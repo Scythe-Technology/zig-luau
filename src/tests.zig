@@ -1,4 +1,6 @@
 const std = @import("std");
+const builtin = @import("builtin");
+
 const testing = std.testing;
 
 const luau = @import("luau");
@@ -12,6 +14,8 @@ const expect = testing.expect;
 const expectEqual = testing.expectEqual;
 const expectEqualStrings = testing.expectEqualStrings;
 const expectError = testing.expectError;
+
+const EXCEPTIONS_ENABLED = !builtin.cpu.arch.isWasm();
 
 fn expectStringContains(actual: []const u8, expected_contains: []const u8) !void {
     if (std.mem.indexOf(u8, actual, expected_contains) == null)
@@ -611,6 +615,9 @@ test "upvalues" {
 }
 
 test "raise error" {
+    if (!EXCEPTIONS_ENABLED)
+        return error.SkipZigTest;
+
     var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
@@ -678,6 +685,9 @@ test "yielding no continuation" {
 }
 
 test "aux check functions" {
+    if (!EXCEPTIONS_ENABLED)
+        return error.SkipZigTest;
+
     var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
@@ -768,6 +778,9 @@ test "aux opt functions" {
 }
 
 test "checkOption" {
+    if (!EXCEPTIONS_ENABLED)
+        return error.SkipZigTest;
+
     var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
@@ -840,6 +853,9 @@ test "ref luau" {
 }
 
 test "args and errors" {
+    if (!EXCEPTIONS_ENABLED)
+        return error.SkipZigTest;
+
     var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
@@ -1290,7 +1306,7 @@ test "Vectors" {
 test "Luau JIT/CodeGen" {
     // Skip this test if the Luau NCG is not supported on machine
     if (!luau.CodeGen.Supported())
-        return;
+        return error.SkipZigTest;
 
     var lua = try Luau.init(&std.testing.allocator);
     defer lua.deinit();
@@ -1329,6 +1345,9 @@ test "Luau JIT/CodeGen" {
 }
 
 test "Readonly table" {
+    if (!EXCEPTIONS_ENABLED)
+        return error.SkipZigTest;
+
     var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
@@ -1392,6 +1411,9 @@ test "Metamethods" {
 }
 
 test "Zig Error Fn Lua Handled" {
+    if (!EXCEPTIONS_ENABLED)
+        return error.SkipZigTest;
+
     var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 

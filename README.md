@@ -91,7 +91,34 @@ pub fn main() anyerror!void {
 }
 ```
 
+## Wasm Usage
+For wasm, make sure to define `zig_luau_try_catch_js_impl` and `zig_luau_throw_js_impl` in your program and host environment (forward them to js). These functions are used to catch and throw errors from the Lua VM.
+```cpp
+// don't need to actually work with these values, they're just pointers which you can pass around as numbers on the js side
+extern "C" void zig_luau_try_catch_js_impl(TryCatchContext *context);
+extern "C" void zig_luau_throw_js_impl(const std::exception *e); 
+```
+Then in your JS environment, when you're ready to run the try and catch branches, you can call `zig_luau_try_impl` and `zig_luau_catch_impl` with the appropriate pointers. For example
+```javascript
+zig_luau_throw_js_impl = function(e) {
+    // a class to store the error pointer
+    throw new NativeException(e);
+}
+zig_luau_try_catch_js_impl = function(context) {
+    try {
+        exports.zig_luau_try_impl(context);
+    } catch (e) {
+        if (e instanceof NativeException) {
+            exports.zig_luau_catch_impl(e.error);
+        } else {
+            throw e;
+        } 
+    }
+}
+```
+
 ## Contributing
+
 Please make suggestions, report bugs, and create pull requests. Anyone is welcome to contribute!
 
 I only use a subset of the Luau API through Zig-luau, so if there are parts that aren't easy to use or understand, please fix it yourself or let me know!

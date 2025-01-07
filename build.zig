@@ -4,20 +4,32 @@ const Build = std.Build;
 const Step = std.Build.Step;
 
 const LUAU_VERSION = std.SemanticVersion{ .major = 0, .minor = 655, .patch = 0 };
-const VERSION_HASH = "12202e48ce8bbddc043bbaadd10ac783d427b41b1ad9b6b3cb4b91bff6cdbb1a3d98";
+const LUAU_HASH = "12202e48ce8bbddc043bbaadd10ac783d427b41b1ad9b6b3cb4b91bff6cdbb1a3d98";
+
+const LUAU_WASM_VERSION = std.SemanticVersion{ .major = 0, .minor = 655, .patch = 0 };
+const LUAU_WASM_HASH = "122015473f9deb29502aeaebfb66963338f602f68937c76a90b021a9f67d38648133";
 
 pub fn build(b: *Build) !void {
-    // Remove the default install and uninstall steps
-    b.top_level_steps = .{};
-
-    const luau_dep = b.lazyDependency("luau", .{}) orelse unreachable;
-
-    std.debug.assert(std.mem.eql(u8, luau_dep.builder.pkg_hash, VERSION_HASH));
-
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // Remove the default install and uninstall steps
+    b.top_level_steps = .{};
+
+    const luau_dep = dep: {
+        // fetch package
+        if (target.result.isWasm())
+            break :dep b.lazyDependency("luau-wasm", .{}) orelse return
+        else
+            break :dep b.lazyDependency("luau", .{}) orelse return;
+    };
+    const version = if (target.result.isWasm()) LUAU_WASM_VERSION else LUAU_VERSION;
+    const hash = if (target.result.isWasm()) LUAU_WASM_HASH else LUAU_HASH;
+
+    std.debug.assert(std.mem.eql(u8, luau_dep.builder.pkg_hash, hash));
+
     const use_4_vector = b.option(bool, "use_4_vector", "Build Luau to use 4-vectors instead of the default 3-vector.") orelse false;
+    const wasm_env_name = b.option([]const u8, "wasm_env", "The environment to import symbols from when building for WebAssembly.") orelse "env";
 
     // Expose build configuration to the zig-luau module
     const config = b.addOptions();
@@ -37,7 +49,10 @@ pub fn build(b: *Build) !void {
 
     const c_module = headers.createModule();
 
-    const lib = try buildLuau(b, target, luau_dep, optimize, use_4_vector);
+    const lib = try buildLuau(b, target, luau_dep, optimize, version, .{
+        .use_4_vector = use_4_vector,
+        .wasm_env_name = wasm_env_name,
+    });
     b.installArtifact(lib);
 
     // Zig module
@@ -143,19 +158,37 @@ fn buildAndLinkModule(
     module.linkLibrary(lib);
 }
 
+pub fn addModuleExportSymbols(b: *Build, module: *Build.Module) void {
+    if (module.resolved_target.?.result.isWasm()) {
+        var old_export_symbols = std.ArrayList([]const u8).init(b.allocator);
+        old_export_symbols.appendSlice(module.export_symbol_names) catch @panic("OOM");
+        old_export_symbols.appendSlice(&.{
+            "zig_luau_try_impl",
+            "zig_luau_catch_impl",
+        }) catch @panic("OOM");
+        module.export_symbol_names = old_export_symbols.toOwnedSlice() catch @panic("OOM");
+    }
+}
+
+const LuauBuildOptions = struct {
+    use_4_vector: bool,
+    wasm_env_name: []const u8,
+};
+
 /// Luau has diverged enough from Lua (C++, project structure, ...) that it is easier to separate the build logic
 fn buildLuau(
     b: *Build,
     target: Build.ResolvedTarget,
     dependency: *Build.Dependency,
     optimize: std.builtin.OptimizeMode,
-    use_4_vector: bool,
+    version: std.SemanticVersion,
+    options: LuauBuildOptions,
 ) !*Step.Compile {
     const lib = b.addStaticLibrary(.{
         .name = "luau",
         .target = target,
         .optimize = optimize,
-        .version = LUAU_VERSION,
+        .version = version,
     });
 
     lib.addIncludePath(b.path("src/Lib"));
@@ -172,36 +205,47 @@ fn buildLuau(
     for (LUAU_VM_HEADERS_DIRS) |dir|
         lib.addIncludePath(dependency.path(dir));
 
-    const FLAGS = [_][]const u8{
-        // setjmp.h compile error in Wasm
-        "-DLUA_USE_LONGJMP=" ++ if (!target.result.isWasm()) "1" else "0",
-        "-DLUA_API=extern\"C\"",
-        "-DLUACODE_API=extern\"C\"",
-        "-DLUACODEGEN_API=extern\"C\"",
-        if (use_4_vector) "-DLUA_VECTOR_SIZE=4" else "",
-        if (target.result.isWasm()) "-fexceptions" else "",
-    };
+    var FLAGS = std.ArrayList([]const u8).init(b.allocator);
+
+    FLAGS.append("-DLUA_USE_LONGJMP=" ++ if (!target.result.isWasm()) "1" else "0") catch @panic("OOM");
+    FLAGS.append("-DLUA_API=extern\"C\"") catch @panic("OOM");
+    FLAGS.append("-DLUACODE_API=extern\"C\"") catch @panic("OOM");
+    FLAGS.append("-DLUACODEGEN_API=extern\"C\"") catch @panic("OOM");
+    if (options.use_4_vector)
+        FLAGS.append("-DLUA_VECTOR_SIZE=4") catch @panic("OOM");
+    if (target.result.isWasm()) {
+        if (target.result.os.tag == .emscripten)
+            FLAGS.append("-fexceptions") catch @panic("OOM");
+        FLAGS.append(b.fmt("-DLUAU_WASM_ENV_NAME=\"{s}\"", .{options.wasm_env_name})) catch @panic("OOM");
+    }
 
     lib.linkLibCpp();
 
+    var FILES = std.ArrayList([]const u8).init(b.allocator);
+
     for (LUAU_Ast_SOURCE_FILES) |file|
-        lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
+        FILES.append(file) catch @panic("OOM");
     for (LUAU_Compiler_SOURCE_FILES) |file|
-        lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
+        FILES.append(file) catch @panic("OOM");
     // CodeGen is not supported on WASM
     if (!target.result.isWasm())
         for (LUAU_CodeGen_SOURCE_FILES) |file|
-            lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
+            FILES.append(file) catch @panic("OOM");
     for (LUAU_VM_SOURCE_FILES) |file|
-        lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
+        FILES.append(file) catch @panic("OOM");
 
-    lib.addCSourceFile(.{ .file = b.path("src/luau.cpp"), .flags = &FLAGS });
+    lib.addCSourceFiles(.{
+        .root = dependency.path(""),
+        .files = FILES.items,
+        .flags = FLAGS.items,
+    });
+    lib.addCSourceFile(.{ .file = b.path("src/luau.cpp"), .flags = FLAGS.items });
 
     // Modules
-    lib.addCSourceFile(.{ .file = b.path("src/Ast/Allocator.cpp"), .flags = &FLAGS });
-    lib.addCSourceFile(.{ .file = b.path("src/Ast/Lexer.cpp"), .flags = &FLAGS });
-    lib.addCSourceFile(.{ .file = b.path("src/Ast/Parser.cpp"), .flags = &FLAGS });
-    lib.addCSourceFile(.{ .file = b.path("src/Compiler/Compiler.cpp"), .flags = &FLAGS });
+    lib.addCSourceFile(.{ .file = b.path("src/Ast/Allocator.cpp"), .flags = FLAGS.items });
+    lib.addCSourceFile(.{ .file = b.path("src/Ast/Lexer.cpp"), .flags = FLAGS.items });
+    lib.addCSourceFile(.{ .file = b.path("src/Ast/Parser.cpp"), .flags = FLAGS.items });
+    lib.addCSourceFile(.{ .file = b.path("src/Compiler/Compiler.cpp"), .flags = FLAGS.items });
 
     // It may not be as likely that other software links against Luau, but might as well expose these anyway
     lib.installHeader(dependency.path("VM/include/lua.h"), "lua.h");

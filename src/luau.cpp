@@ -77,7 +77,7 @@ extern "C" struct FlagGroup
     size_t size;
 };
 
-extern "C" FlagGroup zig_luau_getflags(const char *name, size_t nameLen, int value)
+extern "C" FlagGroup zig_luau_getflags()
 {
     std::vector<std::string> names_list;
     std::vector<int> types_list;
@@ -132,3 +132,47 @@ extern "C" int zig_luau_luaG_isnative(lua_State *L, int level)
 {
     return luaG_isnative(L, level);
 }
+
+#if defined(__wasm__)
+
+#include <functional>
+
+#define LUAU_TRY_CATCH(trying, catching) zig_luau_try_catch_js(trying, catching)
+#define LUAU_THROW(e) zig_luau_throw_js(e)
+#define LUAU_EXTERNAL_TRY_CATCH
+
+#if not defined(LUAU_WASM_ENV_NAME)
+#define LUAU_WASM_ENV_NAME "env"
+#endif
+
+struct TryCatchContext
+{
+    std::function<void()> trying;
+    std::function<void(const std::exception &)> catching;
+};
+// only clang compilers support C/C++ -> wasm so it's safe to use the attribute here
+__attribute__((import_module(LUAU_WASM_ENV_NAME), import_name("try_catch"))) void zig_luau_try_catch_js_impl(TryCatchContext *context);
+__attribute__((import_module(LUAU_WASM_ENV_NAME), import_name("throw"))) void zig_luau_throw_js_impl(const std::exception *e);
+
+void zig_luau_try_catch_js(std::function<void()> trying, std::function<void(const std::exception &)> catching)
+{
+    auto context = TryCatchContext{trying, catching};
+    zig_luau_try_catch_js_impl(&context);
+}
+
+void zig_luau_throw_js(const std::exception &e)
+{
+    zig_luau_throw_js_impl(&e);
+}
+
+extern "C" void zig_luau_try_impl(TryCatchContext *context)
+{
+    context->trying();
+}
+
+extern "C" void zig_luau_catch_impl(TryCatchContext *context, const std::exception &e)
+{
+    context->catching(e);
+}
+
+#endif

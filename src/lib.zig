@@ -2248,3 +2248,31 @@ pub fn compile(allocator: Allocator, source: []const u8, options: CompileOptions
 pub fn clock() f64 {
     return c.lua_clock();
 }
+
+comptime {
+    if (builtin.target.isWasm() and builtin.target.os.tag != .emscripten) {
+        _ = struct {
+            var exception_buf: [4096]u8 = undefined;
+            var exception_fba = std.heap.FixedBufferAllocator.init(exception_buf[0..]);
+            export fn __cxa_allocate_exception(size: usize) callconv(.C) [*]u8 {
+                const data = exception_fba.allocator().alloc(u8, size + 4) catch unreachable;
+                std.mem.writeInt(u32, data[0..4], size, .little);
+                return data[4..].ptr;
+            }
+            export fn __cxa_free_exception(data: [*]const u8) callconv(.C) void {
+                const size = std.mem.readInt(u32, (data - 4)[0..4], .little);
+                exception_fba.allocator().free(data[0 .. size + 4]);
+            }
+            // should NEVER be called as we override in the luau upstream dependency
+            export fn __cxa_throw(thrown_exception: *u8, cpp_type_info: *anyopaque, dest: *const fn () callconv(.C) void) callconv(.C) noreturn {
+                _ = thrown_exception;
+                _ = cpp_type_info;
+                _ = dest;
+                unreachable;
+            }
+            export fn clock() callconv(.C) i64 {
+                return std.time.milliTimestamp();
+            }
+        };
+    }
+}
