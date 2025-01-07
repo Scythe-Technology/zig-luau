@@ -1,18 +1,34 @@
 name: tests
 
 on:
-  push:
-    branches: [ "master" ]
+  workflow_dispatch:
   pull_request:
-    branches: [ "master" ]
+    branches:
+      - master
+  push:
 
 jobs:
   test:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{matrix.os}}
+      - os: ubuntu-latest
+        name: Linux x86_64
+        target: x86_64-linux-gnu
+      - os: macos-13
+        name: macOs x86_64
+        target: x86_64-macos
+      - os: macos-14
+        name: macOs Arm64
+        target: aarch64-macos
+      - os: windows-latest
+        name: Windows x86_64
+        target: x86_64-windows
+      - os: ubuntu-latest
+        name: Wasi Wasm32
+        target: wasm32-wasi
 
+    runs-on: ${{matrix.os}}
+    name: ${{ matrix.name }}
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
@@ -22,5 +38,9 @@ jobs:
         version: 0.14.0-dev.2540+f857bf72e
         use-cache: false
 
+    - name: Setup Wasmtime
+      if: contains(matrix.target, 'wasm')
+      uses: jcbhmr/setup-wasmtime@v2.0.4
+
     - name: Run tests
-      run: make test
+      run: zig build test -Dtarget=${{ matrix.target }}${{ contains(matrix.target, 'wasm') && ' -fwasmtime -Doptimize=ReleaseFast' || '' }} --summary all
