@@ -2112,6 +2112,7 @@ pub fn ZigToCFn(comptime fnType: std.builtin.Type.Fn, comptime f: anytype) CFn {
                     if (@call(.always_inline, f, .{state})) |res|
                         return res
                     else |err| switch (@as(anyerror, @errorCast(err))) {
+                        error.RaiseLuauYieldError => state.raiseErrorStr("attempt to yield across metamethod/C-call boundary", .{}),
                         error.RaiseLuauError => state.raiseError(),
                         else => state.raiseErrorStr("%s", .{@errorName(err).ptr}),
                     }
