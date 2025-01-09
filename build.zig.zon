@@ -5,12 +5,10 @@
         .luau = .{
             .url = "https://github.com/luau-lang/luau/archive/refs/tags/0.655.tar.gz",
             .hash = "12202e48ce8bbddc043bbaadd10ac783d427b41b1ad9b6b3cb4b91bff6cdbb1a3d98",
-            .lazy = true,
         },
         .@"luau-wasm" = .{
             .url = "git+https://github.com/lodinukal/luau#7c15c09700f44d7380708f8db0555a30a46ddf8f",
             .hash = "122015473f9deb29502aeaebfb66963338f602f68937c76a90b021a9f67d38648133",
-            .lazy = true,
         },
     },
     .paths = .{

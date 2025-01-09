@@ -19,9 +19,9 @@ pub fn build(b: *Build) !void {
     const luau_dep = dep: {
         // fetch package
         if (target.result.isWasm())
-            break :dep b.lazyDependency("luau-wasm", .{}) orelse return
+            break :dep b.dependency("luau-wasm", .{})
         else
-            break :dep b.lazyDependency("luau", .{}) orelse return;
+            break :dep b.dependency("luau", .{});
     };
     const version = if (target.result.isWasm()) LUAU_WASM_VERSION else LUAU_VERSION;
     const hash = if (target.result.isWasm()) LUAU_WASM_HASH else LUAU_HASH;
