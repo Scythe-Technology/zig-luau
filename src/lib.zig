@@ -650,6 +650,7 @@ pub const Luau = struct {
         } else c.lua_setuserdatadtor(stateCast(luau), tag, null);
     }
 
+    /// Sets metatable to tag, Pops the stack
     pub inline fn setUserdataMetatable(luau: *Luau, tag: c_int, idx: i32) void {
         c.lua_setuserdatametatable(stateCast(luau), tag, idx);
     }
@@ -1400,6 +1401,10 @@ pub const Luau = struct {
 
     pub inline fn gBreak(luau: *Luau) i32 {
         return c.lua_break(stateCast(luau));
+    }
+
+    pub inline fn isYieldable(luau: *Luau) bool {
+        return c.lua_isyieldable(stateCast(luau)) == 1;
     }
 
     // Debug library functions
