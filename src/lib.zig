@@ -250,9 +250,10 @@ pub const Unsigned = c.lua_Unsigned;
 // pub const CReaderFn = *const fn (state: ?*LuaState, data: ?*anyopaque, size: [*c]usize) callconv(.C) [*c]const u8;
 
 /// The possible status of a call to `Luau.resumeThread`
-pub const ResumeStatus = enum(u1) {
+pub const ResumeStatus = enum(u2) {
     ok = StatusCode.ok,
     yield = StatusCode.yield,
+    @"break" = StatusCode.@"break",
 };
 
 /// Reference constants
@@ -264,6 +265,7 @@ pub const ref_no = c.LUA_NOREF;
 pub const Status = enum(u3) {
     ok = StatusCode.ok,
     yield = StatusCode.yield,
+    @"break" = StatusCode.@"break",
     err_runtime = StatusCode.err_runtime,
     err_syntax = StatusCode.err_syntax,
     err_memory = StatusCode.err_memory,
@@ -289,6 +291,7 @@ pub const CoroutineStatus = enum(u3) {
 const StatusCode = struct {
     pub const ok = c.LUA_OK;
     pub const yield = c.LUA_YIELD;
+    pub const @"break" = c.LUA_BREAK;
     pub const err_runtime = c.LUA_ERRRUN;
     pub const err_syntax = c.LUA_ERRSYNTAX;
     pub const err_memory = c.LUA_ERRMEM;
