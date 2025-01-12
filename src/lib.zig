@@ -250,7 +250,7 @@ pub const Unsigned = c.lua_Unsigned;
 // pub const CReaderFn = *const fn (state: ?*LuaState, data: ?*anyopaque, size: [*c]usize) callconv(.C) [*c]const u8;
 
 /// The possible status of a call to `Luau.resumeThread`
-pub const ResumeStatus = enum(u2) {
+pub const ResumeStatus = enum(u3) {
     ok = StatusCode.ok,
     yield = StatusCode.yield,
     @"break" = StatusCode.@"break",
