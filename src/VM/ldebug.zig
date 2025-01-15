@@ -77,9 +77,9 @@ pub fn Ggetline(p: *object.Proto, pc: usize) i32 {
 }
 
 pub fn Gisnative(L: *lua.State, level: usize) bool {
-    if (level >= L.ci.?.sub(@intFromPtr(L.base_ci.?)))
+    if (level >= L.ci.?.sub(L.base_ci.?))
         return false;
-    const ci: *state.CallInfo = @ptrFromInt(L.ci.?.sub(level));
+    const ci = L.ci.?.sub_num(level);
     return (ci.flags & state.CALLINFO_NATIVE) != 0;
 }
 

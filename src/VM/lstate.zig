@@ -87,12 +87,11 @@ pub const CallInfo = extern struct {
     /// call frame flags, see LUA_CALLINFO_*
     flags: c_uint,
 
-    // helper api
-    pub inline fn add(this: *CallInfo, n: usize) *CallInfo {
-        return @ptrFromInt(@intFromPtr(this) + n);
+    pub inline fn sub(this: *CallInfo, ptr: *CallInfo) usize {
+        return @divExact(@intFromPtr(this) - @intFromPtr(ptr), @sizeOf(CallInfo));
     }
-    pub inline fn sub(this: *CallInfo, n: usize) usize {
-        return @intFromPtr(this) - n;
+    pub inline fn sub_num(this: *CallInfo, num: usize) *CallInfo {
+        return @ptrFromInt(@intFromPtr(this) - (num * @sizeOf(CallInfo)));
     }
 
     pub inline fn ci_func(this: *CallInfo) *lobject.Closure {
