@@ -553,6 +553,7 @@ pub const lua_State = extern struct {
     pub const LerrorL = laux.LerrorL;
     pub const Lcheckoption = laux.Lcheckoption;
     pub const Lnewmetatable = laux.Lnewmetatable;
+    pub const Lgetmetatable = laux.Lgetmetatable;
     pub const Lcheckudata = laux.Lcheckudata;
     pub const Lcheckbuffer = laux.Lcheckbuffer;
     pub const Lcheckstack = laux.Lcheckstack;

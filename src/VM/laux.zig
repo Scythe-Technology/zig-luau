@@ -60,6 +60,10 @@ pub inline fn Lnewmetatable(L: *lua.State, tname: [:0]const u8) bool {
     return c.luaL_newmetatable(@ptrCast(L), tname.ptr) != 0;
 }
 
+pub inline fn Lgetmetatable(L: *lua.State, tname: [:0]const u8) lua.Type {
+    return L.getfield(lua.REGISTRYINDEX, tname);
+}
+
 pub inline fn Lcheckudata(L: *lua.State, comptime T: type, ud: i32, tname: [:0]const u8) ?*T {
     return @ptrCast(c.luaL_checkudata(@ptrCast(L), ud, tname).?);
 }
