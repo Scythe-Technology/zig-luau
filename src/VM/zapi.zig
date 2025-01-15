@@ -77,10 +77,8 @@ pub fn Zpushvalue(L: *lua.State, value: anytype) void {
         .int => |int| {
             if (int.bits <= 32)
                 (if (int.signedness == .signed) L.pushinteger else L.pushunsigned)(value)
-            else if (int.bits <= 64)
-                (if (int.signedness == .signed) L.pushinteger else L.pushunsigned)(@floatFromInt(value))
             else
-                @compileError("int size too large");
+                (if (int.signedness == .signed) L.pushinteger else L.pushunsigned)(@truncate(value));
         },
         .float => |float| {
             if (float.bits <= 64)
