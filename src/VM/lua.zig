@@ -94,7 +94,7 @@ pub const Type = enum(i5) {
     // the count of TValue type tags
     pub const T_COUNT = c.LUA_T_COUNT;
 
-    pub inline fn isNoneOrNil(t: Type) bool {
+    pub inline fn isnoneornil(t: Type) bool {
         return t == .None or t == .Nil;
     }
 };
