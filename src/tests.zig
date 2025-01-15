@@ -1192,8 +1192,8 @@ test "Set Api" {
 
     lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_a", tempFn);
     lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_b", true);
-    lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_c", 1.1);
-    lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_d", 2);
+    lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_c", @as(f64, 1.1));
+    lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_d", @as(i32, 2));
     lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_e", "Api");
     lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_f", &[_]u8{ 'A', 0, 'B' });
     if (luau.VECTOR_SIZE == 3) {

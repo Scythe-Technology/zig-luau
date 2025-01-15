@@ -166,12 +166,7 @@ pub const REFNIL = c.LUA_REFNIL;
 pub const Hook = *const fn (?*State, [*c]Debug) callconv(.c) void;
 
 pub const Debug = struct {
-    what: enum {
-        lua,
-        c,
-        main,
-        tail,
-    } = .lua,
+    what: Context = .lua,
     name: ?[:0]const u8 = null,
     source: ?[:0]const u8 = null,
     short_src: ?[]u8 = null,
@@ -181,6 +176,13 @@ pub const Debug = struct {
     nparams: u8 = 0,
     isvararg: u8 = 0,
     ssbuf: [config.IDSIZE:0]u8,
+
+    pub const Context = enum {
+        lua,
+        c,
+        main,
+        tail,
+    };
 
     pub fn fromLua(ar: c.lua_Debug, options: []const u8) Debug {
         var arz: Debug = undefined;

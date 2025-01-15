@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const lua = @import("lua.zig");
+const lapi = @import("lapi.zig");
 
 pub const ZigFnInt = *const fn (state: *lua.State) i32;
 pub const ZigFnVoid = *const fn (state: *lua.State) void;
@@ -69,16 +70,17 @@ pub inline fn pushfunction(L: *lua.State, comptime f: anytype, name: [:0]const u
     L.pushcfunction(toCFn(f), name);
 }
 
-pub fn Zpushvalue(L: *lua.State, value: anytype) void {
+pub fn Zpushvaluek(L: *lua.State, value: anytype, name: ?[:0]const u8) void {
     switch (@typeInfo(@TypeOf(value))) {
         .bool => L.pushboolean(value),
         .comptime_int => L.pushinteger(@intCast(value)),
         .comptime_float => L.pushnumber(@floatCast(value)),
         .int => |int| {
+            const pushfn = if (int.signedness == .signed) lapi.pushinteger else lapi.pushunsigned;
             if (int.bits <= 32)
-                (if (int.signedness == .signed) L.pushinteger else L.pushunsigned)(value)
+                pushfn(L, value)
             else
-                (if (int.signedness == .signed) L.pushinteger else L.pushunsigned)(@truncate(value));
+                pushfn(L, @truncate(value));
         },
         .float => |float| {
             if (float.bits <= 64)
@@ -89,7 +91,7 @@ pub fn Zpushvalue(L: *lua.State, value: anytype) void {
         .pointer => |pointer| {
             if (pointer.size == .One)
                 switch (@typeInfo(pointer.child)) {
-                    .@"fn" => L.pushcfunction(toCFn(value)),
+                    .@"fn" => L.pushcfunction(toCFn(value), name orelse "?anon func?"),
                     .array => |a| {
                         if (a.child == u8)
                             L.pushlstring(value)
@@ -107,7 +109,7 @@ pub fn Zpushvalue(L: *lua.State, value: anytype) void {
                 } else L.pushlstring(value);
             } else @compileError("Unsupported pointer type");
         },
-        .@"fn" => L.pushcfunction(toCFn(value), "?anon func?"),
+        .@"fn" => L.pushcfunction(toCFn(value), name orelse "?anon func?"),
         .array => |a| {
             L.createtable(a.len, 0);
             for (value, 0..) |v, i| {
@@ -146,14 +148,18 @@ pub fn Zpushvalue(L: *lua.State, value: anytype) void {
     }
 }
 
+pub fn Zpushvalue(L: *lua.State, value: anytype) void {
+    Zpushvaluek(L, value, null);
+}
+
 pub fn Zsetfield(L: *lua.State, comptime index: i32, k: [:0]const u8, value: anytype) void {
     const idx = comptime if (index != lua.GLOBALSINDEX and index != lua.REGISTRYINDEX and index < 0) index - 1 else index;
-    Zpushvalue(L, value);
+    Zpushvaluek(L, value, k);
     L.setfield(idx, k);
 }
 
 pub fn Zsetglobal(L: *lua.State, name: [:0]const u8, value: anytype) void {
-    Zpushvalue(L, value);
+    Zpushvaluek(L, value, name);
     L.setglobal(name);
 }
 
