@@ -18,6 +18,18 @@ pub const CompileOptions = struct {
     vector_type: ?[*:0]const u8 = null,
     /// null-terminated array of globals that are mutable; disables the import optimization for fields accessed through these
     mutable_globals: ?[*:null]const ?[*:0]const u8 = null,
+
+    pub fn toC(this: CompileOptions) c.lua_CompileOptions {
+        return c.lua_CompileOptions{
+            .optimizationLevel = this.optimization_level,
+            .debugLevel = this.debug_level,
+            .coverageLevel = this.coverage_level,
+            .vectorLib = this.vector_lib,
+            .vectorCtor = this.vector_ctor,
+            .vectorType = this.vector_type,
+            .mutableGlobals = this.mutable_globals,
+        };
+    }
 };
 
 pub fn compileParseResult(
@@ -27,14 +39,7 @@ pub fn compileParseResult(
     options: ?CompileOptions,
 ) error{OutOfMemory}![]const u8 {
     var size: usize = 0;
-    var opts = if (options) |o| c.lua_CompileOptions{
-        .optimizationLevel = o.optimization_level,
-        .debugLevel = o.debug_level,
-        .coverageLevel = o.coverage_level,
-        .vectorLib = o.vector_lib,
-        .vectorCtor = o.vector_ctor,
-        .mutableGlobals = o.mutable_globals,
-    } else null;
+    var opts = if (options) |o| o.toC() else null;
     const bytes = zig_Luau_Compiler_compile_ParseResult(parseResult, namesTable, &size, if (opts) |*o| o else null, null) orelse return error.OutOfMemory;
     defer zig_Luau_Compiler_compile_free(@ptrCast(@constCast(bytes)));
     return try allocator.dupe(u8, bytes[0..size]);
