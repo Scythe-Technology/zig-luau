@@ -170,8 +170,8 @@ pub const Debug = struct {
     name: ?[:0]const u8 = null,
     source: ?[:0]const u8 = null,
     short_src: ?[]u8 = null,
-    linedefined: c_int = 0,
-    currentline: c_int = 0,
+    linedefined: ?u32 = null,
+    currentline: ?u32 = null,
     nupvals: u8 = 0,
     nparams: u8 = 0,
     isvararg: u8 = 0,
@@ -185,10 +185,14 @@ pub const Debug = struct {
     };
 
     pub fn fromLua(ar: c.lua_Debug, options: []const u8) Debug {
-        var arz: Debug = undefined;
+        var arz: Debug = .{
+            .ssbuf = undefined,
+        };
 
-        if (std.mem.indexOf(u8, options, "n")) |_|
-            arz.name = std.mem.span(ar.name);
+        if (std.mem.indexOf(u8, options, "n")) |_| {
+            if (ar.name != null)
+                arz.name = std.mem.span(ar.name);
+        }
 
         if (std.mem.indexOf(u8, options, "s")) |_| {
             arz.source = std.mem.span(ar.source);
@@ -197,7 +201,8 @@ pub const Debug = struct {
             @memcpy(arz.ssbuf[0..short_src.len], short_src[0.. :0]);
             arz.short_src = arz.ssbuf[0..short_src.len];
 
-            arz.linedefined = ar.linedefined;
+            if (ar.linedefined >= 0)
+                arz.linedefined = @intCast(ar.linedefined);
             arz.what = blk: {
                 const what = std.mem.span(ar.what);
                 if (std.mem.eql(u8, "Lua", what)) break :blk .lua;
@@ -208,8 +213,10 @@ pub const Debug = struct {
             };
         }
 
-        if (std.mem.indexOf(u8, options, "l")) |_|
-            arz.currentline = ar.currentline;
+        if (std.mem.indexOf(u8, options, "l")) |_| {
+            if (ar.currentline >= 0)
+                arz.currentline = @intCast(ar.currentline);
+        }
 
         if (std.mem.indexOf(u8, options, "u")) |_|
             arz.nupvals = ar.nupvals;
