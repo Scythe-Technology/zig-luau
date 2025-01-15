@@ -72,7 +72,7 @@ pub fn Ggetline(p: *object.Proto, pc: usize) i32 {
     std.debug.assert(pc >= 0 and pc < p.sizecode);
 
     if (p.lineinfo) |lineinfo| {
-        return p.abslineinfo.?[pc >> p.linegaplog2] + lineinfo[pc];
+        return p.abslineinfo.?[pc >> @intCast(p.linegaplog2)] + lineinfo[pc];
     } else return 0;
 }
 
@@ -87,8 +87,8 @@ pub inline fn singlestep(L: *lua.State, enabled: bool) void {
     L.tsinglestep = enabled;
 }
 
-pub inline fn breakpoint(L: *lua.State, funcindex: i32, line: i32, enabled: bool) void {
-    c.lua_breakpoint(@ptrCast(L), funcindex, line, if (enabled) 1 else 0);
+pub inline fn breakpoint(L: *lua.State, funcindex: i32, line: i32, enabled: bool) i32 {
+    return c.lua_breakpoint(@ptrCast(L), funcindex, line, if (enabled) 1 else 0);
 }
 
 pub fn getcoverage(

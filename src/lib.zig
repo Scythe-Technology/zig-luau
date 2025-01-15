@@ -25,6 +25,7 @@ pub const VM = struct {
     pub const lperf = @import("VM/lperf.zig");
     pub const linit = @import("VM/linit.zig");
     pub const lstate = @import("VM/lstate.zig");
+    pub const ldebug = @import("VM/ldebug.zig");
     pub const lobject = @import("VM/lobject.zig");
     pub const lvmload = @import("VM/lvmload.zig");
     pub const lcommon = @import("VM/lcommon.zig");

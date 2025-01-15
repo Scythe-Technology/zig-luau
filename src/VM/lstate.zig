@@ -103,7 +103,7 @@ pub const CallInfo = extern struct {
     }
 
     pub inline fn isLua(this: *CallInfo) bool {
-        return this.func.ttisfunction() and !this.ci_func().isC;
+        return this.func.ttisfunction() and this.ci_func().isC != 1;
     }
 };
 
