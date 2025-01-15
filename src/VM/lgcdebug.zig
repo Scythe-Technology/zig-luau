@@ -26,10 +26,10 @@ fn validatetable(g: *const lstate.global_State, h: *lobject.Table) void {
     std.debug.assert(h.bound.lastfree <= sizenode);
 
     if (h.metatable) |mt|
-        validateobjref(g, @ptrCast(h), @ptrCast(mt));
+        validateobjref(g, @ptrCast(@alignCast(h)), @ptrCast(@alignCast(mt)));
 
     for (0..@intCast(h.sizearray)) |i|
-        validateref(g, @ptrCast(h), &h.array[i]);
+        validateref(g, @ptrCast(@alignCast(h)), &h.array[i]);
 
     for (0..sizenode) |i| {
         const n = &h.node[i];
@@ -42,14 +42,14 @@ fn validatetable(g: *const lstate.global_State, h: *lobject.Table) void {
             k.tt = n.gkey().ttype();
             k.value = n.gkey().value;
 
-            validateref(g, @ptrCast(h), &k);
-            validateref(g, @ptrCast(h), n.gval());
+            validateref(g, @ptrCast(@alignCast(h)), &k);
+            validateref(g, @ptrCast(@alignCast(h)), n.gval());
         }
     }
 }
 
 fn validateclosure(g: *const lstate.global_State, cl: *lobject.Closure) void {
-    validateobjref(g, @ptrCast(cl), @ptrCast(cl.env));
+    validateobjref(g, @ptrCast(cl), @ptrCast(@alignCast(cl.env)));
 
     if (cl.isC != 0) {
         for (0..cl.nupvalues) |i|
@@ -57,7 +57,7 @@ fn validateclosure(g: *const lstate.global_State, cl: *lobject.Closure) void {
     } else {
         std.debug.assert(cl.nupvalues == cl.d.l.p.nups);
 
-        validateobjref(g, @ptrCast(cl), @ptrCast(cl.d.l.p));
+        validateobjref(g, @ptrCast(cl), @ptrCast(@alignCast(cl.d.l.p)));
 
         for (0..cl.nupvalues) |i|
             validateobjref(g, @ptrCast(cl), @ptrCast(&@as([*]lobject.TValue, @ptrCast(&cl.d.l.uprefs))[i]));
@@ -65,7 +65,7 @@ fn validateclosure(g: *const lstate.global_State, cl: *lobject.Closure) void {
 }
 
 fn validatestack(g: *const lstate.global_State, l: *lua.State) void {
-    validateobjref(g, @ptrCast(l), @ptrCast(l.gt.?));
+    validateobjref(g, @ptrCast(@alignCast(l)), @ptrCast(@alignCast(l.gt.?)));
 
     for (0..@intFromPtr(l.ci) - @intFromPtr(l.base_ci)) |i| {
         const ci = l.base_ci.?.add_num(i);
@@ -79,7 +79,7 @@ fn validatestack(g: *const lstate.global_State, l: *lua.State) void {
         l.stack.?.add_num(i).checkliveness(g);
 
     if (l.namecall) |nc|
-        validateobjref(g, @ptrCast(l), @ptrCast(nc));
+        validateobjref(g, @ptrCast(@alignCast(l)), @ptrCast(@alignCast(nc)));
 
     var upval: ?*lobject.UpVal = l.openupval;
     while (upval) |uv| : (upval = uv.u.open.threadnext) {
@@ -92,25 +92,25 @@ fn validatestack(g: *const lstate.global_State, l: *lua.State) void {
 
 fn validateproto(g: *const lstate.global_State, f: *lobject.Proto) void {
     if (f.source) |src|
-        validateobjref(g, @ptrCast(f), @ptrCast(src));
+        validateobjref(g, @ptrCast(@alignCast(f)), @ptrCast(@alignCast(src)));
 
     if (f.debugname) |name|
-        validateobjref(g, @ptrCast(f), @ptrCast(name));
+        validateobjref(g, @ptrCast(@alignCast(f)), @ptrCast(@alignCast(name)));
 
     for (0..@intCast(f.sizek)) |i|
-        validateref(g, @ptrCast(f), @ptrCast(&f.k[i]));
+        validateref(g, @ptrCast(@alignCast(f)), @ptrCast(@alignCast(&f.k[i])));
 
     for (0..@intCast(f.sizeupvalues)) |i|
         if (f.upvalues[i]) |uv|
-            validateobjref(g, @ptrCast(f), @ptrCast(uv));
+            validateobjref(g, @ptrCast(@alignCast(f)), @ptrCast(@alignCast(uv)));
 
     for (0..@intCast(f.sizep)) |i|
         if (f.p[i]) |proto|
-            validateobjref(g, @ptrCast(f), @ptrCast(proto));
+            validateobjref(g, @ptrCast(@alignCast(f)), @ptrCast(@alignCast(proto)));
 
     for (0..@intCast(f.sizelocvars)) |i|
         if (f.locvars[i].varname) |varname|
-            validateobjref(g, @ptrCast(f), @ptrCast(varname));
+            validateobjref(g, @ptrCast(@alignCast(f)), @ptrCast(@alignCast(varname)));
 }
 
 fn validateobj(g: *const lstate.global_State, o: *lstate.GCObject) void {
@@ -125,7 +125,7 @@ fn validateobj(g: *const lstate.global_State, o: *lstate.GCObject) void {
         @intFromEnum(lua.Type.Function) => validateclosure(g, o.tocl()),
         @intFromEnum(lua.Type.Userdata) => {
             if (o.tou().metatable) |mt| {
-                validateobjref(g, o, @ptrCast(mt));
+                validateobjref(g, o, @ptrCast(@alignCast(mt)));
             }
         },
         @intFromEnum(lua.Type.Thread) => validatestack(g, o.toth()),
@@ -163,18 +163,18 @@ fn validategco(context: ?*anyopaque, _: ?*anyopaque, gco: *lstate.GCObject) bool
 pub fn Cvalidate(L: *lua.State) void {
     const g = L.global;
 
-    std.debug.assert(!lgc.isdead(g, @ptrCast(g.mainthread)));
+    std.debug.assert(!lgc.isdead(g, @ptrCast(@alignCast(g.mainthread))));
     g.registry.checkliveness(g);
 
     for (0..lua.Type.T_COUNT) |i|
         if (g.mt[i]) |mt|
-            std.debug.assert(!lgc.isdead(g, @ptrCast(mt)));
+            std.debug.assert(!lgc.isdead(g, @ptrCast(@alignCast(mt))));
 
     validategraylist(g, g.weak);
     validategraylist(g, g.gray);
     validategraylist(g, g.grayagain);
 
-    _ = validategco(@ptrCast(L), null, @ptrCast(g.mainthread));
+    _ = validategco(@ptrCast(L), null, @ptrCast(@alignCast(g.mainthread)));
 
     // TODO: implement luaM_visitgco
     // luaM_visitgco(L, L, validategco);

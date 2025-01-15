@@ -1,5 +1,5 @@
-const c = @import("c");
 const std = @import("std");
+pub const c = @import("c");
 
 const lstate = @import("lstate.zig");
 pub const config = @import("luaconf.zig");

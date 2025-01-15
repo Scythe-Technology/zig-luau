@@ -359,7 +359,7 @@ pub fn touserdata(L: *lua.State, comptime T: type, idx: i32) ?*T {
 pub fn touserdatatagged(L: *lua.State, comptime T: type, idx: i32, tag: i32) ?*T {
     const o: *const lobject.TValue = index2addr(L, idx);
     return if (o.ttisuserdata() and @as(i32, @intCast(o.uvalue().tag)) != tag)
-        @ptrCast(o.uvalue().data)
+        @ptrCast(&o.uvalue().data)
     else
         null;
 }
@@ -601,8 +601,8 @@ pub inline fn setmetatable(L: *lua.State, idx: i32) i32 {
     return c.lua_setmetatable(@ptrCast(L), idx);
 }
 
-pub inline fn setfenv(L: *lua.State, idx: i32) void {
-    return c.lua_setfenv(@ptrCast(L), idx);
+pub inline fn setfenv(L: *lua.State, idx: i32) bool {
+    return c.lua_setfenv(@ptrCast(L), idx) != 0;
 }
 
 //
@@ -681,7 +681,7 @@ pub inline fn newuserdata(L: *lua.State, comptime T: type) *T {
 }
 
 pub inline fn newuserdatataggedwithmetatable(L: *lua.State, comptime T: type, tag: i32) *T {
-    return c.lua_newuserdatataggedwithmetatable(@ptrCast(L), @sizeOf(T), tag);
+    return @ptrCast(@alignCast(c.lua_newuserdatataggedwithmetatable(@ptrCast(L), @sizeOf(T), tag)));
 }
 
 pub inline fn newuserdatadtor(L: *lua.State, comptime T: type, dtorFn: *const fn (dtor: *T) void) *T {
@@ -724,8 +724,8 @@ pub inline fn setuserdatadtor(L: *lua.State, comptime T: type, tag: i32, comptim
         c.lua_setuserdatadtor(@ptrCast(L), tag, struct {
             fn inner(state: ?*c.lua_State, ptr: ?*anyopaque) callconv(.C) void {
                 @call(.always_inline, dtor, .{
-                    @as(*lua.State, @ptrCast(state.?)),
-                    @as(*T, @ptrCast(ptr.?)),
+                    @as(*lua.State, @ptrCast(@alignCast(state.?))),
+                    @as(*T, @ptrCast(@alignCast(ptr.?))),
                 });
             }
         }.inner);
