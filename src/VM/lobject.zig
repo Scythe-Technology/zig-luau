@@ -194,7 +194,7 @@ pub const TValue = extern struct {
         obj.checkliveness(L.global);
     }
     pub inline fn setthvalue(obj: *TValue, L: *lstate.lua_State, x: *lstate.lua_State) void {
-        obj.value.gc = @ptrCast(x);
+        obj.value.gc = @ptrCast(@alignCast(x));
         obj.settype(.Thread);
         obj.checkliveness(L.global);
     }
@@ -204,7 +204,7 @@ pub const TValue = extern struct {
         obj.checkliveness(L.global);
     }
     pub inline fn sethvalue(obj: *TValue, L: *lstate.lua_State, x: *Table) void {
-        obj.value.gc = @ptrCast(x);
+        obj.value.gc = @ptrCast(@alignCast(x));
         obj.settype(.Table);
         obj.checkliveness(L.global);
     }

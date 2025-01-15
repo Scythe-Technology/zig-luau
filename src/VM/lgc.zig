@@ -90,8 +90,8 @@ pub inline fn CneedsGC(L: *const lua.State) bool {
 // }
 
 pub inline fn Cthreadbarrier(L: *lua.State) void {
-    if (isblack(@ptrCast(L))) {
-        Cbarrierback(L, @ptrCast(L), &L.gclist.?);
+    if (isblack(@ptrCast(@alignCast(L)))) {
+        Cbarrierback(L, @ptrCast(@alignCast(L)), &L.gclist.?);
     }
 }
 
