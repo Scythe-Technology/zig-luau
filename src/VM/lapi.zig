@@ -765,7 +765,7 @@ pub inline fn cleartable(L: *lua.State, idx: i32) void {
 }
 
 pub inline fn callbacks(L: *lua.State) *lua.Callbacks {
-    return c.lua_callbacks(@ptrCast(L));
+    return @ptrCast(c.lua_callbacks(@ptrCast(L)));
 }
 
 pub inline fn setmemcat(L: *lua.State, category: i32) void {

@@ -109,7 +109,7 @@ test "Zig allocator access" {
         }
     }.inner;
 
-    lua.pushfunction(inner, "test");
+    lua.Zpushfunction(inner, "test");
     lua.pushinteger(10);
     _ = lua.pcall(1, 1, 0);
 
@@ -239,7 +239,7 @@ test "type of and getting values" {
     try expectEqual(.String, lua.typeOf(-1));
     try expect(lua.isstring(-1));
 
-    lua.pushfunction(add, "func");
+    lua.Zpushfunction(add, "func");
     try expectEqual(.Function, lua.typeOf(-1));
     try expect(lua.iscfunction(-1));
     try expect(lua.isfunction(-1));
@@ -473,7 +473,7 @@ test "warn fn" {
         }
     }.inner;
 
-    lua.pushfunction(warnFn, "newWarn");
+    lua.Zpushfunction(warnFn, "newWarn");
     lua.pushvalue(-1);
     lua.setfield(luau.VM.lua.GLOBALSINDEX, "warn");
     lua.pushstring("this will be caught by the warnFn");
@@ -628,7 +628,7 @@ test "raise error" {
         }
     }.inner;
 
-    lua.pushfunction(makeError, "func");
+    lua.Zpushfunction(makeError, "func");
     lua.pushinteger(1256);
     try expectError(error.Runtime, lua.pcall(1, 0, 0).check());
     try expectEqualStrings("makeError made an error", lua.tostring(-1).?);
@@ -671,7 +671,7 @@ test "yielding no continuation" {
             return l.yield(1);
         }
     }.inner;
-    thread.pushfunction(func, "func");
+    thread.Zpushfunction(func, "func");
 
     try expectEqual(.Suspended, lua.costatus(thread));
 
@@ -702,20 +702,20 @@ test "aux check functions" {
         }
     }.inner;
 
-    lua.pushfunction(function, "func");
+    lua.Zpushfunction(function, "func");
     _ = lua.pcall(0, 0, 0).check() catch {
         try expectStringContains("argument #1", lua.tostring(-1) orelse @panic("bad"));
         lua.pop(-1);
     };
 
-    lua.pushfunction(function, "func");
+    lua.Zpushfunction(function, "func");
     lua.pushnil();
     _ = lua.pcall(1, 0, 0).check() catch {
         try expectStringContains("number expected", lua.tostring(-1) orelse @panic("bad"));
         lua.pop(-1);
     };
 
-    lua.pushfunction(function, "func");
+    lua.Zpushfunction(function, "func");
     lua.pushnil();
     lua.pushinteger(3);
     _ = lua.pcall(2, 0, 0).check() catch {
@@ -723,7 +723,7 @@ test "aux check functions" {
         lua.pop(-1);
     };
 
-    lua.pushfunction(function, "func");
+    lua.Zpushfunction(function, "func");
     lua.pushnil();
     lua.pushinteger(3);
     lua.pushnumber(4);
@@ -732,7 +732,7 @@ test "aux check functions" {
         lua.pop(-1);
     };
 
-    lua.pushfunction(function, "func");
+    lua.Zpushfunction(function, "func");
     lua.pushnil();
     lua.pushinteger(3);
     lua.pushnumber(4);
@@ -742,7 +742,7 @@ test "aux check functions" {
         lua.pop(-1);
     };
 
-    lua.pushfunction(function, "func");
+    lua.Zpushfunction(function, "func");
     // test pushFail here (currently acts the same as pushnil)
     lua.pushnil();
     lua.pushinteger(3);
@@ -766,10 +766,10 @@ test "aux opt functions" {
         }
     }.inner;
 
-    lua.pushfunction(function, "func");
+    lua.Zpushfunction(function, "func");
     _ = lua.pcall(0, 0, 0);
 
-    lua.pushfunction(function, "func");
+    lua.Zpushfunction(function, "func");
     lua.pushinteger(10);
     _ = lua.pushstring("zig");
     lua.pushnumber(1.23);
@@ -802,32 +802,32 @@ test "aux opt functions" {
 //         }
 //     }.inner;
 
-//     lua.pushfunction(function, "func");
+//     lua.Zpushfunction(function, "func");
 //     _ = lua.pushstring("one");
 //     _ = lua.pcall(1, 1, 0);
 //     try expectEqual(1, try lua.toInteger(-1));
 //     lua.pop(1);
 
-//     lua.pushfunction(function, "func");
+//     lua.Zpushfunction(function, "func");
 //     _ = lua.pushstring("two");
 //     _ = lua.pcall(1, 1, 0);
 //     try expectEqual(2, try lua.toInteger(-1));
 //     lua.pop(1);
 
-//     lua.pushfunction(function, "func");
+//     lua.Zpushfunction(function, "func");
 //     _ = lua.pushstring("three");
 //     _ = lua.pcall(1, 1, 0);
 //     try expectEqual(3, try lua.toInteger(-1));
 //     lua.pop(1);
 
 //     // try the default now
-//     lua.pushfunction(function, "func");
+//     lua.Zpushfunction(function, "func");
 //     _ = lua.pcall(0, 1, 0);
 //     try expectEqual(1, try lua.toInteger(-1));
 //     lua.pop(1);
 
 //     // check the raised error
-//     lua.pushfunction(function, "func");
+//     lua.Zpushfunction(function, "func");
 //     _ = lua.pushstring("unknown");
 //     try expectError(error.Runtime, lua.pcall(1, 1, 0));
 //     try expectStringContains("(invalid option 'unknown')", try lua.toString(-1));
@@ -866,7 +866,7 @@ test "args and errors" {
         }
     }.inner;
 
-    lua.pushfunction(argCheck, "ArgCheck");
+    lua.Zpushfunction(argCheck, "ArgCheck");
     try expectError(error.Runtime, lua.pcall(0, 0, 0).check());
 
     const raisesError = struct {
@@ -876,7 +876,7 @@ test "args and errors" {
         }
     }.inner;
 
-    lua.pushfunction(raisesError, "Error");
+    lua.Zpushfunction(raisesError, "Error");
     try expectError(error.Runtime, lua.pcall(0, 0, 0).check());
     try expectEqualStrings("some error zig!", lua.tostring(-1) orelse @panic("bad"));
 
@@ -887,7 +887,7 @@ test "args and errors" {
         }
     }.inner;
 
-    lua.pushfunction(raisesFmtError, "ErrorFmt");
+    lua.Zpushfunction(raisesFmtError, "ErrorFmt");
     try expectError(error.Runtime, lua.pcall(0, 0, 0).check());
     try expectEqualStrings("some fmt error zig!", lua.tostring(-1) orelse @panic("bad"));
 
@@ -897,7 +897,7 @@ test "args and errors" {
         }
     }.inner;
 
-    lua.pushfunction(FmtError, "ErrorFmt");
+    lua.Zpushfunction(FmtError, "ErrorFmt");
     try expectError(error.Runtime, lua.pcall(0, 0, 0).check());
     try expectEqualStrings("some err fmt error zig!", lua.tostring(-1) orelse @panic("bad"));
 
@@ -907,7 +907,7 @@ test "args and errors" {
         }
     }.inner;
 
-    lua.pushfunction(Error, "Error");
+    lua.Zpushfunction(Error, "Error");
     try expectError(error.Runtime, lua.pcall(0, 0, 0).check());
     try expectEqualStrings("some error", lua.tostring(-1) orelse @panic("bad"));
 }
@@ -1010,7 +1010,7 @@ test "debug stacktrace" {
             return 1;
         }
     }.inner;
-    lua.pushfunction(stackTrace, "test");
+    lua.Zpushfunction(stackTrace, "test");
     _ = lua.pcall(0, 1, 0);
     try expectEqualStrings("[C] function test\n", lua.tostring(-1) orelse @panic("bad"));
 }
@@ -1039,7 +1039,7 @@ test "debug stacktrace luau" {
             return 1;
         }
     }.inner;
-    lua.pushfunction(stackTrace, "stack");
+    lua.Zpushfunction(stackTrace, "stack");
     lua.setglobal("stack");
 
     try lua.load("module", bc, 0);
@@ -1426,7 +1426,7 @@ test "Zig Error Fn Lua Handled" {
         }
     }.inner;
 
-    lua.pushfunction(zigEFn, "zigEFn");
+    lua.Zpushfunction(zigEFn, "zigEFn");
     try expectEqual(error.Runtime, lua.pcall(0, 0, 0).check());
     try expectEqualStrings("Fail", lua.tostring(-1).?);
 }
@@ -1676,6 +1676,6 @@ test "Thread Data" {
     var data = Sample{ .a = 10, .b = 20 };
     lua.setthreaddata(*Sample, &data);
 
-    lua.pushfunction(zigFn, "zigFn");
+    lua.Zpushfunction(zigFn, "zigFn");
     try expectEqual(.Ok, lua.pcall(0, 0, 0));
 }

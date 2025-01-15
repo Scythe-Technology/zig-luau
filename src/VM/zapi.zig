@@ -66,7 +66,7 @@ pub fn toCFn(comptime f: anytype) lua.CFunction {
     @compileError("Could not determine zig_fn type");
 }
 
-pub inline fn pushfunction(L: *lua.State, comptime f: anytype, name: [:0]const u8) void {
+pub inline fn Zpushfunction(L: *lua.State, comptime f: anytype, name: [:0]const u8) void {
     L.pushcfunction(toCFn(f), name);
 }
 
@@ -155,6 +155,12 @@ pub fn Zpushvalue(L: *lua.State, value: anytype) void {
 pub fn Zsetfield(L: *lua.State, comptime index: i32, k: [:0]const u8, value: anytype) void {
     const idx = comptime if (index != lua.GLOBALSINDEX and index != lua.REGISTRYINDEX and index < 0) index - 1 else index;
     Zpushvaluek(L, value, k);
+    L.setfield(idx, k);
+}
+
+pub fn Zsetfieldc(L: *lua.State, comptime index: i32, comptime k: [:0]const u8, comptime value: anytype) void {
+    const idx = comptime if (index != lua.GLOBALSINDEX and index != lua.REGISTRYINDEX and index < 0) index - 1 else index;
+    comptime Zpushvaluek(L, value, k);
     L.setfield(idx, k);
 }
 

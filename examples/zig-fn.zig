@@ -31,7 +31,7 @@ pub fn main() !void {
     // Here we use ziglua.wrap() to convert from a Zig function to the lua_CFunction required by Lua.
     // This could be done automatically by pushFunction(), but that would require the parameter to be comptime-known.
     // The call to ziglua.wrap() is slightly more verbose, but has the benefit of being more flexible.
-    L.pushfunction(adder, "add");
+    L.Zpushfunction(adder, "add");
 
     // Push the arguments onto the stack
     L.pushinteger(10);
@@ -46,7 +46,7 @@ pub fn main() !void {
     std.debug.print("the result: {}\n", .{L.tointeger(1).?});
 
     // We can also register the function to a global and run from a Lua "program"
-    L.pushfunction(adder, "add");
+    L.Zpushfunction(adder, "add");
     L.setglobal("add");
 
     // We need to open the base library so the global print() is available

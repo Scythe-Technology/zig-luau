@@ -621,9 +621,11 @@ pub const lua_State = extern struct {
     pub const openvector = lveclib.open;
 
     // zig api
-    pub const pushfunction = zapi.pushfunction;
+    pub const Zpushfunction = zapi.Zpushfunction;
+    pub const Zpushvaluek = zapi.Zpushvaluek;
     pub const Zpushvalue = zapi.Zpushvalue;
     pub const Zsetfield = zapi.Zsetfield;
+    pub const Zsetfieldc = zapi.Zsetfieldc;
     pub const Zsetglobal = zapi.Zsetglobal;
     pub const Zpushbuffer = zapi.Zpushbuffer;
     pub const Zresumeferror = zapi.Zresumeferror;
