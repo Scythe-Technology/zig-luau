@@ -3,7 +3,6 @@
 
 const std = @import("std");
 
-// The ziglua module is made available in build.zig
 const luau = @import("luau");
 
 pub fn main() anyerror!void {
@@ -14,15 +13,14 @@ pub fn main() anyerror!void {
     // Initialize The Lua vm and get a reference to the main thread
     //
     // Passing a Zig allocator to the Lua state requires a stable pointer
-    var L = try luau.Luau.init(&allocator);
+    var L = try luau.init(&allocator);
     defer L.deinit();
 
     // Open all Lua standard libraries
-    L.openLibs();
+    L.Lopenlibs();
 
     var stdin = std.io.getStdIn().reader();
     var stdout = std.io.getStdOut().writer();
-    
 
     var buffer: [256]u8 = undefined;
     while (true) {
@@ -42,11 +40,11 @@ pub fn main() anyerror!void {
         // Compile a line of Luau code
         const bytecode = try luau.compile(allocator, buffer[0..len :0], .{});
         defer allocator.free(bytecode);
-        L.loadBytecode("CLI", bytecode) catch |err| switch (err) {
+        L.load("CLI", bytecode, 0) catch |err| switch (err) {
             error.Fail => {
                 // If there was an error, Lua will place an error string on the top of the stack.
                 // Here we print out the string to inform the user of the issue.
-                try stdout.print("{s}\n", .{L.toString(-1) catch unreachable});
+                try stdout.print("{s}\n", .{L.tostring(-1).?});
 
                 // Remove the error from the stack and go back to the prompt
                 L.pop(1);
@@ -56,9 +54,9 @@ pub fn main() anyerror!void {
         };
 
         // Execute a line of Lua code
-        L.pcall(0, 0, 0) catch {
+        _ = L.pcall(0, 0, 0).check() catch {
             // Error handling here is the same as above.
-            try stdout.print("{s}\n", .{L.toString(-1) catch unreachable});
+            try stdout.print("{s}\n", .{L.tostring(-1).?});
             L.pop(1);
         };
     }

@@ -1,6 +1,6 @@
 .{
     .name = "luau",
-    .version = "0.3.1+655",
+    .version = "0.4.0+656",
     .dependencies = .{
         .luau = .{
             .url = "https://github.com/luau-lang/luau/archive/refs/tags/0.656.tar.gz",

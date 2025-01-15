@@ -8,7 +8,6 @@
 
 const std = @import("std");
 
-// The ziglua module is made available in build.zig
 const luau = @import("luau");
 
 pub fn main() anyerror!void {
@@ -19,17 +18,17 @@ pub fn main() anyerror!void {
     // Initialize The Lua vm and get a reference to the main thread
     //
     // Passing a Zig allocator to the Lua state requires a stable pointer
-    var lua = try luau.Luau.init(&allocator);
+    var lua = try luau.init(&allocator);
     defer lua.deinit();
 
     // Open all Lua standard libraries
-    lua.openLibs();
+    lua.Lopenlibs();
 
     // Load bytecode
     const src = @embedFile("./test.luau");
     const bc = try luau.compile(allocator, src, .{});
     defer allocator.free(bc);
 
-    try lua.loadBytecode("...", bc);
-    try lua.pcall(0, 0, 0);
+    try lua.load("...", bc, 0);
+    _ = try lua.pcall(0, 0, 0).check();
 }
