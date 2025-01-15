@@ -436,11 +436,11 @@ pub const TKey = extern struct {
     next: [3]u8, // for chaining
 
     pub inline fn ttype(this: *const TKey) u4 {
-        return @bitCast(this.tt & 0x0F);
+        return @intCast(this.tt & 0x0F);
     }
 
     pub inline fn vnext(this: *TKey) i28 {
-        const lower = @as(u4, (this.tt & 0xF0));
+        const lower = @as(u4, @intCast(this.tt & 0xF0));
         const higher = @as(u24, @bitCast(this.next));
         return @bitCast((@as(u28, @intCast(lower)) << 24) | @as(u28, @intCast(higher)));
     }
@@ -457,7 +457,7 @@ pub const LuaNode = extern struct {
         return &this.val;
     }
     pub inline fn gnext(this: *LuaNode) i28 {
-        return &this.key.vnext();
+        return this.key.vnext();
     }
 };
 

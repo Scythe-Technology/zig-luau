@@ -15,29 +15,37 @@ pub const Ast = struct {
 };
 
 pub const VM = struct {
-    pub const zapi = @import("VM/zapi.zig");
-    pub const lapi = @import("VM/lapi.zig");
-    pub const laux = @import("VM/laux.zig");
+    pub const lua = @import("VM/lua.zig");
     pub const ldo = @import("VM/ldo.zig");
     pub const lgc = @import("VM/lgc.zig");
     pub const ltm = @import("VM/ltm.zig");
-    pub const lua = @import("VM/lua.zig");
+    pub const zapi = @import("VM/zapi.zig");
+    pub const lapi = @import("VM/lapi.zig");
+    pub const laux = @import("VM/laux.zig");
     pub const lperf = @import("VM/lperf.zig");
+    pub const linit = @import("VM/linit.zig");
     pub const lstate = @import("VM/lstate.zig");
     pub const lobject = @import("VM/lobject.zig");
     pub const lvmload = @import("VM/lvmload.zig");
+    pub const lcommon = @import("VM/lcommon.zig");
+    pub const lvmutils = @import("VM/lvmutils.zig");
+    pub const lgcdebug = @import("VM/lgcdebug.zig");
+
+    // libraries
+    pub const lbitlib = @import("VM/lbitlib.zig");
+    pub const lbaselib = @import("VM/lbaselib.zig");
+    pub const lcorolib = @import("VM/lcorolib.zig");
+    pub const ldblib = @import("VM/ldblib.zig");
+    pub const lmathlib = @import("VM/lmathlib.zig");
+    pub const loslib = @import("VM/loslib.zig");
+    pub const lstrlib = @import("VM/lstrlib.zig");
+    pub const ltablib = @import("VM/ltablib.zig");
+    pub const lutf8lib = @import("VM/lutf8lib.zig");
+    pub const lveclib = @import("VM/lveclib.zig");
     test {
-        std.testing.refAllDecls(zapi);
-        std.testing.refAllDecls(lapi);
-        std.testing.refAllDecls(laux);
-        std.testing.refAllDecls(ldo);
-        std.testing.refAllDecls(lgc);
-        std.testing.refAllDecls(ltm);
-        std.testing.refAllDecls(lua);
-        std.testing.refAllDecls(lperf);
-        std.testing.refAllDecls(lstate);
-        std.testing.refAllDecls(lobject);
-        std.testing.refAllDecls(lvmload);
+        inline for (comptime std.meta.declarations(VM)) |decl| {
+            std.testing.refAllDecls(@field(VM, decl.name));
+        }
     }
 };
 
