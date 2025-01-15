@@ -70,7 +70,7 @@ pub inline fn Zpushfunction(L: *lua.State, comptime f: anytype, name: [:0]const 
     L.pushcfunction(toCFn(f), name);
 }
 
-pub fn Zpushvaluek(L: *lua.State, value: anytype, name: ?[:0]const u8) void {
+pub fn Zpushvaluekc(L: *lua.State, comptime value: anytype, comptime name: ?[:0]const u8) void {
     switch (@typeInfo(@TypeOf(value))) {
         .bool => L.pushboolean(value),
         .comptime_int => L.pushinteger(@intCast(value)),
@@ -91,7 +91,7 @@ pub fn Zpushvaluek(L: *lua.State, value: anytype, name: ?[:0]const u8) void {
         .pointer => |pointer| {
             if (pointer.size == .One)
                 switch (@typeInfo(pointer.child)) {
-                    .@"fn" => L.pushcfunction(toCFn(value), name orelse "?anon func?"),
+                    .@"fn" => Zpushfunction(L, value, name orelse "?anon func?"),
                     .array => |a| {
                         if (a.child == u8)
                             L.pushlstring(value)
@@ -109,7 +109,79 @@ pub fn Zpushvaluek(L: *lua.State, value: anytype, name: ?[:0]const u8) void {
                 } else L.pushlstring(value);
             } else @compileError("Unsupported pointer type");
         },
-        .@"fn" => L.pushcfunction(toCFn(value), name orelse "?anon func?"),
+        .@"fn" => Zpushfunction(L, value, name orelse "?anon func?"),
+        .array => |a| {
+            L.createtable(a.len, 0);
+            inline for (value, 0..) |v, i| {
+                Zpushvalue(L, i + 1);
+                Zpushvalue(L, v);
+                L.settable(-3);
+            }
+        },
+        .vector => |info| {
+            if (info.len != lua.config.VECTOR_SIZE)
+                @compileError("Vector size mismatch");
+            switch (info.len) {
+                3 => L.pushvector(value[0], value[1], value[2], 0),
+                4 => L.pushvector(value[0], value[1], value[2], value[3]),
+                else => @compileError("Unsupported vector size"),
+            }
+        },
+        .@"enum" => L.pushlstring(@tagName(value)),
+        .@"struct" => |s| {
+            L.createtable(0, s.fields.len);
+            inline for (s.fields) |field| {
+                Zpushvalue(L, field.name);
+                Zpushvalue(L, @field(value, field.name));
+                L.settable(-3);
+            }
+        },
+        .null => L.pushnil(),
+        .void => {},
+        else => |t| @compileError("Unsupported type " ++ @tagName(t)),
+    }
+}
+
+pub fn Zpushvalue(L: *lua.State, value: anytype) void {
+    switch (@typeInfo(@TypeOf(value))) {
+        .bool => L.pushboolean(value),
+        .comptime_int => L.pushinteger(@intCast(value)),
+        .comptime_float => L.pushnumber(@floatCast(value)),
+        .int => |int| {
+            const pushfn = if (int.signedness == .signed) lapi.pushinteger else lapi.pushunsigned;
+            if (int.bits <= 32)
+                pushfn(L, value)
+            else
+                pushfn(L, @truncate(value));
+        },
+        .float => |float| {
+            if (float.bits <= 64)
+                L.pushnumber(@floatCast(value))
+            else
+                @compileError("float size too large");
+        },
+        .pointer => |pointer| {
+            if (pointer.size == .One)
+                switch (@typeInfo(pointer.child)) {
+                    .@"fn" => @compileError("Use Zpushvaluekc for functions"),
+                    .array => |a| {
+                        if (a.child == u8)
+                            L.pushlstring(value)
+                        else
+                            @compileError("Unsupported pointer array type");
+                    },
+                    else => |t| @compileError("Unsupported pointer type " ++ @tagName(t)),
+                }
+            else if (pointer.size == .Slice and pointer.child == u8) {
+                if (pointer.sentinel) |sentinel| {
+                    if (@intFromPtr(sentinel) == 0)
+                        L.pushlstring(value)
+                    else
+                        @compileError("Unsupported pointer sentinel");
+                } else L.pushlstring(value);
+            } else @compileError("Unsupported pointer type");
+        },
+        .@"fn" => @compileError("Use Zpushvaluekc for functions"),
         .array => |a| {
             L.createtable(a.len, 0);
             for (value, 0..) |v, i| {
@@ -148,24 +220,25 @@ pub fn Zpushvaluek(L: *lua.State, value: anytype, name: ?[:0]const u8) void {
     }
 }
 
-pub fn Zpushvalue(L: *lua.State, value: anytype) void {
-    Zpushvaluek(L, value, null);
-}
-
 pub fn Zsetfield(L: *lua.State, comptime index: i32, k: [:0]const u8, value: anytype) void {
     const idx = comptime if (index != lua.GLOBALSINDEX and index != lua.REGISTRYINDEX and index < 0) index - 1 else index;
-    Zpushvaluek(L, value, k);
+    Zpushvalue(L, value);
     L.setfield(idx, k);
 }
 
 pub fn Zsetfieldc(L: *lua.State, comptime index: i32, comptime k: [:0]const u8, comptime value: anytype) void {
     const idx = comptime if (index != lua.GLOBALSINDEX and index != lua.REGISTRYINDEX and index < 0) index - 1 else index;
-    comptime Zpushvaluek(L, value, k);
+    Zpushvaluekc(L, value, k);
     L.setfield(idx, k);
 }
 
 pub fn Zsetglobal(L: *lua.State, name: [:0]const u8, value: anytype) void {
-    Zpushvaluek(L, value, name);
+    Zpushvalue(L, value);
+    L.setglobal(name);
+}
+
+pub fn Zsetglobalc(L: *lua.State, comptime name: [:0]const u8, comptime value: anytype) void {
+    Zpushvaluekc(L, value, name);
     L.setglobal(name);
 }
 

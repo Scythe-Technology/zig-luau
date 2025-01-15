@@ -367,7 +367,7 @@ test "calling a function" {
     var lua = try luau.init(&testing.allocator);
     defer lua.deinit();
 
-    lua.Zsetglobal("zigadd", add);
+    lua.Zsetglobalc("zigadd", add);
 
     _ = lua.getglobal("zigadd");
     lua.pushinteger(10);
@@ -1128,7 +1128,7 @@ test "Set Api" {
             return 1;
         }
     }.inner;
-    lua.Zsetglobal("vector", vectorFn);
+    lua.Zsetglobalc("vector", vectorFn);
 
     const src =
         \\function MyFunction(api)
@@ -1178,7 +1178,7 @@ test "Set Api" {
         }
     }.inner;
     lua.newtable();
-    lua.Zsetfield(-1, "a", tempFn);
+    lua.Zsetfieldc(-1, "a", tempFn);
     lua.Zsetfield(-1, "b", true);
     lua.Zsetfield(-1, "c", 1.1);
     lua.Zsetfield(-1, "d", 2);
@@ -1190,7 +1190,7 @@ test "Set Api" {
         lua.Zsetfield(-1, "pos", @Vector(4, f32){ 1.0, 2.0, 3.0, 4.0 });
     }
 
-    lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_a", tempFn);
+    lua.Zsetfieldc(luau.VM.lua.GLOBALSINDEX, "_a", tempFn);
     lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_b", true);
     lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_c", @as(f64, 1.1));
     lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_d", @as(i32, 2));
@@ -1202,7 +1202,7 @@ test "Set Api" {
         lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_pos", @Vector(4, f32){ 1.0, 2.0, 3.0, 4.0 });
     }
 
-    lua.Zsetglobal("gl_a", tempFn);
+    lua.Zsetglobalc("gl_a", tempFn);
     lua.Zsetglobal("gl_b", true);
     lua.Zsetglobal("gl_c", 1.1);
     lua.Zsetglobal("gl_d", 2);
@@ -1276,7 +1276,7 @@ test "Vectors" {
     });
     defer testing.allocator.free(bc);
 
-    lua.Zsetglobal("vector", vectorFn);
+    lua.Zsetglobalc("vector", vectorFn);
 
     try lua.load("module", bc, 0);
     _ = lua.pcall(0, 1, 0); // CALL main()
@@ -1317,7 +1317,7 @@ test "Luau JIT/CodeGen" {
 
     lua.openbase();
 
-    lua.Zsetglobal("test", struct {
+    lua.Zsetglobalc("test", struct {
         fn inner(L: *State) !i32 {
             L.pushboolean(L.Gisnative(@intCast(L.Loptinteger(1, 0))));
             return 1;
@@ -1380,7 +1380,7 @@ test "Metamethods" {
 
     _ = lua.Lnewmetatable("MyMetatable");
 
-    lua.Zsetfield(-1, luau.Metamethods.index, struct {
+    lua.Zsetfieldc(-1, luau.Metamethods.index, struct {
         fn inner(l: *State) i32 {
             l.Lchecktype(1, .Table);
             const key = l.tostring(2) orelse unreachable;
@@ -1390,7 +1390,7 @@ test "Metamethods" {
         }
     }.inner);
 
-    lua.Zsetfield(-1, luau.Metamethods.tostring, struct {
+    lua.Zsetfieldc(-1, luau.Metamethods.tostring, struct {
         fn inner(l: *State) i32 {
             l.Lchecktype(1, .Table);
             l.pushstring("MyMetatable");
@@ -1548,7 +1548,7 @@ test "State getInfo" {
     });
     defer testing.allocator.free(bc);
 
-    lua.Zsetglobal("func", struct {
+    lua.Zsetglobalc("func", struct {
         fn inner(L: *State) !i32 {
             const ar = L.getinfo(1, "snl");
             try expect(ar != null);
@@ -1584,7 +1584,7 @@ test "yielding error" {
         });
         defer testing.allocator.free(bc);
 
-        lua.Zsetglobal("foo", struct {
+        lua.Zsetglobalc("foo", struct {
             fn inner(L: *State) !i32 {
                 return L.yield(0);
             }
@@ -1616,7 +1616,7 @@ test "yielding error" {
         });
         defer testing.allocator.free(bc);
 
-        lua.Zsetglobal("foo", struct {
+        lua.Zsetglobalc("foo", struct {
             fn inner(L: *State) !i32 {
                 return L.yield(0);
             }
