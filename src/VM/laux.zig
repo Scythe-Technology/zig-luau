@@ -1,8 +1,9 @@
 const c = @import("c");
 const std = @import("std");
 
-const lapi = @import("lapi.zig");
 const lua = @import("lua.zig");
+const lapi = @import("lapi.zig");
+const lobject = @import("lobject.zig");
 
 pub const Reg = struct {
     name: [:0]const u8,
@@ -16,8 +17,31 @@ pub fn OptionalValue(comptime T: type, L: *lua.State, check: anytype, narg: i32,
         return check(L, narg);
 }
 
+fn currfuncname(L: *lua.State) ?[:0]const u8 {
+    const cl: ?*lobject.Closure = if (@intFromPtr(L.ci) > @intFromPtr(L.base_ci))
+        L.curr_func()
+    else
+        null;
+    const debugname: ?[:0]const u8 = if (cl != null and cl.?.isC != 0)
+        std.mem.span(cl.?.d.c.debugname)
+    else
+        null;
+
+    if (debugname != null and std.mem.eql(u8, debugname.?, "__namecall")) {
+        return if (L.namecall) |namecall|
+            std.mem.span(namecall.getstr())
+        else
+            null;
+    } else return debugname;
+}
+
 pub inline fn LargerrorL(L: *lua.State, narg: i32, extramsg: [:0]const u8) noreturn {
-    c.luaL_argerror(@as(*c.lua_State, @ptrCast(L)), narg, extramsg);
+    const fname = currfuncname(L);
+
+    if (fname) |name|
+        LerrorL(L, "invalid argument #{d} to '{s}' ({s})", .{ narg, name, extramsg })
+    else
+        LerrorL(L, "invalid argument #{d} ({s})", .{ narg, extramsg });
 }
 pub inline fn Largerror(L: *lua.State, narg: i32, extramsg: [:0]const u8) noreturn {
     LargerrorL(L, narg, extramsg);
@@ -51,8 +75,21 @@ pub fn LerrorL(L: *lua.State, comptime fmt: []const u8, args: anytype) noreturn 
     L.raiseerror();
 }
 
-pub inline fn Lcheckoption(L: *lua.State, narg: i32, def: [:0]const u8, lst: [:0]const [:0]const u8) i32 {
-    return c.luaL_checkoption(@ptrCast(L), narg, def, lst);
+pub inline fn Lcheckoption(L: *lua.State, comptime T: type, narg: i32, def: ?T) T {
+    const name = blk: {
+        if (def) |d|
+            break :blk Loptstring(narg, @tagName(d))
+        else
+            break :blk L.checkstring(narg);
+    };
+
+    inline for (std.meta.fields(T)) |field| {
+        if (std.mem.eql(u8, field.name, name))
+            return @enumFromInt(field.value);
+    }
+
+    var buf: [128]u8 = undefined;
+    return LargerrorL(L, narg, std.fmt.bufPrintZ(&buf, "invalid option '{s}'", .{name}) catch "");
 }
 
 /// Returns true if metatable was created, false if it already exists.
@@ -153,23 +190,23 @@ pub fn Lcheckvector(L: *lua.State, narg: i32) []const f32 {
 }
 
 pub fn Loptvector(L: *lua.State, narg: i32, d: []const f32) []const f32 {
-    return OptionalValue(?[]const f32, L, Lcheckvector, narg, d);
+    return OptionalValue([]const f32, L, Lcheckvector, narg, d);
 }
 
-pub fn Lgetmetafield(L: *lua.State, obj: i32, event: []const u8) i32 {
+pub fn Lgetmetafield(L: *lua.State, obj: i32, event: [:0]const u8) bool {
     if (!L.getmetatable(obj)) // no metatable?
-        return 0;
+        return false;
     L.pushstring(event);
-    L.rawget(-2);
+    _ = L.rawget(-2);
     if (L.isnil(-1)) {
         L.pop(2); // remove metatable and metafield
-        return 0;
+        return false;
     }
     L.remove(-2); // remove only metatable
-    return 1;
+    return true;
 }
 
-pub fn Lcallmeta(L: *lua.State, obj: i32, event: []const u8) bool {
+pub fn Lcallmeta(L: *lua.State, obj: i32, event: [:0]const u8) bool {
     const idx = lapi.absindex(L, obj);
     if (!Lgetmetafield(L, idx, event))
         return false;

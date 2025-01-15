@@ -163,7 +163,7 @@ pub const GCOp = enum(u4) {
 pub const NOREF = c.LUA_NOREF;
 pub const REFNIL = c.LUA_REFNIL;
 
-pub const Hook = *const fn (?*State, [*c]Debug) callconv(.c) void;
+pub const Hook = *const fn (?*State, [*c]c.lua_Debug) callconv(.c) void;
 
 pub const Debug = struct {
     what: Context = .lua,

@@ -113,7 +113,7 @@ pub const TValue = extern struct {
         std.debug.assert(obj.ttisstring());
         return &obj.value.gc.?.ts;
     }
-    pub inline fn uvalue(obj: *TValue) *Udata {
+    pub inline fn uvalue(obj: *const TValue) *Udata {
         std.debug.assert(obj.ttisuserdata());
         return &obj.value.gc.?.u;
     }
@@ -121,7 +121,7 @@ pub const TValue = extern struct {
         std.debug.assert(obj.ttisfunction());
         return &obj.value.gc.?.cl;
     }
-    pub inline fn hvalue(obj: *TValue) *Table {
+    pub inline fn hvalue(obj: *const TValue) *Table {
         std.debug.assert(obj.ttistable());
         return &obj.value.gc.?.h;
     }
@@ -129,11 +129,11 @@ pub const TValue = extern struct {
         std.debug.assert(obj.ttisboolean());
         return obj.value.b != 0;
     }
-    pub inline fn thvalue(obj: *TValue) *lstate.lua_State {
+    pub inline fn thvalue(obj: *const TValue) *lstate.lua_State {
         std.debug.assert(obj.ttisthread());
         return &obj.value.gc.?.th;
     }
-    pub inline fn bufvalue(obj: *TValue) *Buffer {
+    pub inline fn bufvalue(obj: *const TValue) *Buffer {
         std.debug.assert(obj.ttisbuffer());
         return &obj.value.gc.?.buf;
     }

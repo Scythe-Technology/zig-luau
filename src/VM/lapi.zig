@@ -23,7 +23,7 @@ pub inline fn checknelems(L: *State, n: u32) void {
     check(L, n <= @intFromPtr(L.top) - @intFromPtr(L.base));
 }
 
-pub inline fn checkvalidindex(L: *State, obj: lobject.StkId) void {
+pub inline fn checkvalidindex(L: *State, obj: *const lobject.TValue) void {
     check(L, obj != lobject.nilobject);
 }
 
@@ -210,12 +210,12 @@ pub fn typename(t: lua.Type) [:0]const u8 {
 }
 
 pub fn iscfunction(L: *lua.State, idx: i32) bool {
-    const o = index2addr(L, idx);
+    const o: *const lobject.TValue = index2addr(L, idx);
     return o.iscfunction();
 }
 
 pub fn isLfunction(L: *lua.State, idx: i32) bool {
-    const o = index2addr(L, idx);
+    const o: *const lobject.TValue = index2addr(L, idx);
     return o.isLfunction();
 }
 
@@ -229,7 +229,7 @@ pub fn isstring(L: *lua.State, idx: i32) bool {
 }
 
 pub fn isuserdata(L: *lua.State, idx: i32) bool {
-    const o = index2addr(L, idx);
+    const o: *const lobject.TValue = index2addr(L, idx);
     return o.ttisuserdata() or o.ttislightuserdata();
 }
 
@@ -323,7 +323,7 @@ pub inline fn strlen(L: *lua.State, idx: i32) usize {
 }
 
 pub fn tocfunction(L: *lua.State, idx: i32) ?lua.CFunction {
-    const o = index2addr(L, idx);
+    const o: *const lobject.TValue = index2addr(L, idx);
     return if (!o.iscfunction())
         null
     else
@@ -331,7 +331,7 @@ pub fn tocfunction(L: *lua.State, idx: i32) ?lua.CFunction {
 }
 
 pub fn tolightuserdata(L: *lua.State, comptime T: type, idx: i32) ?*T {
-    const o = index2addr(L, idx);
+    const o: *const lobject.TValue = index2addr(L, idx);
     return if (!o.ttislightuserdata())
         null
     else
@@ -339,7 +339,7 @@ pub fn tolightuserdata(L: *lua.State, comptime T: type, idx: i32) ?*T {
 }
 
 pub fn tolightuserdatatagged(L: *lua.State, comptime T: type, idx: i32, tag: i32) ?*T {
-    const o = index2addr(L, idx);
+    const o: *const lobject.TValue = index2addr(L, idx);
     return if (!o.ttislightuserdata() or o.lightuserdatatag() != tag)
         null
     else
@@ -347,7 +347,7 @@ pub fn tolightuserdatatagged(L: *lua.State, comptime T: type, idx: i32, tag: i32
 }
 
 pub fn touserdata(L: *lua.State, comptime T: type, idx: i32) ?*T {
-    const o = index2addr(L, idx);
+    const o: *const lobject.TValue = index2addr(L, idx);
     if (o.ttisuserdata())
         return @ptrCast(&o.uvalue().data)
     else if (o.ttislightuserdata())
@@ -357,7 +357,7 @@ pub fn touserdata(L: *lua.State, comptime T: type, idx: i32) ?*T {
 }
 
 pub fn touserdatatagged(L: *lua.State, comptime T: type, idx: i32, tag: i32) ?*T {
-    const o = index2addr(L, idx);
+    const o: *const lobject.TValue = index2addr(L, idx);
     return if (o.ttisuserdata() and @as(i32, @intCast(o.uvalue().tag)) != tag)
         @ptrCast(o.uvalue().data)
     else
@@ -365,7 +365,7 @@ pub fn touserdatatagged(L: *lua.State, comptime T: type, idx: i32, tag: i32) ?*T
 }
 
 pub fn userdatatag(L: *lua.State, idx: i32) i32 {
-    const o = index2addr(L, idx);
+    const o: *const lobject.TValue = index2addr(L, idx);
     return if (o.ttisuserdata())
         @intCast(o.uvalue().tag)
     else
@@ -373,7 +373,7 @@ pub fn userdatatag(L: *lua.State, idx: i32) i32 {
 }
 
 pub fn lightuserdatatag(L: *lua.State, idx: i32) i32 {
-    const o = index2addr(L, idx);
+    const o: *const lobject.TValue = index2addr(L, idx);
     return if (o.ttislightuserdata())
         o.lightuserdatatag()
     else
@@ -381,7 +381,7 @@ pub fn lightuserdatatag(L: *lua.State, idx: i32) i32 {
 }
 
 pub fn tothread(L: *lua.State, idx: i32) ?*lua.State {
-    const o = index2addr(L, idx);
+    const o: *const lobject.TValue = index2addr(L, idx);
     return if (!o.ttisthread())
         null
     else
@@ -389,7 +389,7 @@ pub fn tothread(L: *lua.State, idx: i32) ?*lua.State {
 }
 
 pub fn tobuffer(L: *lua.State, idx: i32) ?[]u8 {
-    const o = index2addr(L, idx);
+    const o: *const lobject.TValue = index2addr(L, idx);
     if (!o.ttisbuffer())
         return null;
     const b = o.bufvalue();
@@ -397,7 +397,7 @@ pub fn tobuffer(L: *lua.State, idx: i32) ?[]u8 {
 }
 
 pub fn topointer(L: *lua.State, idx: i32) ?*const anyopaque {
-    const o = index2addr(L, idx);
+    const o: *const lobject.TValue = index2addr(L, idx);
     switch (o.tt) {
         @intFromEnum(lua.Type.Userdata) => return @ptrCast(&o.uvalue().data),
         @intFromEnum(lua.Type.LightUserdata) => return @ptrCast(o.pvalue()),
@@ -531,25 +531,25 @@ pub fn setreadonly(L: *lua.State, idx: i32, enabled: bool) void {
 }
 
 pub fn getreadonly(L: *lua.State, idx: i32) bool {
-    const o = index2addr(L, idx);
+    const o: *const lobject.TValue = index2addr(L, idx);
     check(L, o.ttistable());
     return o.hvalue().readonly != 0;
 }
 
 pub fn setsafeenv(L: *lua.State, idx: i32, enabled: bool) void {
-    const o: *const lobject.TValue = index2addr(L, idx);
+    const o = index2addr(L, idx);
     check(L, o.ttistable());
     o.hvalue().safeenv = if (enabled) 1 else 0;
 }
 
 pub fn getmetatable(L: *lua.State, idx: i32) bool {
-    gc.Cthreadbarrier(L);
+    lgc.Cthreadbarrier(L);
     var mt: ?*lobject.Table = null;
     const o: *const lobject.TValue = index2addr(L, idx);
     switch (o.tt) {
         @intFromEnum(lua.Type.Table) => mt = o.hvalue().metatable,
         @intFromEnum(lua.Type.Userdata) => mt = o.uvalue().metatable,
-        else => mt = L.global.mt[o.tt],
+        else => mt = L.global.mt[@intCast(o.tt)],
     }
     if (mt) |ptr| {
         L.top.sethvalue(L, ptr);
@@ -558,13 +558,13 @@ pub fn getmetatable(L: *lua.State, idx: i32) bool {
     return mt != null;
 }
 
-pub fn getfenv(L: *lua.State, idx: i32) bool {
-    gc.Cthreadbarrier(L);
+pub fn getfenv(L: *lua.State, idx: i32) void {
+    lgc.Cthreadbarrier(L);
     const o: *const lobject.TValue = index2addr(L, idx);
     checkvalidindex(L, o);
     switch (o.tt) {
-        @intFromEnum(lua.Type.Function) => L.top.sethvalue(o.clvalue().env),
-        @intFromEnum(lua.Type.Thread) => L.top.sethvalue(o.thvalue().gt),
+        @intFromEnum(lua.Type.Function) => L.top.sethvalue(L, o.clvalue().env),
+        @intFromEnum(lua.Type.Thread) => L.top.sethvalue(L, o.thvalue().gt.?),
         else => L.top.setnilvalue(),
     }
     incr_top(L);

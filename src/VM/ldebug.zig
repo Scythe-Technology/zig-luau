@@ -88,7 +88,7 @@ pub inline fn singlestep(L: *lua.State, enabled: bool) void {
 }
 
 pub inline fn breakpoint(L: *lua.State, funcindex: i32, line: i32, enabled: bool) void {
-    c.lua_breakpoint(@ptrCast(L), funcindex, line, enabled);
+    c.lua_breakpoint(@ptrCast(L), funcindex, line, if (enabled) 1 else 0);
 }
 
 pub fn getcoverage(

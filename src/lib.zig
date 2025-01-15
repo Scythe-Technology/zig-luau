@@ -7,6 +7,11 @@ pub const Ast = struct {
     pub const Allocator = @import("Ast/Allocator.zig");
     pub const Lexer = @import("Ast/Lexer.zig");
     pub const Parser = @import("Ast/Parser.zig");
+    test {
+        std.testing.refAllDecls(Parser);
+        std.testing.refAllDecls(Lexer);
+        std.testing.refAllDecls(Allocator);
+    }
 };
 
 pub const VM = struct {
@@ -21,11 +26,28 @@ pub const VM = struct {
     pub const lstate = @import("VM/lstate.zig");
     pub const lobject = @import("VM/lobject.zig");
     pub const lvmload = @import("VM/lvmload.zig");
+    test {
+        std.testing.refAllDecls(zapi);
+        std.testing.refAllDecls(lapi);
+        std.testing.refAllDecls(laux);
+        std.testing.refAllDecls(ldo);
+        std.testing.refAllDecls(lgc);
+        std.testing.refAllDecls(ltm);
+        std.testing.refAllDecls(lua);
+        std.testing.refAllDecls(lperf);
+        std.testing.refAllDecls(lstate);
+        std.testing.refAllDecls(lobject);
+        std.testing.refAllDecls(lvmload);
+    }
 };
 
 pub const Compiler = struct {
     pub const luacode = @import("Compiler/luacode.zig");
     pub const Compiler = @import("Compiler/Compiler.zig");
+    test {
+        std.testing.refAllDecls(luacode);
+        std.testing.refAllDecls(@import("Compiler/Compiler.zig"));
+    }
 };
 
 //
@@ -41,12 +63,6 @@ pub const State = VM.lua.State;
 //
 pub const compile = Compiler.luacode.compile;
 pub const CompileOptions = Compiler.Compiler.CompileOptions;
-
-test {
-    std.testing.refAllDecls(Compiler);
-    std.testing.refAllDecls(Ast);
-    std.testing.refAllDecls(VM);
-}
 
 const c_FlagGroup = extern struct {
     names: [*c][*c]const u8,
