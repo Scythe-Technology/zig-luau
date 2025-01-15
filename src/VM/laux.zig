@@ -60,8 +60,8 @@ inline fn tag_error(L: *lua.State, narg: i32, tag: lua.Type) void {
 
 pub fn Lwhere(L: *lua.State, level: i32) void {
     if (L.getinfo(level, "sl")) |info| {
-        if (info.currentline > 0) {
-            L.pushfstring("{s}:{d}: ", .{ info.short_src.?, info.currentline });
+        if (info.currentline) |line| {
+            L.pushfstring("{s}:{d}: ", .{ info.short_src.?, line });
             return;
         }
     }
