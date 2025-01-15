@@ -44,4 +44,4 @@ jobs:
       uses: jcbhmr/setup-wasmtime@v2.0.4
 
     - name: Run tests
-      run: zig build test -Dtarget=${{ matrix.target }}${{ contains(matrix.target, 'wasm') && ' -fwasmtime -Doptimize=ReleaseFast' || '' }} --summary all
+      run: zig build test -Dtarget=${{ matrix.target }}${{ contains(matrix.target, 'wasm') && ' -fwasmtime -Doptimize=ReleaseSafe' || '' }} --summary all
