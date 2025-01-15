@@ -661,8 +661,8 @@ pub inline fn @"error"(L: *lua.State) noreturn {
     return c.lua_error(@ptrCast(L));
 }
 
-pub inline fn next(L: *lua.State, idx: i32) i32 {
-    return c.lua_next(@ptrCast(L), idx);
+pub inline fn next(L: *lua.State, idx: i32) bool {
+    return c.lua_next(@ptrCast(L), idx) != 0;
 }
 
 pub inline fn rawiter(L: *lua.State, idx: i32, iter: i32) i32 {
