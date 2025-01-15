@@ -102,10 +102,11 @@ pub fn Zpushvaluekc(L: *lua.State, comptime value: anytype, comptime name: ?[:0]
                 }
             else if (pointer.size == .Slice and pointer.child == u8) {
                 if (pointer.sentinel) |sentinel| {
-                    if (@intFromPtr(sentinel) == 0)
+                    const s: *const pointer.child = @ptrCast(sentinel);
+                    if (s.* == 0)
                         L.pushlstring(value)
                     else
-                        @compileError("Unsupported pointer sentinel");
+                        @compileError("Unsupported pointer sentinel [:?]" ++ @typeName(pointer.child));
                 } else L.pushlstring(value);
             } else @compileError("Unsupported pointer type");
         },
@@ -174,10 +175,11 @@ pub fn Zpushvalue(L: *lua.State, value: anytype) void {
                 }
             else if (pointer.size == .Slice and pointer.child == u8) {
                 if (pointer.sentinel) |sentinel| {
-                    if (@intFromPtr(sentinel) == 0)
+                    const s: *const pointer.child = @ptrCast(sentinel);
+                    if (s.* == 0)
                         L.pushlstring(value)
                     else
-                        @compileError("Unsupported pointer sentinel");
+                        @compileError("Unsupported pointer sentinel [:?]" ++ @typeName(pointer.child));
                 } else L.pushlstring(value);
             } else @compileError("Unsupported pointer type");
         },
