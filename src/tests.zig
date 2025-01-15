@@ -893,7 +893,7 @@ test "args and errors" {
 
     const FmtError = struct {
         fn inner(l: *State) !i32 {
-            return l.Zerror("some err fmt error {s}!", .{"zig"});
+            return l.Zerrorf("some err fmt error {s}!", .{"zig"});
         }
     }.inner;
 
@@ -903,7 +903,7 @@ test "args and errors" {
 
     const Error = struct {
         fn inner(l: *State) !i32 {
-            return l.Zerror("some error", .{});
+            return l.Zerror("some error");
         }
     }.inner;
 

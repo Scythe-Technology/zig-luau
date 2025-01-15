@@ -623,6 +623,7 @@ pub const lua_State = extern struct {
     pub const Zpushbuffer = zapi.Zpushbuffer;
     pub const Zresumeferror = zapi.Zresumeferror;
     pub const Zerror = zapi.Zerror;
+    pub const Zerrorf = zapi.Zerrorf;
 
     pub inline fn deinit(L: *lua_State) void {
         L.close();
