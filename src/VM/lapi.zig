@@ -52,7 +52,7 @@ pub noinline fn pseudo2addr(L: *State, idx: i32) lobject.StkId {
             const func = L.curr_func();
             const i = lua.GLOBALSINDEX - idx;
             return if (i <= @as(i32, @intCast(func.nupvalues)))
-                &func.d.c.upvals[@intCast(i - 1)]
+                &@as([*]lobject.TValue, &func.d.c.upvals)[@intCast(i - 1)]
             else
                 @constCast(lobject.nilobject);
         },
