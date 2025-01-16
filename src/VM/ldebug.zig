@@ -42,7 +42,7 @@ pub inline fn setlocal(L: *lua.State, level: i32, n: i32) ?[:0]const u8 {
 }
 
 pub inline fn stackdepth(L: *lua.State) usize {
-    return L.ci.?.sub(@intFromPtr(L.base_ci.?));
+    return L.ci.?.sub(L.base_ci.?);
 }
 
 pub fn getinfo(L: *lua.State, level: i32, what: [:0]const u8, ar: *lua.Debug) bool {
