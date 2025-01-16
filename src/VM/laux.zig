@@ -160,7 +160,7 @@ pub fn Loptnumber(L: *lua.State, narg: i32, d: f64) f64 {
 }
 
 pub fn Lcheckboolean(L: *lua.State, narg: i32) bool {
-    if (!L.isboolean(narg))
+    if (L.isboolean(narg))
         return L.toboolean(narg)
     else
         tag_error(L, narg, .Boolean);

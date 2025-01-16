@@ -167,7 +167,7 @@ pub inline fn pushvalue(L: *lua.State, idx: i32) void {
 //
 
 pub fn @"type"(L: *lua.State, idx: i32) i32 {
-    const o = index2addr(L, idx);
+    const o: *const lobject.TValue = index2addr(L, idx);
     return if (o == lobject.nilobject) @intFromEnum(lua.Type.None) else o.ttype();
 }
 pub inline fn isfunction(L: *lua.State, idx: i32) bool {
