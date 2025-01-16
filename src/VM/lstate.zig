@@ -585,7 +585,7 @@ pub const lua_State = extern struct {
     pub const Ltolstring = laux.Ltolstring;
 
     // ldebug
-    pub const getarument = ldebug.getarument;
+    pub const getargument = ldebug.getargument;
     pub const getlocal = ldebug.getlocal;
     pub const setlocal = ldebug.setlocal;
     pub const stackdepth = ldebug.stackdepth;

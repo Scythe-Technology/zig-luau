@@ -27,12 +27,18 @@ pub inline fn getargument(L: *lua.State, level: i32, n: i32) bool {
     return c.lua_getargument(@ptrCast(L), level, n) != 0;
 }
 
-pub inline fn getlocal(L: *lua.State, level: i32, n: i32) [:0]const u8 {
-    return std.mem.span(c.lua_getlocal(@ptrCast(L), level, n));
+pub inline fn getlocal(L: *lua.State, level: i32, n: i32) ?[:0]const u8 {
+    const name = c.lua_getlocal(@ptrCast(L), level, n);
+    if (name != null)
+        return std.mem.span(name);
+    return null;
 }
 
-pub inline fn setlocal(L: *lua.State, level: i32, n: i32) [:0]const u8 {
-    return std.mem.span(c.lua_setlocal(@ptrCast(L), level, n));
+pub inline fn setlocal(L: *lua.State, level: i32, n: i32) ?[:0]const u8 {
+    const name = c.lua_setlocal(@ptrCast(L), level, n);
+    if (name != null)
+        return std.mem.span(name);
+    return null;
 }
 
 pub inline fn stackdepth(L: *lua.State) usize {
