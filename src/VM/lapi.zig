@@ -358,10 +358,10 @@ pub fn touserdata(L: *lua.State, comptime T: type, idx: i32) ?*T {
 
 pub fn touserdatatagged(L: *lua.State, comptime T: type, idx: i32, tag: i32) ?*T {
     const o: *const lobject.TValue = index2addr(L, idx);
-    return if (o.ttisuserdata() and @as(i32, @intCast(o.uvalue().tag)) != tag)
-        @ptrCast(&o.uvalue().data)
+    return if (!o.ttisuserdata() or @as(i32, @intCast(o.uvalue().tag)) != tag)
+        null
     else
-        null;
+        @ptrCast(&o.uvalue().data);
 }
 
 pub fn userdatatag(L: *lua.State, idx: i32) i32 {
