@@ -39,11 +39,12 @@ pub inline fn stackdepth(L: *lua.State) usize {
     return L.ci.?.sub(@intFromPtr(L.base_ci.?));
 }
 
-pub fn getinfo(L: *lua.State, level: i32, what: [:0]const u8) ?lua.Debug {
-    var ar: c.lua_Debug = undefined;
-    if (c.lua_getinfo(@ptrCast(L), level, what.ptr, &ar) == 0)
-        return null;
-    return lua.Debug.fromLua(ar, what);
+pub fn getinfo(L: *lua.State, level: i32, what: [:0]const u8, ar: *lua.Debug) bool {
+    var info: c.lua_Debug = undefined;
+    if (c.lua_getinfo(@ptrCast(L), level, what.ptr, &info) == 0)
+        return false;
+    ar.fromLua(info, what);
+    return true;
 }
 
 fn pusherror(L: *lua.State, msg: [:0]const u8) void {

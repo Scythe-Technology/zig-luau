@@ -184,26 +184,22 @@ pub const Debug = struct {
         tail,
     };
 
-    pub fn fromLua(ar: c.lua_Debug, options: []const u8) Debug {
-        var arz: Debug = .{
-            .ssbuf = undefined,
-        };
-
+    pub fn fromLua(self: *Debug, ar: c.lua_Debug, options: []const u8) void {
         if (std.mem.indexOf(u8, options, "n")) |_| {
             if (ar.name != null)
-                arz.name = std.mem.span(ar.name);
+                self.name = std.mem.span(ar.name);
         }
 
         if (std.mem.indexOf(u8, options, "s")) |_| {
-            arz.source = std.mem.span(ar.source);
+            self.source = std.mem.span(ar.source);
 
             const short_src: [:0]const u8 = std.mem.span(ar.short_src);
-            @memcpy(arz.ssbuf[0..short_src.len], short_src[0.. :0]);
-            arz.short_src = arz.ssbuf[0..short_src.len];
+            @memcpy(self.ssbuf[0..short_src.len], short_src[0.. :0]);
+            self.short_src = self.ssbuf[0..short_src.len];
 
             if (ar.linedefined >= 0)
-                arz.linedefined = @intCast(ar.linedefined);
-            arz.what = blk: {
+                self.linedefined = @intCast(ar.linedefined);
+            self.what = blk: {
                 const what = std.mem.span(ar.what);
                 if (std.mem.eql(u8, "Lua", what)) break :blk .lua;
                 if (std.mem.eql(u8, "C", what)) break :blk .c;
@@ -215,18 +211,16 @@ pub const Debug = struct {
 
         if (std.mem.indexOf(u8, options, "l")) |_| {
             if (ar.currentline >= 0)
-                arz.currentline = @intCast(ar.currentline);
+                self.currentline = @intCast(ar.currentline);
         }
 
         if (std.mem.indexOf(u8, options, "u")) |_|
-            arz.nupvals = ar.nupvals;
+            self.nupvals = ar.nupvals;
 
         if (std.mem.indexOf(u8, options, "a")) |_| {
-            arz.nparams = ar.nparams;
-            arz.isvararg = ar.isvararg;
+            self.nparams = ar.nparams;
+            self.isvararg = ar.isvararg;
         }
-
-        return arz;
     }
 };
 

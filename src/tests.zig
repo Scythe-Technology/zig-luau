@@ -1550,12 +1550,12 @@ test "State getInfo" {
 
     lua.Zsetglobalc("func", struct {
         fn inner(L: *State) !i32 {
-            const ar = L.getinfo(1, "snl");
-            try expect(ar != null);
-            try expect(ar.?.what == .lua);
-            try std.testing.expectEqualSentinel(u8, 0, "MyFunction", ar.?.name orelse @panic("Failed"));
-            try std.testing.expectEqualStrings("[string \"module\"]", ar.?.short_src orelse @panic("Failed"));
-            try expect(ar.?.linedefined == 1);
+            var ar: luau.VM.lua.Debug = undefined;
+            try expect(L.getinfo(1, "snl", &ar));
+            try expect(ar.what == .lua);
+            try std.testing.expectEqualSentinel(u8, 0, "MyFunction", ar.name orelse @panic("Failed"));
+            try std.testing.expectEqualStrings("[string \"module\"]", ar.short_src orelse @panic("Failed"));
+            try expect(ar.linedefined.? == 1);
             return 1;
         }
     }.inner);
