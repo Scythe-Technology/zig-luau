@@ -251,5 +251,8 @@ pub inline fn Ltypename(L: *lua.State, idx: i32) [:0]const u8 {
 }
 
 pub inline fn Ltolstring(L: *lua.State, idx: i32) ?[:0]const u8 {
-    return std.mem.span(c.luaL_tolstring(@ptrCast(L), idx));
+    var len: usize = undefined;
+    if (c.luaL_tolstring(@ptrCast(L), idx, &len)) |str|
+        return str[0..len :0];
+    return null;
 }
