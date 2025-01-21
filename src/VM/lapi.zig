@@ -696,12 +696,18 @@ pub inline fn newbuffer(L: *lua.State, sz: usize) []u8 {
     return @as([*]u8, @ptrCast(c.lua_newbuffer(@ptrCast(L), sz).?))[0..sz];
 }
 
-pub inline fn getupvalue(L: *lua.State, funcidx: i32, n: i32) ?[]const u8 {
-    return c.lua_getupvalue(@ptrCast(L), funcidx, n);
+pub inline fn getupvalue(L: *lua.State, funcidx: i32, n: i32) ?[:0]const u8 {
+    const name = c.lua_getupvalue(@ptrCast(L), funcidx, n);
+    if (name != null)
+        return std.mem.span(name);
+    return null;
 }
 
-pub inline fn setupvalue(L: *lua.State, funcidx: i32, n: i32) ?[]const u8 {
-    return c.lua_setupvalue(@ptrCast(L), funcidx, n);
+pub inline fn setupvalue(L: *lua.State, funcidx: i32, n: i32) ?[:0]const u8 {
+    const name = c.lua_setupvalue(@ptrCast(L), funcidx, n);
+    if (name != null)
+        return std.mem.span(name);
+    return null;
 }
 
 pub fn ref(L: *lua.State, idx: i32) ?i32 {
