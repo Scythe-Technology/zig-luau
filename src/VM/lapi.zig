@@ -27,7 +27,7 @@ pub inline fn checkvalidindex(L: *State, obj: *const lobject.TValue) void {
     check(L, obj != lobject.nilobject);
 }
 
-pub fn getcurrenv(L: *lua.State) *lobject.Table {
+pub fn getcurrenv(L: *lua.State) *lobject.LuaTable {
     if (L.ci == L.base_ci) // no enclosing function?
         return L.gt.? // use global table as environment
     else
@@ -544,7 +544,7 @@ pub fn setsafeenv(L: *lua.State, idx: i32, enabled: bool) void {
 
 pub fn getmetatable(L: *lua.State, idx: i32) bool {
     lgc.Cthreadbarrier(L);
-    var mt: ?*lobject.Table = null;
+    var mt: ?*lobject.LuaTable = null;
     const o: *const lobject.TValue = index2addr(L, idx);
     switch (o.tt) {
         @intFromEnum(lua.Type.Table) => mt = o.hvalue().metatable,

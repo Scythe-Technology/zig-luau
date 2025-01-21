@@ -20,7 +20,7 @@ fn validateref(g: *const lstate.global_State, f: *lstate.GCObject, v: *lobject.T
     }
 }
 
-fn validatetable(g: *const lstate.global_State, h: *lobject.Table) void {
+fn validatetable(g: *const lstate.global_State, h: *lobject.LuaTable) void {
     const sizenode = @as(u32, 1) << @intCast(h.lsizenode);
 
     std.debug.assert(h.bound.lastfree <= sizenode);

@@ -121,7 +121,7 @@ pub const TValue = extern struct {
         std.debug.assert(obj.ttisfunction());
         return &obj.value.gc.?.cl;
     }
-    pub inline fn hvalue(obj: *const TValue) *Table {
+    pub inline fn hvalue(obj: *const TValue) *LuaTable {
         std.debug.assert(obj.ttistable());
         return &obj.value.gc.?.h;
     }
@@ -203,7 +203,7 @@ pub const TValue = extern struct {
         obj.settype(.Function);
         obj.checkliveness(L.global);
     }
-    pub inline fn sethvalue(obj: *TValue, L: *lstate.lua_State, x: *Table) void {
+    pub inline fn sethvalue(obj: *TValue, L: *lstate.lua_State, x: *LuaTable) void {
         obj.value.gc = @ptrCast(@alignCast(x));
         obj.settype(.Table);
         obj.checkliveness(L.global);
@@ -278,7 +278,7 @@ pub const Udata = extern struct {
 
     len: c_int,
 
-    metatable: ?*Table,
+    metatable: ?*LuaTable,
 
     data: extern union {
         /// userdata is allocated right after the header
@@ -413,7 +413,7 @@ pub const Closure = extern struct {
     preload: u8,
 
     gclist: ?*lstate.GCObject,
-    env: *Table,
+    env: *LuaTable,
 
     d: extern union {
         c: extern struct {
@@ -461,7 +461,7 @@ pub const LuaNode = extern struct {
     }
 };
 
-pub const Table = extern struct {
+pub const LuaTable = extern struct {
     tt: u8,
     marked: u8,
     memcat: u8,
@@ -486,7 +486,7 @@ pub const Table = extern struct {
         aboundary: c_int,
     },
 
-    metatable: ?*Table,
+    metatable: ?*LuaTable,
     array: [*]TValue, // array part
     node: [*]LuaNode,
     gclist: ?*lstate.GCObject,

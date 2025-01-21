@@ -245,7 +245,7 @@ pub const global_State = extern struct {
     /// head of double-linked list of all open upvalues
     uvhead: lobject.UpVal,
     /// metatables for basic types
-    mt: [lua.Type.T_COUNT]?*lobject.Table,
+    mt: [lua.Type.T_COUNT]?*lobject.LuaTable,
     /// names for basic types
     ttname: [lua.Type.T_COUNT]*lobject.TString,
     /// array with tag-method names
@@ -274,7 +274,7 @@ pub const global_State = extern struct {
     /// for each userdata tag, a gc callback to be called immediately before freeing memory
     udatagc: [config.UTAG_LIMIT]*const fn (*lua_State, *anyopaque) callconv(.C) void,
     /// metatables for tagged userdata
-    udatamt: [config.UTAG_LIMIT]*lobject.Table,
+    udatamt: [config.UTAG_LIMIT]*lobject.LuaTable,
 
     /// names for tagged lightuserdata
     lightuserdataname: [config.LUTAG_LIMIT]*lobject.TString,
@@ -330,7 +330,7 @@ pub const lua_State = extern struct {
     cachedslot: c_int,
 
     /// table of globals
-    gt: ?*lobject.Table,
+    gt: ?*lobject.LuaTable,
     /// list of open upvalues in this stack
     openupval: ?*lobject.UpVal,
     gclist: ?*GCObject,
@@ -643,7 +643,7 @@ pub const GCObject = extern union {
     ts: lobject.TString,
     u: lobject.Udata,
     cl: lobject.Closure,
-    h: lobject.Table,
+    h: lobject.LuaTable,
     p: lobject.Proto,
     uv: lobject.UpVal,
     th: lua_State, // thread
@@ -661,7 +661,7 @@ pub const GCObject = extern union {
         std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.Function));
         return &o.cl;
     }
-    pub inline fn toh(o: *GCObject) *lobject.Table {
+    pub inline fn toh(o: *GCObject) *lobject.LuaTable {
         std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.Table));
         return &o.h;
     }
