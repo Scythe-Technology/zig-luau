@@ -82,3 +82,10 @@ comptime {
     if (@intFromEnum(TMS.TM_EQ) >= 8)
         @compileError("fasttm optimization stores a bitfield with metamethods in a byte");
 }
+
+pub const LONGEST_TYPENAME_SIZE = res: {
+    var large = 0;
+    for (typenames) |name|
+        large = @max(large, name.len);
+    break :res large;
+};

@@ -2,6 +2,7 @@ const c = @import("c");
 const std = @import("std");
 
 const lua = @import("lua.zig");
+const ltm = @import("ltm.zig");
 const lapi = @import("lapi.zig");
 const lobject = @import("lobject.zig");
 
@@ -207,12 +208,15 @@ pub fn Lgetmetafield(L: *lua.State, obj: i32, event: [:0]const u8) bool {
     return true;
 }
 
-pub fn Lcallmeta(L: *lua.State, obj: i32, event: [:0]const u8) bool {
+/// Calls a metamethod and pushes the result on the stack.
+/// If the metamethod fails, it returns an error & error value on stack.
+pub fn Lcallmeta(L: *lua.State, obj: i32, event: [:0]const u8) !bool {
     const idx = lapi.absindex(L, obj);
     if (!Lgetmetafield(L, idx, event))
         return false;
     L.pushvalue(idx);
-    L.call(1, 1);
+    // TODO: maybe change?
+    _ = try L.pcall(1, 1, 0).check();
     return true;
 }
 
@@ -250,9 +254,39 @@ pub inline fn Ltypename(L: *lua.State, idx: i32) [:0]const u8 {
     return std.mem.span(c.luaL_typename(@ptrCast(L), idx));
 }
 
-pub inline fn Ltolstring(L: *lua.State, idx: i32) ?[:0]const u8 {
-    var len: usize = undefined;
-    if (c.luaL_tolstring(@ptrCast(L), idx, &len)) |str|
-        return str[0..len :0];
-    return null;
+/// Converts value to string, calls a __tostring metamethod when it exists.
+/// If the metamethod fails, it returns an error & error value on stack.
+pub inline fn Ltolstring(L: *lua.State, idx: i32) ![:0]const u8 {
+    if (try Lcallmeta(L, idx, "__tostring")) {
+        return L.tolstring(-1) orelse return error.BadReturnType;
+    }
+    const MAX_NUM_BUF = std.fmt.format_float.bufferSize(.decimal, f64);
+    const VEC_SIZE = lua.config.VECTOR_SIZE;
+    switch (L.typeOf(idx)) {
+        .Nil => L.pushlstring("nil"),
+        .Boolean => L.pushlstring(if (L.toboolean(idx)) "true" else "false"),
+        .Number => {
+            const number = L.tonumber(idx).?;
+            var s: [MAX_NUM_BUF]u8 = undefined;
+            const buf = std.fmt.bufPrint(&s, "{d}", .{number}) catch unreachable; // should be able to fit
+            L.pushlstring(buf);
+        },
+        .Vector => {
+            const vec = L.tovector(idx).?;
+            var s: [(MAX_NUM_BUF * VEC_SIZE) + ((VEC_SIZE - 1) * 2)]u8 = undefined;
+            const buf = if (VEC_SIZE == 3)
+                std.fmt.bufPrint(&s, "{d}, {d}, {d}", .{ vec[0], vec[1], vec[2] }) catch unreachable // should be able to fit
+            else
+                std.fmt.bufPrint(&s, "{d}, {d}, {d}, {d}", .{ vec[0], vec[1], vec[2], vec[3] }) catch unreachable; // should be able to fit
+            L.pushlstring(buf);
+        },
+        .String => L.pushvalue(idx),
+        else => {
+            const ptr = L.topointer(idx).?;
+            var s: [20 + ltm.LONGEST_TYPENAME_SIZE]u8 = undefined; // 16 + 2 + 2(extra) + size
+            const buf = std.fmt.bufPrint(&s, "{s}: 0x{x:016}", .{ lapi.typename(L.typeOf(idx)), @intFromPtr(ptr) }) catch unreachable; // should be able to fit
+            L.pushlstring(buf);
+        },
+    }
+    return L.tolstring(-1) orelse unreachable;
 }
