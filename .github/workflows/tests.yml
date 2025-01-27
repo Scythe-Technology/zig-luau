@@ -36,7 +36,7 @@ jobs:
 
     - uses: mlugg/setup-zig@v1
       with:
-        version: 0.14.0-dev.2540+f857bf72e
+        version: 0.14.0-dev.2851+b074fb7dd
         use-cache: false
 
     - name: Setup Wasmtime
