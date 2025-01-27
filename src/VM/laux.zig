@@ -291,6 +291,8 @@ pub inline fn Ltolstring(L: *lua.State, idx: i32) ![:0]const u8 {
     return L.tolstring(-1) orelse unreachable;
 }
 
+const EXCEPTIONS_ENABLED = !@import("builtin").cpu.arch.isWasm();
+
 test Ltolstring {
     const L = try @import("lstate.zig").Lnewstate();
     defer L.close();
@@ -354,7 +356,7 @@ test Ltolstring {
         try std.testing.expectEqualStrings("meta_test", try Ltolstring(L, -1));
         L.pop(2);
     }
-    {
+    if (comptime EXCEPTIONS_ENABLED) {
         _ = L.newuserdata(struct {});
         L.newtable();
         L.Zpushfunction(struct {
