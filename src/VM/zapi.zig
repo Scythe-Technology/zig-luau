@@ -206,6 +206,8 @@ pub fn Zerrorf(L: *lua.State, comptime fmt: []const u8, args: anytype) anyerror 
     return error.RaiseLuauError;
 }
 
+const EXCEPTIONS_ENABLED = !@import("builtin").cpu.arch.isWasm();
+
 test toCFn {
     const L = try @import("lstate.zig").Lnewstate();
     defer L.deinit();
@@ -224,7 +226,7 @@ test toCFn {
         L.call(1, 1);
         try std.testing.expectEqual(2, L.tonumber(-1).?);
     }
-    {
+    if (comptime EXCEPTIONS_ENABLED) {
         const foo = struct {
             fn inner(_: *lua.State) !i32 {
                 return error.TestError;
