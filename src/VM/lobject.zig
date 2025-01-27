@@ -31,7 +31,7 @@ pub const Value = extern union {
 ///
 pub const TValue = extern struct {
     value: Value,
-    extra: [config.EXTRA_SIZE]c_int,
+    extra: [config.EXTRA_SIZE]c_int = undefined,
     tt: c_int,
 
     // helper api
@@ -97,9 +97,9 @@ pub const TValue = extern struct {
         std.debug.assert(obj.iscollectable());
         return obj.value.gc.?;
     }
-    pub inline fn pvalue(obj: *const TValue) *anyopaque {
+    pub inline fn pvalue(obj: *const TValue) ?*anyopaque {
         std.debug.assert(obj.ttislightuserdata());
-        return obj.value.p.?;
+        return obj.value.p;
     }
     pub inline fn nvalue(obj: *const TValue) f64 {
         std.debug.assert(obj.ttisnumber());
@@ -262,7 +262,7 @@ pub const TString = extern struct {
     len: c_uint,
 
     /// string data is allocated right after the header
-    data: [1]u8,
+    data: [*]u8,
 
     pub inline fn getstr(s: *const TString) [*c]const u8 {
         return @ptrCast(&s.data);
@@ -282,7 +282,7 @@ pub const Udata = extern struct {
 
     data: extern union {
         /// userdata is allocated right after the header
-        data: [1]u8,
+        data: [*]u8,
         /// ensures maximum alignment for data
         dummy: lcommon.L_Umaxalign,
     },
@@ -297,7 +297,7 @@ pub const Buffer = extern struct {
 
     data: extern union {
         /// userdata is allocated right after the header
-        data: [1]u8,
+        data: [*]u8,
         /// ensures maximum alignment for data
         dummy: lcommon.L_Umaxalign,
     },

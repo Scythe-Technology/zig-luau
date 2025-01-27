@@ -282,11 +282,107 @@ pub inline fn Ltolstring(L: *lua.State, idx: i32) ![:0]const u8 {
         },
         .String => L.pushvalue(idx),
         else => {
-            const ptr = L.topointer(idx).?;
+            const ptr = L.topointer(idx);
             var s: [20 + ltm.LONGEST_TYPENAME_SIZE]u8 = undefined; // 16 + 2 + 2(extra) + size
             const buf = std.fmt.bufPrint(&s, "{s}: 0x{x:016}", .{ lapi.typename(L.typeOf(idx)), @intFromPtr(ptr) }) catch unreachable; // should be able to fit
             L.pushlstring(buf);
         },
     }
     return L.tolstring(-1) orelse unreachable;
+}
+
+test Ltolstring {
+    const L = try @import("lstate.zig").Lnewstate();
+    defer L.close();
+
+    {
+        L.pushnil();
+        try std.testing.expectEqualStrings("nil", try Ltolstring(L, -1));
+        L.pop(1);
+    }
+    {
+        L.pushboolean(true);
+        try std.testing.expectEqualStrings("true", try Ltolstring(L, -1));
+        L.pop(1);
+    }
+    {
+        if (lua.config.VECTOR_SIZE == 3) {
+            L.pushvector(1.2, 44.0, 123.0, 0.0);
+            try std.testing.expectEqualStrings("1.2, 44, 123", try Ltolstring(L, -1));
+        } else {
+            L.pushvector(1.2, 44.0, 123.0, 1205.0);
+            try std.testing.expectEqualStrings("1.2, 44, 123, 1205", try Ltolstring(L, -1));
+        }
+        L.pop(1);
+    }
+    {
+        L.pushstring("hello");
+        try std.testing.expectEqualStrings("hello", try Ltolstring(L, -1));
+        L.pop(1);
+    }
+    {
+        L.pushinteger(-123);
+        try std.testing.expectEqualStrings("-123", try Ltolstring(L, -1));
+        L.pop(1);
+    }
+    {
+        L.pushunsigned(123);
+        try std.testing.expectEqualStrings("123", try Ltolstring(L, -1));
+        L.pop(1);
+    }
+    {
+        L.pushnumber(123.0);
+        try std.testing.expectEqualStrings("123", try Ltolstring(L, -1));
+        L.pop(1);
+    }
+    {
+        L.pushlightuserdata(@ptrFromInt(0));
+        try std.testing.expectEqualStrings("userdata: 0x0000000000000000", try Ltolstring(L, -1));
+        L.pop(1);
+    }
+    {
+        _ = L.newuserdata(struct {});
+        L.newtable();
+        L.Zpushfunction(struct {
+            fn inner(l: *lua.State) i32 {
+                l.pushlstring("meta_test");
+                return 1;
+            }
+        }.inner, "__tostring");
+        L.setfield(-2, "__tostring");
+        _ = L.setmetatable(-2);
+        try std.testing.expectEqualStrings("meta_test", try Ltolstring(L, -1));
+        L.pop(2);
+    }
+    {
+        _ = L.newuserdata(struct {});
+        L.newtable();
+        L.Zpushfunction(struct {
+            fn inner(l: *lua.State) i32 {
+                l.pushstring("error");
+                l.raiseerror();
+            }
+        }.inner, "__tostring");
+        L.setfield(-2, "__tostring");
+        _ = L.setmetatable(-2);
+        try std.testing.expectEqual(error.Runtime, Ltolstring(L, -1));
+        try std.testing.expectEqual(.String, L.typeOf(-1));
+        try std.testing.expectEqualStrings("error", L.tostring(-1).?);
+        L.pop(2);
+    }
+    {
+        _ = L.newuserdata(struct {});
+        L.newtable();
+        L.Zpushfunction(struct {
+            fn inner(l: *lua.State) i32 {
+                l.newtable();
+                return 1;
+            }
+        }.inner, "__tostring");
+        L.setfield(-2, "__tostring");
+        _ = L.setmetatable(-2);
+        try std.testing.expectEqual(error.BadReturnType, Ltolstring(L, -1));
+        try std.testing.expectEqual(.Table, L.typeOf(-1));
+        L.pop(2);
+    }
 }

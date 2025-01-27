@@ -8,9 +8,8 @@ pub const Ast = struct {
     pub const Lexer = @import("Ast/Lexer.zig");
     pub const Parser = @import("Ast/Parser.zig");
     test {
-        std.testing.refAllDecls(Parser);
-        std.testing.refAllDecls(Lexer);
-        std.testing.refAllDecls(Allocator);
+        inline for (comptime std.meta.declarations(@This())) |decl|
+            std.testing.refAllDecls(@field(@This(), decl.name));
     }
 };
 
@@ -44,9 +43,8 @@ pub const VM = struct {
     pub const lutf8lib = @import("VM/lutf8lib.zig");
     pub const lveclib = @import("VM/lveclib.zig");
     test {
-        inline for (comptime std.meta.declarations(VM)) |decl| {
-            std.testing.refAllDecls(@field(VM, decl.name));
-        }
+        inline for (comptime std.meta.declarations(@This())) |decl|
+            std.testing.refAllDecls(@field(@This(), decl.name));
     }
 };
 
@@ -54,8 +52,8 @@ pub const Compiler = struct {
     pub const luacode = @import("Compiler/luacode.zig");
     pub const Compiler = @import("Compiler/Compiler.zig");
     test {
-        std.testing.refAllDecls(luacode);
-        std.testing.refAllDecls(@import("Compiler/Compiler.zig"));
+        inline for (comptime std.meta.declarations(@This())) |decl|
+            std.testing.refAllDecls(@field(@This(), decl.name));
     }
 };
 

@@ -52,7 +52,7 @@ pub noinline fn pseudo2addr(L: *State, idx: i32) lobject.StkId {
             const func = L.curr_func();
             const i = lua.GLOBALSINDEX - idx;
             return if (i <= @as(i32, @intCast(func.nupvalues)))
-                &@as([*]lobject.TValue, &func.d.c.upvals)[@intCast(i - 1)]
+                &(func.d.c.upvals[@intCast(i - 1)])
             else
                 @constCast(lobject.nilobject);
         },
@@ -507,21 +507,30 @@ pub inline fn rawgetfield(L: *lua.State, idx: i32, k: [:0]const u8) lua.Type {
     return @enumFromInt(c.lua_rawgetfield(@ptrCast(L), idx, k.ptr));
 }
 
+/// get value from table value at `idx`
+/// * pushes value to stack
+/// * expects value at `idx` to be *table*
 pub inline fn rawget(L: *lua.State, idx: i32) lua.Type {
     return @enumFromInt(c.lua_rawget(@ptrCast(L), idx));
 }
 
+/// get value from table value at `idx` with number key `n`
+/// * pushes value to stack
+/// * expects value at `idx` to be *table*
 pub inline fn rawgeti(L: *lua.State, idx: i32, n: i32) lua.Type {
     return @enumFromInt(c.lua_rawgeti(@ptrCast(L), idx, n));
 }
 
+/// create a new table and push it to the stack
 pub inline fn createtable(L: *lua.State, narray: i32, nrec: i32) void {
     c.lua_createtable(@ptrCast(L), narray, nrec);
 }
+/// create a new table and push it to the stack
 pub inline fn newtable(L: *lua.State) void {
     c.lua_createtable(@ptrCast(L), 0, 0);
 }
 
+/// set readonly flag for table at `idx`
 pub fn setreadonly(L: *lua.State, idx: i32, enabled: bool) void {
     const o = index2addr(L, idx);
     check(L, o.ttistable());
@@ -530,18 +539,23 @@ pub fn setreadonly(L: *lua.State, idx: i32, enabled: bool) void {
     t.readonly = if (enabled) 1 else 0;
 }
 
+/// get readonly flag for table at `idx`
 pub fn getreadonly(L: *lua.State, idx: i32) bool {
     const o: *const lobject.TValue = index2addr(L, idx);
     check(L, o.ttistable());
     return o.hvalue().readonly != 0;
 }
 
+/// set safeenv flag for table at `idx`
 pub fn setsafeenv(L: *lua.State, idx: i32, enabled: bool) void {
     const o = index2addr(L, idx);
     check(L, o.ttistable());
     o.hvalue().safeenv = if (enabled) 1 else 0;
 }
 
+/// get metatable from `idx`
+/// * returns **true** if metatable is found
+///   * pushes metatable to stack
 pub fn getmetatable(L: *lua.State, idx: i32) bool {
     lgc.Cthreadbarrier(L);
     var mt: ?*lobject.LuaTable = null;
@@ -574,10 +588,17 @@ pub fn getfenv(L: *lua.State, idx: i32) void {
 // set functions (stack -> Lua)
 //
 
+/// set table value at `idx` with value:**top** and key:**top-1**
+/// * pops **top** x2
+/// * throws lua error if *table* is readonly
+/// * throws lua error if key is *nil*/*NaN*/*NaN vector*
 pub inline fn settable(L: *lua.State, idx: i32) void {
     c.lua_settable(@ptrCast(L), idx);
 }
 
+/// set table value at `idx` with value:**top** and `k`
+/// * pops **top**
+/// * throws lua error if *table* is readonly
 pub inline fn setfield(L: *lua.State, idx: i32, k: [:0]const u8) void {
     c.lua_setfield(@ptrCast(L), idx, k.ptr);
 }
@@ -585,18 +606,36 @@ pub inline fn setglobal(L: *lua.State, k: [:0]const u8) void {
     setfield(L, lua.GLOBALSINDEX, k);
 }
 
+/// set table value at `idx` with value:**top** and `k`
+/// ignoring metamethods.
+/// * pops **top**
+/// * throws lua error if *table* is readonly
 pub inline fn rawsetfield(L: *lua.State, idx: i32, k: [:0]const u8) void {
     c.lua_rawsetfield(@ptrCast(L), idx, k.ptr);
 }
 
+/// set table value at `idx` with value:**top** and key:**top-1**
+/// ignoring metamethods.
+/// * pops **top** x2
+/// * throws lua error if *table* is readonly
+/// * throws lua error if key is *nil*/*NaN*/*NaN vector*
 pub inline fn rawset(L: *lua.State, idx: i32) void {
     c.lua_rawset(@ptrCast(L), idx);
 }
 
+/// set table value at `idx` with **top**
+/// ignoring metamethods.
+/// * pops **top**
+/// * throws lua error if *table* is readonly
 pub inline fn rawseti(L: *lua.State, idx: i32, n: i32) void {
     c.lua_rawseti(@ptrCast(L), idx, n);
 }
 
+/// set metatable for `idx` with **top**
+/// * pops **top**
+/// * expects **top** to be *table* or *nil*
+/// * always returns `1`
+/// * throws lua error if `idx` is *table* and readonly
 pub inline fn setmetatable(L: *lua.State, idx: i32) i32 {
     return c.lua_setmetatable(@ptrCast(L), idx);
 }
