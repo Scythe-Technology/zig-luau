@@ -251,7 +251,7 @@ pub inline fn Ltypename(L: *lua.State, idx: i32) [:0]const u8 {
 pub inline fn Ltolstring(L: *lua.State, idx: i32) [:0]const u8 {
     var len: usize = undefined;
     if (c.luaL_tolstring(@ptrCast(L), idx, &len)) |str|
-        return str[0..len]
+        return str[0..len :0]
     else
         unreachable;
 }
