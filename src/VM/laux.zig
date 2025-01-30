@@ -208,16 +208,9 @@ pub fn Lgetmetafield(L: *lua.State, obj: i32, event: [:0]const u8) bool {
     return true;
 }
 
-/// Calls a metamethod and pushes the result on the stack.
-/// If the metamethod fails, it returns an error & error value on stack.
-pub fn Lcallmeta(L: *lua.State, obj: i32, event: [:0]const u8) !bool {
-    const idx = lapi.absindex(L, obj);
-    if (!Lgetmetafield(L, idx, event))
-        return false;
-    L.pushvalue(idx);
-    // TODO: maybe change?
-    _ = try L.pcall(1, 1, 0).check();
-    return true;
+/// `unsafe` throws exceptions. Use `Zcallmeta`.
+pub fn Lcallmeta(L: *lua.State, obj: i32, event: [:0]const u8) bool {
+    return c.luaL_callmeta(@ptrCast(L), obj, event) != 0;
 }
 
 pub fn Lregister(L: *lua.State, libname: ?[:0]const u8, funcs: []const Reg) void {
@@ -254,137 +247,11 @@ pub inline fn Ltypename(L: *lua.State, idx: i32) [:0]const u8 {
     return std.mem.span(c.luaL_typename(@ptrCast(L), idx));
 }
 
-/// Converts value to string, calls a __tostring metamethod when it exists.
-/// If the metamethod fails, it returns an error & error value on stack.
-pub inline fn Ltolstring(L: *lua.State, idx: i32) ![:0]const u8 {
-    if (try Lcallmeta(L, idx, "__tostring")) {
-        return L.tolstring(-1) orelse return error.BadReturnType;
-    }
-    const MAX_NUM_BUF = std.fmt.format_float.bufferSize(.decimal, f64);
-    const VEC_SIZE = lua.config.VECTOR_SIZE;
-    switch (L.typeOf(idx)) {
-        .Nil => L.pushlstring("nil"),
-        .Boolean => L.pushlstring(if (L.toboolean(idx)) "true" else "false"),
-        .Number => {
-            const number = L.tonumber(idx).?;
-            var s: [MAX_NUM_BUF]u8 = undefined;
-            const buf = std.fmt.bufPrint(&s, "{d}", .{number}) catch unreachable; // should be able to fit
-            L.pushlstring(buf);
-        },
-        .Vector => {
-            const vec = L.tovector(idx).?;
-            var s: [(MAX_NUM_BUF * VEC_SIZE) + ((VEC_SIZE - 1) * 2)]u8 = undefined;
-            const buf = if (VEC_SIZE == 3)
-                std.fmt.bufPrint(&s, "{d}, {d}, {d}", .{ vec[0], vec[1], vec[2] }) catch unreachable // should be able to fit
-            else
-                std.fmt.bufPrint(&s, "{d}, {d}, {d}, {d}", .{ vec[0], vec[1], vec[2], vec[3] }) catch unreachable; // should be able to fit
-            L.pushlstring(buf);
-        },
-        .String => L.pushvalue(idx),
-        else => {
-            const ptr = L.topointer(idx);
-            var s: [20 + ltm.LONGEST_TYPENAME_SIZE]u8 = undefined; // 16 + 2 + 2(extra) + size
-            const buf = std.fmt.bufPrint(&s, "{s}: 0x{x:016}", .{ lapi.typename(L.typeOf(idx)), @intFromPtr(ptr) }) catch unreachable; // should be able to fit
-            L.pushlstring(buf);
-        },
-    }
-    return L.tolstring(-1) orelse unreachable;
-}
-
-const EXCEPTIONS_ENABLED = !@import("builtin").cpu.arch.isWasm();
-
-test Ltolstring {
-    const L = try @import("lstate.zig").Lnewstate();
-    defer L.close();
-
-    {
-        L.pushnil();
-        try std.testing.expectEqualStrings("nil", try Ltolstring(L, -1));
-        L.pop(1);
-    }
-    {
-        L.pushboolean(true);
-        try std.testing.expectEqualStrings("true", try Ltolstring(L, -1));
-        L.pop(1);
-    }
-    {
-        if (lua.config.VECTOR_SIZE == 3) {
-            L.pushvector(1.2, 44.0, 123.0, 0.0);
-            try std.testing.expectEqualStrings("1.2, 44, 123", try Ltolstring(L, -1));
-        } else {
-            L.pushvector(1.2, 44.0, 123.0, 1205.0);
-            try std.testing.expectEqualStrings("1.2, 44, 123, 1205", try Ltolstring(L, -1));
-        }
-        L.pop(1);
-    }
-    {
-        L.pushstring("hello");
-        try std.testing.expectEqualStrings("hello", try Ltolstring(L, -1));
-        L.pop(1);
-    }
-    {
-        L.pushinteger(-123);
-        try std.testing.expectEqualStrings("-123", try Ltolstring(L, -1));
-        L.pop(1);
-    }
-    {
-        L.pushunsigned(123);
-        try std.testing.expectEqualStrings("123", try Ltolstring(L, -1));
-        L.pop(1);
-    }
-    {
-        L.pushnumber(123.0);
-        try std.testing.expectEqualStrings("123", try Ltolstring(L, -1));
-        L.pop(1);
-    }
-    {
-        L.pushlightuserdata(@ptrFromInt(0));
-        try std.testing.expectEqualStrings("userdata: 0x0000000000000000", try Ltolstring(L, -1));
-        L.pop(1);
-    }
-    {
-        _ = L.newuserdata(struct {});
-        L.newtable();
-        L.Zpushfunction(struct {
-            fn inner(l: *lua.State) i32 {
-                l.pushlstring("meta_test");
-                return 1;
-            }
-        }.inner, "__tostring");
-        L.setfield(-2, "__tostring");
-        _ = L.setmetatable(-2);
-        try std.testing.expectEqualStrings("meta_test", try Ltolstring(L, -1));
-        L.pop(2);
-    }
-    if (comptime EXCEPTIONS_ENABLED) {
-        _ = L.newuserdata(struct {});
-        L.newtable();
-        L.Zpushfunction(struct {
-            fn inner(l: *lua.State) i32 {
-                l.pushstring("error");
-                l.raiseerror();
-            }
-        }.inner, "__tostring");
-        L.setfield(-2, "__tostring");
-        _ = L.setmetatable(-2);
-        try std.testing.expectEqual(error.Runtime, Ltolstring(L, -1));
-        try std.testing.expectEqual(.String, L.typeOf(-1));
-        try std.testing.expectEqualStrings("error", L.tostring(-1).?);
-        L.pop(2);
-    }
-    {
-        _ = L.newuserdata(struct {});
-        L.newtable();
-        L.Zpushfunction(struct {
-            fn inner(l: *lua.State) i32 {
-                l.newtable();
-                return 1;
-            }
-        }.inner, "__tostring");
-        L.setfield(-2, "__tostring");
-        _ = L.setmetatable(-2);
-        try std.testing.expectEqual(error.BadReturnType, Ltolstring(L, -1));
-        try std.testing.expectEqual(.Table, L.typeOf(-1));
-        L.pop(2);
-    }
+/// `unsafe` throws exceptions. Use `Ztolstring`.
+pub inline fn Ltolstring(L: *lua.State, idx: i32) [:0]const u8 {
+    var len: usize = undefined;
+    if (c.luaL_tolstring(@ptrCast(L), idx, &len)) |str|
+        return str[0..len]
+    else
+        unreachable;
 }
