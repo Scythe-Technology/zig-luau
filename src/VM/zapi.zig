@@ -183,7 +183,7 @@ pub inline fn Zpushfunction(L: *lua.State, comptime f: anytype, name: [:0]const 
     L.pushcfunction(toCFn(f), name);
 }
 
-pub inline fn Zpushfunctionvk(L: *lua.State, comptime f: anytype, name: [:0]const u8) void {
+pub inline fn ZpushfunctionV(L: *lua.State, comptime f: anytype, name: [:0]const u8) void {
     L.pushcfunction(toCFnV(f), name);
 }
 
@@ -291,16 +291,14 @@ pub fn Zsetfield(L: *lua.State, comptime index: i32, k: [:0]const u8, value: any
     Zpushvalue(L, value);
     L.setfield(idx, k);
 }
-
 pub fn Zsetfieldfn(L: *lua.State, comptime index: i32, comptime k: [:0]const u8, comptime f: anytype) void {
     const idx = comptime if (index != lua.GLOBALSINDEX and index != lua.REGISTRYINDEX and index < 0) index - 1 else index;
     Zpushfunction(L, f, k);
     L.setfield(idx, k);
 }
-
-pub fn Zsetfieldfnvk(L: *lua.State, comptime index: i32, comptime k: [:0]const u8, comptime f: anytype) void {
+pub fn ZsetfieldfnV(L: *lua.State, comptime index: i32, comptime k: [:0]const u8, comptime f: anytype) void {
     const idx = comptime if (index != lua.GLOBALSINDEX and index != lua.REGISTRYINDEX and index < 0) index - 1 else index;
-    Zpushfunctionvk(L, f, k);
+    ZpushfunctionV(L, f, k);
     L.setfield(idx, k);
 }
 
@@ -308,9 +306,12 @@ pub fn Zsetglobal(L: *lua.State, name: [:0]const u8, value: anytype) void {
     Zpushvalue(L, value);
     L.setglobal(name);
 }
-
 pub fn Zsetglobalfn(L: *lua.State, comptime name: [:0]const u8, comptime f: anytype) void {
     Zpushfunction(L, f, name);
+    L.setglobal(name);
+}
+pub fn ZsetglobalfnV(L: *lua.State, comptime name: [:0]const u8, comptime f: anytype) void {
+    ZpushfunctionV(L, f, name);
     L.setglobal(name);
 }
 
