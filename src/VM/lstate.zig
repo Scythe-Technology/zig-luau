@@ -622,11 +622,14 @@ pub const lua_State = extern struct {
 
     // zig api
     pub const Zpushfunction = zapi.Zpushfunction;
+    pub const ZpushfunctionV = zapi.ZpushfunctionV;
     pub const Zpushvalue = zapi.Zpushvalue;
     pub const Zsetfield = zapi.Zsetfield;
     pub const Zsetfieldfn = zapi.Zsetfieldfn;
+    pub const ZsetfieldfnV = zapi.ZsetfieldfnV;
     pub const Zsetglobal = zapi.Zsetglobal;
     pub const Zsetglobalfn = zapi.Zsetglobalfn;
+    pub const ZsetglobalfnV = zapi.ZsetglobalfnV;
     pub const Zpushbuffer = zapi.Zpushbuffer;
     pub const Zresumeerror = zapi.Zresumeerror;
     pub const Zresumeferror = zapi.Zresumeferror;

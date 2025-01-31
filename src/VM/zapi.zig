@@ -4,23 +4,43 @@ const lua = @import("lua.zig");
 const ltm = @import("ltm.zig");
 const lapi = @import("lapi.zig");
 
-pub const ZigFnInt = *const fn (state: *lua.State) i32;
-pub const ZigFnVoid = *const fn (state: *lua.State) void;
-pub const ZigFnErrorSet = *const fn (state: *lua.State) anyerror!i32;
+pub fn LuaZigFn(comptime ReturnType: type) type {
+    switch (@typeInfo(ReturnType)) {
+        .int => {
+            if (ReturnType != i32)
+                @compileError("Unsupported Fn Return type, must be i32");
+        },
+        else => {},
+    }
+    return *const fn (state: *lua.State) ReturnType;
+}
+
+fn handleError(L: *lua.State, err: anyerror) noreturn {
+    switch (err) {
+        // else => @panic("Unknown error"),
+        error.RaiseLuauYieldError => L.LerrorL("attempt to yield across metamethod/C-call boundary", .{}),
+        error.RaiseLuauError => L.raiseerror(),
+        else => L.LerrorL("{s}", .{@errorName(err)}),
+    }
+}
 
 pub fn ZigToCFn(comptime fnType: std.builtin.Type.Fn, comptime f: anytype) lua.CFunction {
-    const ri = @typeInfo(fnType.return_type orelse @compileError("Fn must return something"));
-    switch (ri) {
-        .int => |_| {
-            _ = @as(ZigFnInt, f);
+    if (fnType.params.len != 1)
+        @compileError("Fn must have exactly 1 parameter");
+    const param_type = fnType.params[0].type orelse @compileError("Param must have a type");
+    if (param_type != *lua.State)
+        @compileError("Fn parameter must be *lua.State");
+    switch (@typeInfo(fnType.return_type orelse @compileError("Fn must return something"))) {
+        .int => {
+            if (fnType.return_type != i32)
+                @compileError("Unsupported Fn Return type, must be i32");
             return struct {
                 fn inner(s: *lua.State) callconv(.C) c_int {
                     return @call(.always_inline, f, .{s});
                 }
             }.inner;
         },
-        .void => |_| {
-            _ = @as(ZigFnVoid, f);
+        .void => {
             return struct {
                 fn inner(s: *lua.State) callconv(.C) c_int {
                     @call(.always_inline, f, .{s});
@@ -28,22 +48,94 @@ pub fn ZigToCFn(comptime fnType: std.builtin.Type.Fn, comptime f: anytype) lua.C
                 }
             }.inner;
         },
-        .error_union => |_| {
-            _ = @as(ZigFnErrorSet, f);
+        .error_union => |error_union| {
+            switch (@typeInfo(error_union.payload)) {
+                .int => {
+                    if (error_union.payload != i32)
+                        @compileError("Unsupported Fn Return type, must be i32");
+                    return struct {
+                        fn inner(s: *lua.State) callconv(.C) c_int {
+                            if (@call(.always_inline, f, .{s})) |res|
+                                return res
+                            else |err|
+                                handleError(s, err);
+                        }
+                    }.inner;
+                },
+                .void => {
+                    return struct {
+                        fn inner(s: *lua.State) callconv(.C) c_int {
+                            if (@call(.always_inline, f, .{s}))
+                                return 0
+                            else |err|
+                                handleError(s, err);
+                        }
+                    }.inner;
+                },
+                else => |t| @compileError("Unsupported Fn Return type " ++ @tagName(t)),
+            }
+        },
+        else => |t| @compileError("Unsupported Fn Return type " ++ @tagName(t)),
+    }
+}
+
+pub fn ZigToCFnV(comptime fnType: std.builtin.Type.Fn, comptime f: anytype) lua.CFunction {
+    if (fnType.params.len != 1)
+        @compileError("Fn must have exactly 1 parameter");
+    const param_type = fnType.params[0].type orelse @compileError("Param must have a type");
+    if (param_type != *lua.State)
+        @compileError("Fn parameter must be *lua.State");
+    switch (@typeInfo(fnType.return_type orelse @compileError("Fn must return something"))) {
+        .void, .noreturn => {
             return struct {
-                fn inner(s: *lua.State) callconv(.C) c_int {
-                    if (@call(.always_inline, f, .{s})) |res|
-                        return res
-                    else |err| switch (@as(anyerror, @errorCast(err))) {
-                        // else => @panic("Unknown error"),
-                        error.RaiseLuauYieldError => s.LerrorL("attempt to yield across metamethod/C-call boundary", .{}),
-                        error.RaiseLuauError => s.raiseerror(),
-                        else => s.LerrorL("{s}", .{@errorName(err)}),
-                    }
+                fn inner(L: *lua.State) callconv(.C) c_int {
+                    @call(.always_inline, f, .{L});
+                    return 0;
                 }
             }.inner;
         },
-        else => @compileError("Unsupported Fn Return type"),
+        .comptime_int, .comptime_float, .bool, .int, .float, .@"struct", .array, .@"enum", .null, .optional => {
+            return struct {
+                fn inner(L: *lua.State) callconv(.C) c_int {
+                    Zpushvalue(L, @call(.always_inline, f, .{L}));
+                    return 1;
+                }
+            }.inner;
+        },
+        .error_union => |error_union| {
+            switch (@typeInfo(error_union.payload)) {
+                .void, .noreturn => {
+                    return struct {
+                        fn inner(L: *lua.State) callconv(.C) c_int {
+                            if (@call(.always_inline, f, .{L}))
+                                return 0
+                            else |err|
+                                handleError(L, err);
+                        }
+                    }.inner;
+                },
+                .comptime_int, .comptime_float, .bool, .int, .float, .@"struct", .array, .@"enum", .null, .optional => {
+                    return struct {
+                        fn inner(L: *lua.State) callconv(.C) c_int {
+                            if (@call(.always_inline, f, .{L})) |res| {
+                                Zpushvalue(L, res);
+                                return 1;
+                            } else |err| handleError(L, err);
+                        }
+                    }.inner;
+                },
+                else => |t| @compileError("Unsupported Fn Return type " ++ @tagName(t)),
+            }
+        },
+        .error_set => |_| {
+            return struct {
+                fn inner(L: *lua.State) callconv(.C) c_int {
+                    const err = @call(.always_inline, f, .{L});
+                    return handleError(L, err);
+                }
+            }.inner;
+        },
+        else => |t| @compileError("Unsupported Fn Return type " ++ @tagName(t)),
     }
 }
 
@@ -67,8 +159,32 @@ pub fn toCFn(comptime f: anytype) lua.CFunction {
     @compileError("Could not determine zig_fn type");
 }
 
+pub fn toCFnV(comptime f: anytype) lua.CFunction {
+    const t = @TypeOf(f);
+    const ti = @typeInfo(t);
+    switch (ti) {
+        .@"fn" => |Fn| return ZigToCFnV(Fn, f),
+        .pointer => |ptr| {
+            // *const fn ...
+            if (!ptr.is_const)
+                @compileError("Pointer must be constant");
+            const pi = @typeInfo(ptr.child);
+            switch (pi) {
+                .@"fn" => |Fn| return ZigToCFnV(Fn, f),
+                else => @compileError("Pointer must be a pointer to a function"),
+            }
+        },
+        else => @compileError("zig_fn must be a Fn or a Fn Pointer"),
+    }
+    @compileError("Could not determine zig_fn type");
+}
+
 pub inline fn Zpushfunction(L: *lua.State, comptime f: anytype, name: [:0]const u8) void {
     L.pushcfunction(toCFn(f), name);
+}
+
+pub inline fn Zpushfunctionvk(L: *lua.State, comptime f: anytype, name: [:0]const u8) void {
+    L.pushcfunction(toCFnV(f), name);
 }
 
 pub fn Zpushvalue(L: *lua.State, value: anytype) void {
@@ -139,7 +255,17 @@ pub fn Zpushvalue(L: *lua.State, value: anytype) void {
                 else => @compileError("Unsupported vector size"),
             }
         },
-        .@"enum" => L.pushlstring(@tagName(value)),
+        .@"enum" => |e| {
+            switch (@typeInfo(e.tag_type)) {
+                .int => |int| {
+                    if (int.signedness == .unsigned)
+                        L.pushunsigned(@intFromEnum(value))
+                    else
+                        L.pushinteger(@intFromEnum(value));
+                },
+                else => @compileError("Unsupported enum type " ++ @tagName(e.tag_type)),
+            }
+        },
         .@"struct" => |s| {
             L.createtable(0, s.fields.len);
             inline for (s.fields) |field| {
@@ -169,6 +295,12 @@ pub fn Zsetfield(L: *lua.State, comptime index: i32, k: [:0]const u8, value: any
 pub fn Zsetfieldfn(L: *lua.State, comptime index: i32, comptime k: [:0]const u8, comptime f: anytype) void {
     const idx = comptime if (index != lua.GLOBALSINDEX and index != lua.REGISTRYINDEX and index < 0) index - 1 else index;
     Zpushfunction(L, f, k);
+    L.setfield(idx, k);
+}
+
+pub fn Zsetfieldfnvk(L: *lua.State, comptime index: i32, comptime k: [:0]const u8, comptime f: anytype) void {
+    const idx = comptime if (index != lua.GLOBALSINDEX and index != lua.REGISTRYINDEX and index < 0) index - 1 else index;
+    Zpushfunctionvk(L, f, k);
     L.setfield(idx, k);
 }
 
@@ -278,6 +410,7 @@ test toCFn {
         L.pushcclosure(toCFn(foo), "foo", 0);
         L.pushnumber(6);
         L.call(1, 1);
+        defer L.pop(1);
         try std.testing.expectEqual(2, L.tonumber(-1).?);
     }
     if (comptime EXCEPTIONS_ENABLED) {
@@ -301,6 +434,167 @@ test toCFn {
         L.pushcclosure(toCFn(foo), "foo", 0);
         L.pushnumber(9);
         L.call(1, 0);
+        defer L.pop(1);
+    }
+}
+
+test toCFnV {
+    const L = try @import("lstate.zig").Lnewstate();
+    defer L.deinit();
+
+    {
+        const foo = struct {
+            fn inner(l: *lua.State) i32 {
+                std.testing.expectEqual(6, l.tonumber(1).?) catch @panic("failed");
+                return 2;
+            }
+        }.inner;
+
+        L.pushcclosure(toCFnV(foo), "foo", 0);
+        L.pushnumber(6);
+        L.call(1, 1);
+        defer L.pop(1);
+        try std.testing.expectEqual(2, L.tonumber(-1).?);
+    }
+    {
+        const foo = struct {
+            fn inner(_: *lua.State) comptime_int {
+                return 8;
+            }
+        }.inner;
+
+        L.pushcclosure(toCFnV(foo), "foo", 0);
+        L.call(0, 1);
+        defer L.pop(1);
+        try std.testing.expectEqual(8, L.tonumber(-1).?);
+    }
+    {
+        const foo = struct {
+            fn inner(_: *lua.State) comptime_float {
+                return 123.456;
+            }
+        }.inner;
+
+        L.pushcclosure(toCFnV(foo), "foo", 0);
+        L.call(0, 1);
+        defer L.pop(1);
+        try std.testing.expectEqual(123.456, L.tonumber(-1).?);
+    }
+    {
+        const foo = struct {
+            fn inner(_: *lua.State) f64 {
+                return 234.567;
+            }
+        }.inner;
+
+        L.pushcclosure(toCFnV(foo), "foo", 0);
+        L.call(0, 1);
+        defer L.pop(1);
+        try std.testing.expectEqual(234.567, L.tonumber(-1).?);
+    }
+    {
+        const Dummy = struct {
+            a: f64,
+            b: enum { A, B, C },
+            c: []const u8,
+            d: i4,
+        };
+        const foo = struct {
+            fn inner(_: *lua.State) Dummy {
+                return Dummy{
+                    .a = 3.14,
+                    .b = .A,
+                    .c = "Test",
+                    .d = 6,
+                };
+            }
+        }.inner;
+
+        L.pushcclosure(toCFnV(foo), "foo", 0);
+        L.call(0, 1);
+        defer L.pop(1);
+        try std.testing.expectEqual(.Number, L.getfield(-1, "a"));
+        try std.testing.expectEqual(3.14, L.tonumber(-1).?);
+        L.pop(1);
+        try std.testing.expectEqual(.Number, L.getfield(-1, "b"));
+        try std.testing.expectEqual(0, L.tointeger(-1).?);
+        L.pop(1);
+        try std.testing.expectEqual(.String, L.getfield(-1, "c"));
+        try std.testing.expectEqualStrings("Test", L.tostring(-1).?);
+        L.pop(1);
+        try std.testing.expectEqual(.Number, L.getfield(-1, "d"));
+        try std.testing.expectEqual(6, L.tointeger(-1).?);
+        L.pop(1);
+    }
+    {
+        const foo = struct {
+            fn inner(_: *lua.State) ?i32 {
+                return 123;
+            }
+        }.inner;
+
+        L.pushcclosure(toCFnV(foo), "foo", 0);
+        L.call(0, 1);
+        defer L.pop(1);
+        try std.testing.expectEqual(123, L.tonumber(-1).?);
+    }
+    {
+        const foo = struct {
+            fn inner(_: *lua.State) !?i32 {
+                return 123;
+            }
+        }.inner;
+
+        L.pushcclosure(toCFnV(foo), "foo", 0);
+        L.call(0, 1);
+        defer L.pop(1);
+        try std.testing.expectEqual(123, L.tonumber(-1).?);
+    }
+    {
+        const foo = struct {
+            fn inner(_: *lua.State) enum { A, B, C } {
+                return .C;
+            }
+        }.inner;
+
+        L.pushcclosure(toCFnV(foo), "foo", 0);
+        L.call(0, 1);
+        defer L.pop(1);
+        try std.testing.expectEqual(2, L.tointeger(-1).?);
+    }
+    if (comptime EXCEPTIONS_ENABLED) {
+        const foo = struct {
+            fn inner(_: *lua.State) !?i32 {
+                return error.Failed;
+            }
+        }.inner;
+
+        L.pushcclosure(toCFnV(foo), "foo", 0);
+        try std.testing.expectEqual(error.Runtime, L.pcall(0, 0, 0).check());
+        try std.testing.expectEqualStrings("Failed", L.tostring(-1).?);
+    }
+    if (comptime EXCEPTIONS_ENABLED) {
+        const foo = struct {
+            fn inner(_: *lua.State) !i32 {
+                return error.TestError;
+            }
+        }.inner;
+
+        L.pushcclosure(toCFnV(foo), "foo", 0);
+        try std.testing.expectEqual(error.Runtime, L.pcall(0, 0, 0).check());
+        try std.testing.expectEqualStrings("TestError", L.tostring(-1).?);
+    }
+    {
+        const foo = struct {
+            fn inner(l: *lua.State) void {
+                std.testing.expectEqual(9, l.tonumber(1).?) catch @panic("failed");
+            }
+        }.inner;
+
+        L.pushcclosure(toCFnV(foo), "foo", 0);
+        L.pushnumber(9);
+        L.call(1, 0);
+        defer L.pop(1);
     }
 }
 
@@ -331,54 +625,67 @@ test Zpushvalue {
     Zpushvalue(L, 455);
     try std.testing.expectEqual(.Number, L.typeOf(-1));
     try std.testing.expectEqual(455, L.tointeger(-1).?);
+    L.pop(1);
 
     Zpushvalue(L, @as(u8, 255));
     try std.testing.expectEqual(.Number, L.typeOf(-1));
     try std.testing.expectEqual(255, L.tounsigned(-1).?);
+    L.pop(1);
 
     Zpushvalue(L, @as(i10, std.math.maxInt(i10)));
     try std.testing.expectEqual(.Number, L.typeOf(-1));
     try std.testing.expectEqual(std.math.maxInt(i10), L.tointeger(-1).?);
+    L.pop(1);
 
     Zpushvalue(L, 1.24);
     try std.testing.expectEqual(.Number, L.typeOf(-1));
     try std.testing.expectEqual(1.24, L.tonumber(-1).?);
+    L.pop(1);
 
     Zpushvalue(L, @as(f32, 1.24));
     try std.testing.expectEqual(.Number, L.typeOf(-1));
     try std.testing.expectApproxEqRel(1.24, L.tonumber(-1).?, 0.001);
+    L.pop(1);
 
     Zpushvalue(L, @as(f64, 1.24));
     try std.testing.expectEqual(.Number, L.typeOf(-1));
     try std.testing.expectEqual(1.24, L.tonumber(-1).?);
+    L.pop(1);
 
     Zpushvalue(L, "Test");
     try std.testing.expectEqual(.String, L.typeOf(-1));
     try std.testing.expectEqualStrings("Test", L.tostring(-1).?);
+    L.pop(1);
 
     Zpushvalue(L, @as([]const u8, "Test2"));
     try std.testing.expectEqual(.String, L.typeOf(-1));
     try std.testing.expectEqualStrings("Test2", L.tostring(-1).?);
+    L.pop(1);
 
     Zpushvalue(L, @as([:0]const u8, "Test3"));
     try std.testing.expectEqual(.String, L.typeOf(-1));
     try std.testing.expectEqualStrings("Test3", L.tostring(-1).?);
+    L.pop(1);
 
     Zpushvalue(L, true);
     try std.testing.expectEqual(.Boolean, L.typeOf(-1));
     try std.testing.expectEqual(true, L.toboolean(-1));
+    L.pop(1);
 
     Zpushvalue(L, null);
     try std.testing.expectEqual(.Nil, L.typeOf(-1));
     try std.testing.expectEqual(false, L.toboolean(-1));
+    L.pop(1);
 
     Zpushvalue(L, .{}); // empty struct
     try std.testing.expectEqual(.Table, L.typeOf(-1));
     L.pushnil();
     try std.testing.expectEqual(false, L.next(-2));
+    L.pop(1);
 
     Zpushvalue(L, .{ .x = 1, .y = 2 });
     {
+        defer L.pop(1);
         try std.testing.expectEqual(.Table, L.typeOf(-1));
         L.pushnil();
         try std.testing.expectEqual(true, L.next(-2));
@@ -405,6 +712,7 @@ test Zpushvalue {
         Zpushvalue(L, @Vector(4, f32){ 1.0, 2.0, 3.0, 4.0 });
     }
     {
+        defer L.pop(1);
         try std.testing.expectEqual(.Vector, L.typeOf(-1));
         const vec = L.tovector(-1).?;
         try std.testing.expectEqual(lua.config.VECTOR_SIZE, vec.len);
@@ -422,6 +730,7 @@ test Zpushvalue {
         array[2] = 3;
 
         Zpushvalue(L, array);
+        defer L.pop(1);
         {
             try std.testing.expectEqual(.Table, L.typeOf(-1));
             L.pushnil();
@@ -459,6 +768,7 @@ test Zpushvalue {
         array[2] = 6;
 
         Zpushvalue(L, array);
+        defer L.pop(1);
         {
             try std.testing.expectEqual(.Table, L.typeOf(-1));
             L.pushnil();
@@ -491,10 +801,37 @@ test Zpushvalue {
     Zpushvalue(L, @as(?u8, 255));
     try std.testing.expectEqual(.Number, L.typeOf(-1));
     try std.testing.expectEqual(255, L.tounsigned(-1).?);
+    L.pop(1);
 
     Zpushvalue(L, @as(?u8, null));
     try std.testing.expectEqual(.Nil, L.typeOf(-1));
     try std.testing.expectEqual(false, L.toboolean(-1));
+    L.pop(1);
+
+    {
+        Zpushvalue(L, .{
+            .x = 1,
+            .y = 2,
+        });
+        try std.testing.expectEqual(.Table, L.typeOf(-1));
+        L.pushnil();
+        try std.testing.expectEqual(true, L.next(-2));
+        try std.testing.expectEqual(.String, L.typeOf(-2));
+        try std.testing.expectEqual(.Number, L.typeOf(-1));
+        L.pop(1);
+        try std.testing.expectEqual(true, L.next(-2));
+        try std.testing.expectEqual(.String, L.typeOf(-2));
+        try std.testing.expectEqual(.Number, L.typeOf(-1));
+        L.pop(1);
+        try std.testing.expectEqual(false, L.next(-2));
+
+        try std.testing.expectEqual(.Number, L.getfield(-1, "x"));
+        try std.testing.expectEqual(1, L.tointeger(-1).?);
+        L.pop(1);
+        try std.testing.expectEqual(.Number, L.getfield(-1, "y"));
+        try std.testing.expectEqual(2, L.tointeger(-1).?);
+        L.pop(1);
+    }
 }
 
 test Zsetfield {
