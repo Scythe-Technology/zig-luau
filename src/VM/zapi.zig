@@ -424,6 +424,7 @@ test toCFn {
         L.pushcclosure(toCFn(foo), "foo", 0);
         try std.testing.expectEqual(error.Runtime, L.pcall(0, 0, 0).check());
         try std.testing.expectEqualStrings("TestError", L.tostring(-1).?);
+        defer L.pop(1);
     }
     {
         const foo = struct {
@@ -435,7 +436,6 @@ test toCFn {
         L.pushcclosure(toCFn(foo), "foo", 0);
         L.pushnumber(9);
         L.call(1, 0);
-        defer L.pop(1);
     }
 }
 
@@ -573,6 +573,7 @@ test toCFnV {
         L.pushcclosure(toCFnV(foo), "foo", 0);
         try std.testing.expectEqual(error.Runtime, L.pcall(0, 0, 0).check());
         try std.testing.expectEqualStrings("Failed", L.tostring(-1).?);
+        defer L.pop(1);
     }
     if (comptime EXCEPTIONS_ENABLED) {
         const foo = struct {
@@ -584,6 +585,7 @@ test toCFnV {
         L.pushcclosure(toCFnV(foo), "foo", 0);
         try std.testing.expectEqual(error.Runtime, L.pcall(0, 0, 0).check());
         try std.testing.expectEqualStrings("TestError", L.tostring(-1).?);
+        defer L.pop(1);
     }
     {
         const foo = struct {
@@ -595,7 +597,6 @@ test toCFnV {
         L.pushcclosure(toCFnV(foo), "foo", 0);
         L.pushnumber(9);
         L.call(1, 0);
-        defer L.pop(1);
     }
 }
 
