@@ -809,6 +809,10 @@ pub inline fn cleartable(L: *lua.State, idx: i32) void {
     c.lua_cleartable(@ptrCast(L), idx);
 }
 
+pub inline fn clonetable(L: *lua.State, idx: i32) void {
+    c.lua_clonetable(@ptrCast(L), idx);
+}
+
 pub inline fn callbacks(L: *lua.State) *lua.Callbacks {
     return @ptrCast(c.lua_callbacks(@ptrCast(L)));
 }

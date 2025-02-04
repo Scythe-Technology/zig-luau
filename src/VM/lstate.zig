@@ -541,6 +541,7 @@ pub const lua_State = extern struct {
     pub const getlightuserdataname = lapi.getlightuserdataname;
     pub const clonefunction = lapi.clonefunction;
     pub const cleartable = lapi.cleartable;
+    pub const clonetable = lapi.clonetable;
     pub const callbacks = lapi.callbacks;
     pub const getallocf = lapi.getallocf;
 
