@@ -6,14 +6,19 @@ const lua = @import("lua.zig");
 const lstate = @import("lstate.zig");
 const config = @import("luaconf.zig");
 const lcommon = @import("lcommon.zig");
+const lnumutils = @import("lnumutils.zig");
 
-pub const GCheader = extern struct {
+pub const CommonHeader = extern struct {
     tt: u8,
     marked: u8,
     memcat: u8,
+};
+
+pub const GCheader = extern struct {
+    header: CommonHeader,
 
     pub inline fn ttype(this: *const GCheader) c_int {
-        return this.tt;
+        return this.header.tt;
     }
 };
 
@@ -105,9 +110,9 @@ pub const TValue = extern struct {
         std.debug.assert(obj.ttisnumber());
         return obj.value.n;
     }
-    pub inline fn vvalue(obj: *TValue) []const f32 {
+    pub inline fn vvalue(obj: *const TValue) []const f32 {
         std.debug.assert(obj.ttisvector());
-        return @as([*]f32, @ptrCast(&obj.value.v))[0..config.VECTOR_SIZE];
+        return @as([*]const f32, @ptrCast(&obj.value.v))[0..config.VECTOR_SIZE];
     }
     pub inline fn tsvalue(obj: *const TValue) *TString {
         std.debug.assert(obj.ttisstring());
@@ -155,7 +160,7 @@ pub const TValue = extern struct {
     }
 
     pub inline fn checkliveness(obj: *const TValue, g: *const lstate.global_State) void {
-        std.debug.assert(!obj.iscollectable() or ((obj.ttype() == obj.value.gc.?.gch.tt) and !lgc.isdead(g, obj.value.gc.?)));
+        std.debug.assert(!obj.iscollectable() or ((obj.ttype() == obj.value.gc.?.gch.header.tt) and !lgc.isdead(g, obj.value.gc.?)));
     }
 
     pub inline fn setnilvalue(obj: *TValue) void {
@@ -245,9 +250,7 @@ pub inline fn checkliveness() void {}
 pub const StkId = *TValue;
 
 pub const TString = extern struct {
-    tt: u8,
-    marked: u8,
-    memcat: u8,
+    header: CommonHeader,
 
     // 1 byte padding
 
@@ -270,9 +273,7 @@ pub const TString = extern struct {
 };
 
 pub const Udata = extern struct {
-    tt: u8,
-    marked: u8,
-    memcat: u8,
+    header: CommonHeader,
 
     tag: u8,
 
@@ -289,9 +290,7 @@ pub const Udata = extern struct {
 };
 
 pub const Buffer = extern struct {
-    tt: u8,
-    marked: u8,
-    memcat: u8,
+    header: CommonHeader,
 
     len: c_int,
 
@@ -307,9 +306,7 @@ pub const Buffer = extern struct {
 /// Function Prototypes
 ///
 pub const Proto = extern struct {
-    tt: u8,
-    marked: u8,
-    memcat: u8,
+    header: CommonHeader,
 
     /// number of upvalues
     nups: u8,
@@ -370,9 +367,7 @@ pub const LocVar = extern struct {
 /// Upvalues
 ///
 pub const UpVal = extern struct {
-    tt: u8,
-    marked: u8,
-    memcat: u8,
+    header: CommonHeader,
 
     /// set if reachable from an alive thread (only valid during atomic)
     markedopen: u8,
@@ -403,9 +398,7 @@ pub const UpVal = extern struct {
 /// Closures
 ///
 pub const Closure = extern struct {
-    tt: u8,
-    marked: u8,
-    memcat: u8,
+    header: CommonHeader,
 
     isC: u8,
     nupvalues: u8,
@@ -439,6 +432,99 @@ pub const TKey = extern struct {
         return @intCast(this.tt & 0x0F);
     }
 
+    pub inline fn ttisnil(obj: *const TKey) bool {
+        return obj.ttype() == @intFromEnum(lua.Type.Nil);
+    }
+    pub inline fn ttisnumber(obj: *const TKey) bool {
+        return obj.ttype() == @intFromEnum(lua.Type.Number);
+    }
+    pub inline fn ttisstring(obj: *const TKey) bool {
+        return obj.ttype() == @intFromEnum(lua.Type.String);
+    }
+    pub inline fn ttistable(obj: *const TKey) bool {
+        return obj.ttype() == @intFromEnum(lua.Type.Table);
+    }
+    pub inline fn ttisfunction(obj: *const TKey) bool {
+        return obj.ttype() == @intFromEnum(lua.Type.Function);
+    }
+    pub inline fn ttisboolean(obj: *const TKey) bool {
+        return obj.ttype() == @intFromEnum(lua.Type.Boolean);
+    }
+    pub inline fn ttisuserdata(obj: *const TKey) bool {
+        return obj.ttype() == @intFromEnum(lua.Type.Userdata);
+    }
+    pub inline fn ttisthread(obj: *const TKey) bool {
+        return obj.ttype() == @intFromEnum(lua.Type.Thread);
+    }
+    pub inline fn ttisbuffer(obj: *const TKey) bool {
+        return obj.ttype() == @intFromEnum(lua.Type.Buffer);
+    }
+    pub inline fn ttislightuserdata(obj: *const TKey) bool {
+        return obj.ttype() == @intFromEnum(lua.Type.LightUserdata);
+    }
+    pub inline fn ttisvector(obj: *const TKey) bool {
+        return obj.ttype() == @intFromEnum(lua.Type.Vector);
+    }
+    pub inline fn ttisupval(obj: *const TKey) bool {
+        return obj.ttype() == @intFromEnum(lua.Type.UpVal);
+    }
+
+    pub inline fn gcvalue(obj: *const TKey) *lstate.GCObject {
+        std.debug.assert(obj.iscollectable());
+        return obj.value.gc.?;
+    }
+    pub inline fn pvalue(obj: *const TKey) ?*anyopaque {
+        std.debug.assert(obj.ttislightuserdata());
+        return obj.value.p;
+    }
+    pub inline fn nvalue(obj: *const TKey) f64 {
+        std.debug.assert(obj.ttisnumber());
+        return obj.value.n;
+    }
+    pub inline fn vvalue(obj: *const TKey) []const f32 {
+        std.debug.assert(obj.ttisvector());
+        return @as([*]const f32, @ptrCast(&obj.value.v))[0..config.VECTOR_SIZE];
+    }
+    pub inline fn tsvalue(obj: *const TKey) *TString {
+        std.debug.assert(obj.ttisstring());
+        return &obj.value.gc.?.ts;
+    }
+    pub inline fn uvalue(obj: *const TKey) *Udata {
+        std.debug.assert(obj.ttisuserdata());
+        return &obj.value.gc.?.u;
+    }
+    pub inline fn clvalue(obj: *const TKey) *Closure {
+        std.debug.assert(obj.ttisfunction());
+        return &obj.value.gc.?.cl;
+    }
+    pub inline fn hvalue(obj: *const TKey) *LuaTable {
+        std.debug.assert(obj.ttistable());
+        return &obj.value.gc.?.h;
+    }
+    pub inline fn bvalue(obj: *const TKey) bool {
+        std.debug.assert(obj.ttisboolean());
+        return obj.value.b != 0;
+    }
+    pub inline fn thvalue(obj: *const TKey) *lstate.lua_State {
+        std.debug.assert(obj.ttisthread());
+        return &obj.value.gc.?.th;
+    }
+    pub inline fn bufvalue(obj: *const TKey) *Buffer {
+        std.debug.assert(obj.ttisbuffer());
+        return &obj.value.gc.?.buf;
+    }
+    pub inline fn upvalue(obj: *TKey) *UpVal {
+        std.debug.assert(obj.ttisupval());
+        return &obj.value.gc.?.uv;
+    }
+    pub inline fn svalue(obj: *const TKey) [*c]const u8 {
+        return obj.tsvalue().getstr();
+    }
+
+    pub inline fn iscollectable(o: *const TKey) bool {
+        return o.ttype() >= @intFromEnum(lua.Type.String);
+    }
+
     pub inline fn vnext(this: *TKey) i28 {
         const lower = @as(u4, @intCast(this.tt & 0xF0));
         const higher = @as(u24, @bitCast(this.next));
@@ -462,9 +548,7 @@ pub const LuaNode = extern struct {
 };
 
 pub const LuaTable = extern struct {
-    tt: u8,
-    marked: u8,
-    memcat: u8,
+    header: CommonHeader,
 
     /// 1<<p means tagmethod(p) is not present
     tmcache: u8,
@@ -492,13 +576,40 @@ pub const LuaTable = extern struct {
     gclist: ?*lstate.GCObject,
 };
 
-pub const nilobject = &nilobject_;
+pub inline fn lmod(s: u32, size: i32) i32 {
+    std.debug.assert(size & (size - 1) == 0);
+    return s & (size - 1);
+}
 
-const nilobject_: TValue = .{
+pub inline fn sizenode(t: *const LuaTable) i32 {
+    return @intCast(1 << t.lsizenode);
+}
+
+pub const Onilobject = &Onilobject_;
+
+const Onilobject_: TValue = .{
     .value = undefined,
     .extra = undefined,
     .tt = @intFromEnum(lua.Type.Nil),
 };
+
+pub fn OrawequalObj(t1: *const TValue, t2: *const TValue) bool {
+    if (t1.ttype() != t2.ttype())
+        return false;
+
+    switch (t1.typeOf()) {
+        .None => unreachable,
+        .Nil => return true,
+        .Number => return t1.nvalue() == t2.nvalue(),
+        .Vector => return lnumutils.iveceq(t1.vvalue(), t2.vvalue()),
+        .Boolean => return t1.bvalue() == t2.bvalue(),
+        .LightUserdata => return t1.pvalue() == t2.pvalue() and t1.lightuserdatatag() == t2.lightuserdatatag(),
+        inline else => |t| {
+            comptime std.debug.assert(t.istypecollectable());
+            return t1.gcvalue() == t2.gcvalue();
+        },
+    }
+}
 
 pub fn Opushvfstring(L: *lua.State, comptime fmt: []const u8, args: anytype) void {
     var buf: [lua.config.BUFFERSIZE]u8 = undefined;

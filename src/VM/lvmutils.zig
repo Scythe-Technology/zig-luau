@@ -34,9 +34,11 @@ test Vtonumber {
         const gc: *GCObject = @ptrCast(@alignCast(gc_buf[0..@sizeOf(GCObject)]));
         gc.* = .{
             .gch = .{
-                .tt = @intFromEnum(lua.Type.String),
-                .marked = 0,
-                .memcat = 0,
+                .header = .{
+                    .tt = @intFromEnum(lua.Type.String),
+                    .marked = 0,
+                    .memcat = 0,
+                },
             },
         };
 
@@ -59,9 +61,11 @@ test Vtonumber {
         const gc: *GCObject = @ptrCast(@alignCast(gc_buf[0..@sizeOf(GCObject)]));
         gc.* = .{
             .gch = .{
-                .tt = @intFromEnum(lua.Type.String),
-                .marked = 0,
-                .memcat = 0,
+                .header = .{
+                    .tt = @intFromEnum(lua.Type.String),
+                    .marked = 0,
+                    .memcat = 0,
+                },
             },
         };
 

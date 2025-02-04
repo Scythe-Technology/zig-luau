@@ -2,21 +2,22 @@ const c = @import("c");
 const std = @import("std");
 
 const lua = @import("lua.zig");
-const state = @import("lstate.zig");
-const object = @import("lobject.zig");
+const ltm = @import("ltm.zig");
+const lstate = @import("lstate.zig");
+const lobject = @import("lobject.zig");
 
-pub fn currentpc(ci: *state.CallInfo) usize {
+pub fn currentpc(ci: *lstate.CallInfo) usize {
     if (ci.savedpc) |pc| {
         return @intFromPtr(pc) - @intFromPtr(ci.ci_func().d.l.p.code) - 1;
     } else return 0;
 }
 
-pub fn currentline(ci: *state.CallInfo) i32 {
+pub fn currentline(ci: *lstate.CallInfo) i32 {
     std.debug.assert(ci.isLua());
     return Ggetline(ci.ci_func().d.l.p, currentpc(ci));
 }
 
-pub fn getluaproto(ci: *state.CallInfo) ?*object.Proto {
+pub fn getluaproto(ci: *lstate.CallInfo) ?*lobject.Proto {
     return if (ci.isLua())
         ci.ci_func().d.l.p
     else
@@ -75,7 +76,7 @@ pub fn GrunerrorL(L: *lua.State, comptime fmt: []const u8, args: anytype) noretu
     L.raiseerror();
 }
 
-pub fn Ggetline(p: *object.Proto, pc: usize) i32 {
+pub fn Ggetline(p: *lobject.Proto, pc: usize) i32 {
     std.debug.assert(pc >= 0 and pc < p.sizecode);
 
     if (p.lineinfo) |lineinfo| {
@@ -87,7 +88,7 @@ pub fn Gisnative(L: *lua.State, level: usize) bool {
     if (level >= L.ci.?.sub(L.base_ci.?))
         return false;
     const ci = L.ci.?.sub_num(level);
-    return (ci.flags & state.CALLINFO_NATIVE) != 0;
+    return (ci.flags & lstate.CALLINFO_NATIVE) != 0;
 }
 
 pub inline fn singlestep(L: *lua.State, enabled: bool) void {

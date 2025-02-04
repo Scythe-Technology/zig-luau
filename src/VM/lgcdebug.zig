@@ -15,7 +15,7 @@ fn validateobjref(g: *const lstate.global_State, f: *lstate.GCObject, t: *lstate
 
 fn validateref(g: *const lstate.global_State, f: *lstate.GCObject, v: *lobject.TValue) void {
     if (v.iscollectable()) {
-        std.debug.assert(v.ttype() == v.gcvalue().gch.tt);
+        std.debug.assert(v.ttype() == v.gcvalue().gch.header.tt);
         validateobjref(g, f, v.gcvalue());
     }
 }
@@ -83,7 +83,7 @@ fn validatestack(g: *const lstate.global_State, l: *lua.State) void {
 
     var upval: ?*lobject.UpVal = l.openupval;
     while (upval) |uv| : (upval = uv.u.open.threadnext) {
-        std.debug.assert(uv.tt == @intFromEnum(lua.Type.UpVal));
+        std.debug.assert(uv.header.tt == @intFromEnum(lua.Type.UpVal));
         std.debug.assert(uv.upisopen());
         std.debug.assert(uv.u.open.next.?.u.open.prev == uv and uv.u.open.prev.?.u.open.next == uv);
         std.debug.assert(!lgc.isblack(@ptrCast(uv)));
@@ -119,7 +119,7 @@ fn validateobj(g: *const lstate.global_State, o: *lstate.GCObject) void {
         return;
     }
 
-    switch (o.gch.tt) {
+    switch (o.gch.header.tt) {
         @intFromEnum(lua.Type.String), @intFromEnum(lua.Type.Buffer) => {},
         @intFromEnum(lua.Type.Table) => validatetable(g, o.toh()),
         @intFromEnum(lua.Type.Function) => validateclosure(g, o.tocl()),
@@ -142,7 +142,7 @@ fn validategraylist(g: *const lstate.global_State, obj: *lstate.GCObject) void {
     var so: ?*lstate.GCObject = obj;
     while (so) |o| {
         std.debug.assert(lgc.isgray(o));
-        switch (o.gch.tt) {
+        switch (o.gch.header.tt) {
             @intFromEnum(lua.Type.Table) => so = o.toh().gclist,
             @intFromEnum(lua.Type.Function) => so = o.tocl().gclist,
             @intFromEnum(lua.Type.Thread) => so = o.toth().gclist,
@@ -181,7 +181,7 @@ pub fn Cvalidate(L: *lua.State) void {
 
     var upval: ?*lobject.UpVal = g.uvhead.u.open.next.?;
     while (upval != &g.uvhead) : (upval = upval.?.u.open.next) {
-        std.debug.assert(upval.?.tt == @intFromEnum(lua.Type.UpVal));
+        std.debug.assert(upval.?.header.tt == @intFromEnum(lua.Type.UpVal));
         std.debug.assert(upval.?.upisopen());
         std.debug.assert(upval.?.u.open.next.?.u.open.prev == upval and upval.?.u.open.prev.?.u.open.next == upval);
         std.debug.assert(!lgc.isblack(@ptrCast(upval.?)));

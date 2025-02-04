@@ -286,9 +286,7 @@ pub const global_State = extern struct {
 };
 
 pub const lua_State = extern struct {
-    tt: u8,
-    marked: u8,
-    memcat: u8,
+    header: lobject.CommonHeader,
 
     curr_status: u8,
 

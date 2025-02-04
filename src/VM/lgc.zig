@@ -47,32 +47,32 @@ pub const FIXEDBIT = 3;
 pub const WHITEBITS = bit2mask(WHITE0BIT, WHITE1BIT);
 
 pub inline fn iswhite(x: *lstate.GCObject) bool {
-    return test2bits(x.gch.marked, WHITE0BIT, WHITE1BIT) != 0;
+    return test2bits(x.gch.header.marked, WHITE0BIT, WHITE1BIT) != 0;
 }
 pub inline fn isblack(x: *lstate.GCObject) bool {
-    return testbit(x.gch.marked, BLACKBIT) != 0;
+    return testbit(x.gch.header.marked, BLACKBIT) != 0;
 }
 pub inline fn isgray(x: *lstate.GCObject) bool {
-    return testbits(x.gch.marked, WHITEBITS | bitmask(BLACKBIT)) == 0;
+    return testbits(x.gch.header.marked, WHITEBITS | bitmask(BLACKBIT)) == 0;
 }
 pub inline fn isfixed(x: *lstate.GCObject) bool {
-    return testbit(x.gch.marked, FIXEDBIT) != 0;
+    return testbit(x.gch.header.marked, FIXEDBIT) != 0;
 }
 
 pub inline fn otherwhite(g: *const lstate.global_State) u8 {
     return g.currentwhite ^ WHITEBITS;
 }
 pub inline fn isdead(g: *const lstate.global_State, v: *const lstate.GCObject) bool {
-    return (v.gch.marked & (WHITEBITS | bitmask(FIXEDBIT))) == (otherwhite(g) & WHITEBITS);
+    return (v.gch.header.marked & (WHITEBITS | bitmask(FIXEDBIT))) == (otherwhite(g) & WHITEBITS);
 }
 
 pub inline fn changewhite(x: *lstate.GCObject) void {
-    x.gch.marked ^= WHITEBITS;
+    x.gch.header.marked ^= WHITEBITS;
 }
 
 pub inline fn black2gray(x: *lstate.GCObject) void {
     std.debug.assert(isblack(x));
-    x.gch.marked &= ~(bitmask(BLACKBIT));
+    x.gch.header.marked &= ~(bitmask(BLACKBIT));
 }
 
 pub inline fn Cwhite(g: *const lstate.global_State) u8 {

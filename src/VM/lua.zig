@@ -97,6 +97,9 @@ pub const Type = enum(i5) {
     pub inline fn isnoneornil(t: Type) bool {
         return t == .None or t == .Nil;
     }
+    pub inline fn istypecollectable(comptime t: Type) bool {
+        return @intFromEnum(t) >= @intFromEnum(Type.String);
+    }
 };
 
 // type of numbers in Luau

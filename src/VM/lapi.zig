@@ -24,7 +24,7 @@ pub inline fn checknelems(L: *State, n: u32) void {
 }
 
 pub inline fn checkvalidindex(L: *State, obj: *const lobject.TValue) void {
-    check(L, obj != lobject.nilobject);
+    check(L, obj != lobject.Onilobject);
 }
 
 pub fn getcurrenv(L: *lua.State) *lobject.LuaTable {
@@ -54,7 +54,7 @@ pub noinline fn pseudo2addr(L: *State, idx: i32) lobject.StkId {
             return if (i <= @as(i32, @intCast(func.nupvalues)))
                 &@as([*]lobject.TValue, &func.d.c.upvals)[@intCast(i - 1)]
             else
-                @constCast(lobject.nilobject);
+                @constCast(lobject.Onilobject);
         },
     }
 }
@@ -64,7 +64,7 @@ pub inline fn index2addr(L: *State, idx: i32) lobject.StkId {
         const o: usize = @intFromPtr(L.base.add_num(@intCast(idx - 1)));
         check(L, idx <= L.ci.?.top.sub(L.base));
         if (o >= @intFromPtr(L.top))
-            return @constCast(lobject.nilobject)
+            return @constCast(lobject.Onilobject)
         else
             return @ptrFromInt(o);
     } else if (idx > lua.REGISTRYINDEX) {
@@ -80,7 +80,7 @@ pub inline fn index2addr(L: *State, idx: i32) lobject.StkId {
 
 pub fn Atoobject(L: *lua.State, idx: i32) ?*const lobject.TValue {
     const p = index2addr(L, idx);
-    return if (p == lobject.nilobject) null else p;
+    return if (p == lobject.Onilobject) null else p;
 }
 
 pub fn Apushobject(L: *lua.State, o: *const lobject.TValue) void {
@@ -168,7 +168,7 @@ pub inline fn pushvalue(L: *lua.State, idx: i32) void {
 
 pub fn @"type"(L: *lua.State, idx: i32) i32 {
     const o: *const lobject.TValue = index2addr(L, idx);
-    return if (o == lobject.nilobject) @intFromEnum(lua.Type.None) else o.ttype();
+    return if (o == lobject.Onilobject) @intFromEnum(lua.Type.None) else o.ttype();
 }
 pub inline fn isfunction(L: *lua.State, idx: i32) bool {
     return @"type"(L, idx) == @intFromEnum(lua.Type.Function);
@@ -233,8 +233,10 @@ pub fn isuserdata(L: *lua.State, idx: i32) bool {
     return o.ttisuserdata() or o.ttislightuserdata();
 }
 
-pub inline fn rawequal(L: *lua.State, index1: i32, index2: i32) bool {
-    return c.lua_rawequal(@ptrCast(L), index1, index2) != 0;
+pub fn rawequal(L: *lua.State, index1: i32, index2: i32) bool {
+    const o1 = index2addr(L, index1);
+    const o2 = index2addr(L, index2);
+    return if (o1 == lobject.Onilobject or o2 == lobject.Onilobject) false else lobject.OrawequalObj(o1, o2);
 }
 
 pub inline fn equal(L: *lua.State, index1: i32, index2: i32) bool {
