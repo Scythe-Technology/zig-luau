@@ -290,7 +290,7 @@ pub const lua_State = extern struct {
     marked: u8,
     memcat: u8,
 
-    tstatus: u8,
+    curr_status: u8,
 
     /// memory category that is used for new GC lobject allocations
     activememcat: u8,
@@ -298,7 +298,7 @@ pub const lua_State = extern struct {
     /// thread is currently executing, stack may be mutated without barriers
     isactive: bool,
     /// call debugstep hook after each instruction
-    tsinglestep: bool,
+    singlestep_on: bool,
 
     /// first free slot in the stack
     top: lobject.StkId,
@@ -598,9 +598,9 @@ pub const lua_State = extern struct {
     pub const debugtrace = ldebug.debugtrace;
 
     // linit
-    pub const Lopenlibs = linit.openlibs;
-    pub const Lsandbox = linit.sandbox;
-    pub const Lsandboxthread = linit.sandboxthread;
+    pub const Lopenlibs = linit.Lopenlibs;
+    pub const Lsandbox = linit.Lsandbox;
+    pub const Lsandboxthread = linit.Lsandboxthread;
 
     // lobject
     pub const Opushfstring = lobject.pushfstring;
@@ -712,5 +712,5 @@ pub inline fn resetthread(L: *lua_State) void {
 }
 
 pub fn isthreadreset(L: *lua_State) bool {
-    return L.ci == L.base_ci and L.base == L.top and L.tstatus == @intFromEnum(lua.Status.Ok);
+    return L.ci == L.base_ci and L.base == L.top and L.curr_status == @intFromEnum(lua.Status.Ok);
 }

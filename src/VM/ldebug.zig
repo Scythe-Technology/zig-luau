@@ -91,7 +91,7 @@ pub fn Gisnative(L: *lua.State, level: usize) bool {
 }
 
 pub inline fn singlestep(L: *lua.State, enabled: bool) void {
-    L.tsinglestep = enabled;
+    L.singlestep_on = enabled;
 }
 
 pub inline fn breakpoint(L: *lua.State, funcindex: i32, line: i32, enabled: bool) i32 {

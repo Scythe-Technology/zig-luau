@@ -657,7 +657,7 @@ pub inline fn pcall(L: *lua.State, nargs: i32, nresults: i32, msgh: i32) lua.Sta
 }
 
 pub inline fn status(L: *lua.State) lua.Status {
-    return @enumFromInt(L.tstatus);
+    return @enumFromInt(L.curr_status);
 }
 
 pub inline fn costatus(L: *lua.State, co: *lua.State) lua.CoStatus {
