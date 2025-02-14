@@ -3,8 +3,8 @@ const std = @import("std");
 const Build = std.Build;
 const Step = std.Build.Step;
 
-const LUAU_VERSION = std.SemanticVersion{ .major = 0, .minor = 659, .patch = 0 };
-const LUAU_HASH = "12201eb094ea9a223e186f99350bc201dc0cdde357cb607b38094bea5e30a3edea85";
+const LUAU_VERSION = std.SemanticVersion{ .major = 0, .minor = 660, .patch = 0 };
+const LUAU_HASH = "1220627cc15aba7c2bd870373397d07ac489484d296df37adce6f95e2004c9053dcc";
 
 const LUAU_WASM_VERSION = std.SemanticVersion{ .major = 0, .minor = 655, .patch = 0 };
 const LUAU_WASM_HASH = "122015473f9deb29502aeaebfb66963338f602f68937c76a90b021a9f67d38648133";
@@ -233,6 +233,10 @@ fn buildLuau(
             FILES.append(file) catch @panic("OOM");
     for (LUAU_VM_SOURCE_FILES) |file|
         FILES.append(file) catch @panic("OOM");
+
+    // TODO: Wasm luau build is outdated, add to LUAU_Ast_SOURCE_FILES when possible
+    if (!target.result.isWasm())
+        FILES.append("Ast/src/Cst.cpp") catch @panic("OOM");
 
     lib.addCSourceFiles(.{
         .root = dependency.path(""),
