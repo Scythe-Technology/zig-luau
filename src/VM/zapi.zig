@@ -393,9 +393,21 @@ pub fn Ztolstring(L: *lua.State, idx: i32) ![:0]const u8 {
     return Ztolstringk(L, idx);
 }
 
-fn tag_error(L: *lua.State, narg: i32, tag: lua.Type) anyerror {
+fn tag_error(L: *lua.State, narg: i32, tag: lua.Type, comptime msg: ?[]const u8) anyerror {
     const curr_type = L.typeOf(narg);
-    return Zerrorf(L, "invalid argument #{d} (expected {s}, got {s})", .{ narg, lapi.typename(tag), lapi.typename(curr_type) });
+    if (narg > 0) {
+        if (msg) |m| {
+            return Zerrorf(L, "{s}, argument #{d} (expected {s}, got {s})", .{ m, narg, lapi.typename(tag), lapi.typename(curr_type) });
+        } else {
+            return Zerrorf(L, "invalid argument #{d} (expected {s}, got {s})", .{ narg, lapi.typename(tag), lapi.typename(curr_type) });
+        }
+    } else {
+        if (msg) |m| {
+            return Zerrorf(L, "{s} (expected {s}, got {s})", .{ m, lapi.typename(tag), lapi.typename(curr_type) });
+        } else {
+            return Zerrorf(L, "invalid value (expected {s}, got {s})", .{ lapi.typename(tag), lapi.typename(curr_type) });
+        }
+    }
 }
 
 pub fn Zcheckstack(L: *lua.State, space: i32, msg: ?[]const u8) !void {
@@ -408,18 +420,18 @@ pub fn Zcheckstack(L: *lua.State, space: i32, msg: ?[]const u8) !void {
 
 pub fn Zchecktype(L: *lua.State, narg: i32, t: lua.Type) !void {
     if (L.typeOf(narg) != t)
-        return tag_error(L, narg, t);
+        return tag_error(L, narg, t, null);
 }
 
-pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32) !T {
+pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32, comptime msg: ?[]const u8) !T {
     switch (@typeInfo(T)) {
         .bool => if (L.isboolean(narg))
             return L.toboolean(narg)
         else
-            return tag_error(L, narg, .Boolean),
+            return tag_error(L, narg, .Boolean, msg),
         .int => |int| {
             if (!L.isnumber(narg))
-                return tag_error(L, narg, .Number);
+                return tag_error(L, narg, .Number, msg);
             const getfn = if (int.signedness == .signed) lapi.tointeger else lapi.tounsigned;
             if (int.bits <= 32)
                 return @truncate(getfn(L, narg) orelse unreachable)
@@ -428,7 +440,7 @@ pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32) !T {
         },
         .float => |float| {
             if (!L.isnumber(narg))
-                return tag_error(L, narg, .Number);
+                return tag_error(L, narg, .Number, msg);
             if (float.bits <= 64)
                 return @floatCast(L.tonumber(narg) orelse unreachable)
             else
@@ -438,7 +450,7 @@ pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32) !T {
             if (pointer.size == .one)
                 switch (L.typeOf(narg)) {
                     .LightUserdata, .Userdata => return L.touserdata(pointer.child, narg) orelse unreachable,
-                    else => return tag_error(L, narg, .Userdata),
+                    else => return tag_error(L, narg, .Userdata, msg),
                 }
             else if (pointer.size == .slice) {
                 if (pointer.child == u8) {
@@ -448,7 +460,7 @@ pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32) !T {
                             if (!pointer.is_const)
                                 @compileError("Pointer must be [:0]const u8 when using a sentinel, string only");
                             if (L.typeOf(narg) != .String)
-                                return tag_error(L, narg, .String);
+                                return tag_error(L, narg, .String, msg);
                             return L.tostring(narg) orelse unreachable;
                         } else @compileError("Unsupported pointer sentinel [:?]" ++ @typeName(pointer.child));
                     } else {
@@ -456,11 +468,11 @@ pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32) !T {
                             switch (L.typeOf(narg)) {
                                 .String => return L.tolstring(narg) orelse unreachable,
                                 .Buffer => return L.tobuffer(narg) orelse unreachable,
-                                else => return tag_error(L, narg, .String),
+                                else => return tag_error(L, narg, .String, msg),
                             }
                         else switch (L.typeOf(narg)) {
                             .Buffer => return L.tobuffer(narg) orelse unreachable,
-                            else => return tag_error(L, narg, .Buffer),
+                            else => return tag_error(L, narg, .Buffer, msg),
                         }
                     }
                 } else if (pointer.child == f32) {
@@ -468,7 +480,7 @@ pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32) !T {
                         if (L.isvector(narg))
                             return L.tovector(narg) orelse unreachable
                         else
-                            return tag_error(L, narg, .Vector);
+                            return tag_error(L, narg, .Vector, msg);
                     } else @compileError("Unsupported pointer type, you would need to make []f32 const and exclude sentinel" ++ @typeName(T));
                 } else @compileError("Unsupported pointer type " ++ @typeName(T));
             } else @compileError("Unsupported pointer type " ++ @typeName(T));
@@ -479,7 +491,7 @@ pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32) !T {
                     if (int.bits > 32)
                         @compileError("int size too large, 32 bits or lower is supported");
                     if (!L.isnumber(narg))
-                        return tag_error(L, narg, .Number);
+                        return tag_error(L, narg, .Number, msg);
                     if (int.signedness == .unsigned) {
                         const value = L.tounsigned(narg) orelse unreachable;
                         comptime var can_cast = true;
@@ -514,16 +526,16 @@ pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32) !T {
         .null => if (L.typeOf(narg) == .Nil)
             return null
         else
-            return tag_error(L, narg, .Nil),
+            return tag_error(L, narg, .Nil, msg),
         .optional => |optional| {
             if (L.isnoneornil(narg))
                 return null;
-            return try Zcheckvalue(L, optional.child, narg);
+            return try Zcheckvalue(L, optional.child, narg, msg);
         },
         .void => if (L.typeOf(narg) == .None)
             return
         else {
-            return tag_error(L, narg, .None);
+            return tag_error(L, narg, .None, msg);
         },
         else => |t| @compileError("Unsupported type " ++ @tagName(t)),
     }
@@ -991,48 +1003,48 @@ test Zcheckvalue {
     defer L.deinit();
 
     Zpushvalue(L, 455);
-    try std.testing.expectEqual(455, try Zcheckvalue(L, i32, -1));
+    try std.testing.expectEqual(455, try Zcheckvalue(L, i32, -1, null));
     L.pop(1);
 
     Zpushvalue(L, 1.24);
-    try std.testing.expectEqual(1.24, try Zcheckvalue(L, f64, -1));
+    try std.testing.expectEqual(1.24, try Zcheckvalue(L, f64, -1, null));
     L.pop(1);
 
     Zpushvalue(L, "Test");
-    try std.testing.expectEqualStrings("Test", try Zcheckvalue(L, []const u8, -1));
+    try std.testing.expectEqualStrings("Test", try Zcheckvalue(L, []const u8, -1, null));
     L.pop(1);
 
     Zpushvalue(L, true);
-    try std.testing.expectEqual(true, try Zcheckvalue(L, bool, -1));
+    try std.testing.expectEqual(true, try Zcheckvalue(L, bool, -1, null));
     L.pop(1);
 
     Zpushvalue(L, null);
-    try std.testing.expectEqual(null, try Zcheckvalue(L, ?i32, -1));
+    try std.testing.expectEqual(null, try Zcheckvalue(L, ?i32, -1, null));
     L.pop(1);
     Zpushvalue(L, 2);
-    try std.testing.expectEqual(2, try Zcheckvalue(L, ?i32, -1));
+    try std.testing.expectEqual(2, try Zcheckvalue(L, ?i32, -1, null));
     L.pop(1);
 
     const e = enum { A, B, C };
     Zpushvalue(L, e.A);
-    try std.testing.expectEqual(e.A, try Zcheckvalue(L, e, -1));
+    try std.testing.expectEqual(e.A, try Zcheckvalue(L, e, -1, null));
     L.pop(1);
 
     const odd_e = enum(u4) { A = 2, B = 3, C = 4 };
     Zpushvalue(L, odd_e.A);
-    try std.testing.expectEqual(odd_e.A, try Zcheckvalue(L, odd_e, -1));
+    try std.testing.expectEqual(odd_e.A, try Zcheckvalue(L, odd_e, -1, null));
     L.pop(1);
 
     const signed_e = enum(i32) { A = -1, B = 2, C = 4 };
     Zpushvalue(L, signed_e.B);
-    try std.testing.expectEqual(signed_e.B, try Zcheckvalue(L, signed_e, -1));
+    try std.testing.expectEqual(signed_e.B, try Zcheckvalue(L, signed_e, -1, null));
     L.pop(1);
 
     {
         const ud = struct { b: i32, c: i32 };
         const ptr = L.newuserdata(ud);
         ptr.* = .{ .b = 1, .c = 2 };
-        const checked_ud = try Zcheckvalue(L, *ud, -1);
+        const checked_ud = try Zcheckvalue(L, *ud, -1, null);
         try std.testing.expectEqual(1, checked_ud.b);
         try std.testing.expectEqual(2, checked_ud.c);
     }
@@ -1043,7 +1055,7 @@ test Zcheckvalue {
         else
             @Vector(4, f32){ 1.0, 2.0, 3.0, 4.0 };
         Zpushvalue(L, vec);
-        const checked_vec = try Zcheckvalue(L, []const f32, -1);
+        const checked_vec = try Zcheckvalue(L, []const f32, -1, null);
         try std.testing.expectEqual(1.0, checked_vec[0]);
         try std.testing.expectEqual(2.0, checked_vec[1]);
         try std.testing.expectEqual(3.0, checked_vec[2]);
@@ -1054,19 +1066,28 @@ test Zcheckvalue {
 
     {
         Zpushbuffer(L, "Test");
-        const checked_buf = try Zcheckvalue(L, []const u8, -1);
+        const checked_buf = try Zcheckvalue(L, []const u8, -1, null);
         try std.testing.expectEqualSlices(u8, "Test", checked_buf);
-        const checked_buf2 = try Zcheckvalue(L, []u8, -1);
+        const checked_buf2 = try Zcheckvalue(L, []u8, -1, null);
         try std.testing.expectEqualSlices(u8, "Test", checked_buf2);
         L.pop(1);
     }
 
     {
         L.pushlstring("Test2");
-        const checked_buf = try Zcheckvalue(L, []const u8, -1);
+        const checked_buf = try Zcheckvalue(L, []const u8, -1, null);
         try std.testing.expectEqualSlices(u8, "Test2", checked_buf);
-        try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, []u8, -1));
-        try std.testing.expectEqualStrings("invalid argument #-1 (expected buffer, got string)", L.tostring(-1).?);
+        try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, []u8, @intCast(L.gettop()), null));
+        try std.testing.expectEqualStrings("invalid argument #2 (expected buffer, got string)", L.tostring(-1).?);
+        L.pop(1);
+        try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, []u8, @intCast(L.gettop()), "custom"));
+        try std.testing.expectEqualStrings("custom, argument #2 (expected buffer, got string)", L.tostring(-1).?);
+        L.pop(1);
+        try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, []u8, -1, null));
+        try std.testing.expectEqualStrings("invalid value (expected buffer, got string)", L.tostring(-1).?);
+        L.pop(1);
+        try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, []u8, -1, "custom"));
+        try std.testing.expectEqualStrings("custom (expected buffer, got string)", L.tostring(-1).?);
         L.pop(2);
     }
 }
