@@ -3,6 +3,7 @@ const std = @import("std");
 const lua = @import("lua.zig");
 const ltm = @import("ltm.zig");
 const lapi = @import("lapi.zig");
+const laux = @import("laux.zig");
 
 pub fn LuaZigFn(comptime ReturnType: type) type {
     switch (@typeInfo(ReturnType)) {
@@ -395,11 +396,18 @@ pub fn Ztolstring(L: *lua.State, idx: i32) ![:0]const u8 {
 
 fn tag_error(L: *lua.State, narg: i32, tag: lua.Type, comptime msg: ?[]const u8) anyerror {
     const curr_type = L.typeOf(narg);
+    const fname = laux.currfuncname(L);
     if (narg > 0) {
         if (msg) |m| {
-            return Zerrorf(L, "{s}, argument #{d} (expected {s}, got {s})", .{ m, narg, lapi.typename(tag), lapi.typename(curr_type) });
+            if (fname) |name|
+                return Zerrorf(L, "{s}, argument #{d} to '{s}' (expected {s}, got {s})", .{ m, narg, name, lapi.typename(tag), lapi.typename(curr_type) })
+            else
+                return Zerrorf(L, "{s}, argument #{d} (expected {s}, got {s})", .{ m, narg, lapi.typename(tag), lapi.typename(curr_type) });
         } else {
-            return Zerrorf(L, "invalid argument #{d} (expected {s}, got {s})", .{ narg, lapi.typename(tag), lapi.typename(curr_type) });
+            if (fname) |name|
+                return Zerrorf(L, "invalid argument #{d} to '{s}' (expected {s}, got {s})", .{ narg, name, lapi.typename(tag), lapi.typename(curr_type) })
+            else
+                return Zerrorf(L, "invalid argument #{d} (expected {s}, got {s})", .{ narg, lapi.typename(tag), lapi.typename(curr_type) });
         }
     } else {
         return Zerrorf(L, "{s} (expected {s}, got {s})", .{ msg orelse "invalid value", lapi.typename(tag), lapi.typename(curr_type) });
@@ -585,7 +593,7 @@ test "toCFn + Zchecktype" {
 
         L.pushcclosure(toCFn(foo), "foo", 0);
         try std.testing.expectEqual(error.Runtime, L.pcall(0, 0, 0).check());
-        try std.testing.expectEqualStrings("invalid argument #1 (expected number, got nil)", L.tostring(-1).?);
+        try std.testing.expectEqualStrings("invalid argument #1 to 'foo' (expected number, got nil)", L.tostring(-1).?);
         defer L.pop(1);
     }
     if (comptime EXCEPTIONS_ENABLED) {

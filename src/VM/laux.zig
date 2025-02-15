@@ -18,7 +18,7 @@ pub fn OptionalValue(comptime T: type, L: *lua.State, check: anytype, narg: i32,
         return check(L, narg);
 }
 
-fn currfuncname(L: *lua.State) ?[:0]const u8 {
+pub fn currfuncname(L: *lua.State) ?[:0]const u8 {
     const cl: ?*lobject.Closure = if (@intFromPtr(L.ci) > @intFromPtr(L.base_ci))
         L.curr_func()
     else
