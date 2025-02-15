@@ -263,7 +263,7 @@ pub fn tointegerx(L: *lua.State, idx: i32) ?i32 {
     var n: lobject.TValue = undefined;
     const o: *const lobject.TValue = index2addr(L, idx);
     if (lvmutils.Vtonumber(o, &n)) |obj|
-        return @truncate(@as(i52, @intFromFloat(obj.nvalue())))
+        return @truncate(@as(isize, @intFromFloat(obj.nvalue())))
     else
         return null;
 }
@@ -275,7 +275,7 @@ pub fn tounsignedx(L: *lua.State, idx: i32) ?u32 {
     var n: lobject.TValue = undefined;
     const o: *const lobject.TValue = index2addr(L, idx);
     if (lvmutils.Vtonumber(o, &n)) |obj|
-        return @truncate(@as(u64, @intFromFloat(obj.nvalue())))
+        return @bitCast(@as(i32, @truncate(@as(isize, @intFromFloat(obj.nvalue())))))
     else
         return null;
 }

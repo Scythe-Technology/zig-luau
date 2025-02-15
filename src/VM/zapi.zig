@@ -195,7 +195,7 @@ pub fn Zpushvalue(L: *lua.State, value: anytype) void {
         .int => |int| {
             const pushfn = if (int.signedness == .signed) lapi.pushinteger else lapi.pushunsigned;
             if (int.bits <= 32)
-                pushfn(L, value)
+                pushfn(L, @intCast(value))
             else
                 pushfn(L, @truncate(value));
         },
@@ -402,11 +402,7 @@ fn tag_error(L: *lua.State, narg: i32, tag: lua.Type, comptime msg: ?[]const u8)
             return Zerrorf(L, "invalid argument #{d} (expected {s}, got {s})", .{ narg, lapi.typename(tag), lapi.typename(curr_type) });
         }
     } else {
-        if (msg) |m| {
-            return Zerrorf(L, "{s} (expected {s}, got {s})", .{ m, lapi.typename(tag), lapi.typename(curr_type) });
-        } else {
-            return Zerrorf(L, "invalid value (expected {s}, got {s})", .{ lapi.typename(tag), lapi.typename(curr_type) });
-        }
+        return Zerrorf(L, "{s} (expected {s}, got {s})", .{ msg orelse "invalid value", lapi.typename(tag), lapi.typename(curr_type) });
     }
 }
 
@@ -432,11 +428,22 @@ pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32, comptime msg: ?[]
         .int => |int| {
             if (!L.isnumber(narg))
                 return tag_error(L, narg, .Number, msg);
-            const getfn = if (int.signedness == .signed) lapi.tointeger else lapi.tounsigned;
-            if (int.bits <= 32)
-                return @truncate(getfn(L, narg) orelse unreachable)
-            else
-                @compileError("int size too large, 32 bits or lower is supported");
+            if (int.bits < 32) {
+                const value = lapi.tointeger(L, narg) orelse unreachable;
+                const max = std.math.maxInt(T);
+                const min = std.math.minInt(T);
+                if (value > max or value < min) {
+                    if (narg > 0) {
+                        return L.Zerrorf("invalid argument #{d} (expected number between {d} and {d}, got {d})", .{ narg, min, max, value });
+                    } else {
+                        return L.Zerrorf("{s} (expected number between {d} and {d}, got {d})", .{ msg orelse "invalid value", min, max, value });
+                    }
+                }
+                return @intCast(value);
+            } else if (int.bits == 32) {
+                const getfn = if (int.signedness == .signed) lapi.tointeger else lapi.tounsigned;
+                return getfn(L, narg) orelse unreachable;
+            } else @compileError("int size too large, 32 bits or lower is supported");
         },
         .float => |float| {
             if (!L.isnumber(narg))
@@ -1093,6 +1100,35 @@ test Zcheckvalue {
         L.pop(1);
         try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, []u8, -1, "custom"));
         try std.testing.expectEqualStrings("custom (expected buffer, got string)", L.tostring(-1).?);
+        L.pop(2);
+    }
+
+    {
+        L.pushinteger(255);
+        const num = try Zcheckvalue(L, u8, -1, null);
+        try std.testing.expectEqual(255, num);
+        try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, u2, @intCast(L.gettop()), null));
+        try std.testing.expectEqualStrings("invalid argument #2 (expected number between 0 and 3, got 255)", L.tostring(-1).?);
+        L.pop(1);
+        try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, i2, @intCast(L.gettop()), null));
+        try std.testing.expectEqualStrings("invalid argument #2 (expected number between -2 and 1, got 255)", L.tostring(-1).?);
+        L.pop(1);
+        try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, u2, -1, null));
+        try std.testing.expectEqualStrings("invalid value (expected number between 0 and 3, got 255)", L.tostring(-1).?);
+        L.pop(2);
+    }
+    {
+        L.pushinteger(-20);
+        const num = try Zcheckvalue(L, i8, -1, null);
+        try std.testing.expectEqual(-20, num);
+        try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, u2, @intCast(L.gettop()), null));
+        try std.testing.expectEqualStrings("invalid argument #2 (expected number between 0 and 3, got -20)", L.tostring(-1).?);
+        L.pop(1);
+        try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, i2, @intCast(L.gettop()), null));
+        try std.testing.expectEqualStrings("invalid argument #2 (expected number between -2 and 1, got -20)", L.tostring(-1).?);
+        L.pop(1);
+        try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, i3, -1, null));
+        try std.testing.expectEqualStrings("invalid value (expected number between -4 and 3, got -20)", L.tostring(-1).?);
         L.pop(2);
     }
 }
