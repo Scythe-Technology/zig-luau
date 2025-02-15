@@ -585,13 +585,8 @@ pub inline fn sizenode(t: *const LuaTable) i32 {
     return @intCast(1 << t.lsizenode);
 }
 
-pub const Onilobject = &Onilobject_;
-
-const Onilobject_: TValue = .{
-    .value = undefined,
-    .extra = undefined,
-    .tt = @intFromEnum(lua.Type.Nil),
-};
+extern "c" const luaO_nilobject_: TValue;
+pub const Onilobject = &luaO_nilobject_;
 
 pub fn OrawequalObj(t1: *const TValue, t2: *const TValue) bool {
     if (t1.ttype() != t2.ttype())
