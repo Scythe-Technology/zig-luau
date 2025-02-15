@@ -419,7 +419,7 @@ fn tag_error(L: *lua.State, narg: i32, tag: lua.Type, comptime msg: ?[]const u8)
             }
         }
     } else {
-        return Zerrorf(L, "{s} (expected {s}, got {s})", .{ msg orelse "invalid value", lapi.typename(tag), lapi.typename(curr_type) });
+        return Zerrorf(L, "{s} ({s} expected, got {s})", .{ msg orelse "invalid value", lapi.typename(tag), lapi.typename(curr_type) });
     }
 }
 
