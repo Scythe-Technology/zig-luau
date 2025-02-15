@@ -541,7 +541,7 @@ pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32, comptime msg: ?[]
     }
 }
 
-pub fn Zcheckfield(L: *lua.State, comptime T: type, idx: i32, comptime field: []const u8) !T {
+pub fn Zcheckfield(L: *lua.State, comptime T: type, idx: i32, comptime field: [:0]const u8) !T {
     _ = L.getfield(idx, field);
     return try Zcheckvalue(L, T, -1, "invalid field '" ++ field ++ "'");
 }
