@@ -411,7 +411,7 @@ pub fn Zchecktype(L: *lua.State, narg: i32, t: lua.Type) !void {
         return tag_error(L, narg, t);
 }
 
-pub fn Zcheckvalue(comptime T: type, L: *lua.State, narg: i32) !T {
+pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32) !T {
     switch (@typeInfo(T)) {
         .bool => if (L.isboolean(narg))
             return L.toboolean(narg)
@@ -518,7 +518,7 @@ pub fn Zcheckvalue(comptime T: type, L: *lua.State, narg: i32) !T {
         .optional => |optional| {
             if (L.isnoneornil(narg))
                 return null;
-            return try Zcheckvalue(optional.child, L, narg);
+            return try Zcheckvalue(L, optional.child, narg);
         },
         .void => if (L.typeOf(narg) == .None)
             return
@@ -991,48 +991,48 @@ test Zcheckvalue {
     defer L.deinit();
 
     Zpushvalue(L, 455);
-    try std.testing.expectEqual(455, try Zcheckvalue(i32, L, -1));
+    try std.testing.expectEqual(455, try Zcheckvalue(L, i32, -1));
     L.pop(1);
 
     Zpushvalue(L, 1.24);
-    try std.testing.expectEqual(1.24, try Zcheckvalue(f64, L, -1));
+    try std.testing.expectEqual(1.24, try Zcheckvalue(L, f64, -1));
     L.pop(1);
 
     Zpushvalue(L, "Test");
-    try std.testing.expectEqualStrings("Test", try Zcheckvalue([]const u8, L, -1));
+    try std.testing.expectEqualStrings("Test", try Zcheckvalue(L, []const u8, -1));
     L.pop(1);
 
     Zpushvalue(L, true);
-    try std.testing.expectEqual(true, try Zcheckvalue(bool, L, -1));
+    try std.testing.expectEqual(true, try Zcheckvalue(L, bool, -1));
     L.pop(1);
 
     Zpushvalue(L, null);
-    try std.testing.expectEqual(null, try Zcheckvalue(?i32, L, -1));
+    try std.testing.expectEqual(null, try Zcheckvalue(L, ?i32, -1));
     L.pop(1);
     Zpushvalue(L, 2);
-    try std.testing.expectEqual(2, try Zcheckvalue(?i32, L, -1));
+    try std.testing.expectEqual(2, try Zcheckvalue(L, ?i32, -1));
     L.pop(1);
 
     const e = enum { A, B, C };
     Zpushvalue(L, e.A);
-    try std.testing.expectEqual(e.A, try Zcheckvalue(e, L, -1));
+    try std.testing.expectEqual(e.A, try Zcheckvalue(L, e, -1));
     L.pop(1);
 
     const odd_e = enum(u4) { A = 2, B = 3, C = 4 };
     Zpushvalue(L, odd_e.A);
-    try std.testing.expectEqual(odd_e.A, try Zcheckvalue(odd_e, L, -1));
+    try std.testing.expectEqual(odd_e.A, try Zcheckvalue(L, odd_e, -1));
     L.pop(1);
 
     const signed_e = enum(i32) { A = -1, B = 2, C = 4 };
     Zpushvalue(L, signed_e.B);
-    try std.testing.expectEqual(signed_e.B, try Zcheckvalue(signed_e, L, -1));
+    try std.testing.expectEqual(signed_e.B, try Zcheckvalue(L, signed_e, -1));
     L.pop(1);
 
     {
         const ud = struct { b: i32, c: i32 };
         const ptr = L.newuserdata(ud);
         ptr.* = .{ .b = 1, .c = 2 };
-        const checked_ud = try Zcheckvalue(*ud, L, -1);
+        const checked_ud = try Zcheckvalue(L, *ud, -1);
         try std.testing.expectEqual(1, checked_ud.b);
         try std.testing.expectEqual(2, checked_ud.c);
     }
@@ -1043,7 +1043,7 @@ test Zcheckvalue {
         else
             @Vector(4, f32){ 1.0, 2.0, 3.0, 4.0 };
         Zpushvalue(L, vec);
-        const checked_vec = try Zcheckvalue([]const f32, L, -1);
+        const checked_vec = try Zcheckvalue(L, []const f32, -1);
         try std.testing.expectEqual(1.0, checked_vec[0]);
         try std.testing.expectEqual(2.0, checked_vec[1]);
         try std.testing.expectEqual(3.0, checked_vec[2]);
@@ -1054,18 +1054,18 @@ test Zcheckvalue {
 
     {
         Zpushbuffer(L, "Test");
-        const checked_buf = try Zcheckvalue([]const u8, L, -1);
+        const checked_buf = try Zcheckvalue(L, []const u8, -1);
         try std.testing.expectEqualSlices(u8, "Test", checked_buf);
-        const checked_buf2 = try Zcheckvalue([]u8, L, -1);
+        const checked_buf2 = try Zcheckvalue(L, []u8, -1);
         try std.testing.expectEqualSlices(u8, "Test", checked_buf2);
         L.pop(1);
     }
 
     {
         L.pushlstring("Test2");
-        const checked_buf = try Zcheckvalue([]const u8, L, -1);
+        const checked_buf = try Zcheckvalue(L, []const u8, -1);
         try std.testing.expectEqualSlices(u8, "Test2", checked_buf);
-        try std.testing.expectError(error.RaiseLuauError, Zcheckvalue([]u8, L, -1));
+        try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, []u8, -1));
         try std.testing.expectEqualStrings("invalid argument #-1 (expected buffer, got string)", L.tostring(-1).?);
         L.pop(2);
     }
