@@ -402,20 +402,20 @@ fn tag_error(L: *lua.State, narg: i32, tag: lua.Type, comptime msg: ?[]const u8)
     if (narg > 0) {
         if (msg) |m| {
             if (fname) |name|
-                return Zerrorf(L, "{s}, argument #{d} to '{s}' (expected {s}, got {s})", .{ m, narg, name, lapi.typename(tag), lapi.typename(curr_type) })
+                return Zerrorf(L, "{s}, argument #{d} to '{s}' ({s} expected, got {s})", .{ m, narg, name, lapi.typename(tag), lapi.typename(curr_type) })
             else
-                return Zerrorf(L, "{s}, argument #{d} (expected {s}, got {s})", .{ m, narg, lapi.typename(tag), lapi.typename(curr_type) });
+                return Zerrorf(L, "{s}, argument #{d} ({s} expected, got {s})", .{ m, narg, lapi.typename(tag), lapi.typename(curr_type) });
         } else {
             if (obj != null) {
                 if (fname) |name|
-                    return Zerrorf(L, "invalid argument #{d} to '{s}' (expected {s}, got {s})", .{ narg, name, lapi.typename(tag), lapi.typename(curr_type) })
+                    return Zerrorf(L, "invalid argument #{d} to '{s}' ({s} expected, got {s})", .{ narg, name, lapi.typename(tag), lapi.typename(curr_type) })
                 else
-                    return Zerrorf(L, "invalid argument #{d} (expected {s}, got {s})", .{ narg, lapi.typename(tag), lapi.typename(curr_type) });
+                    return Zerrorf(L, "invalid argument #{d} ({s} expected, got {s})", .{ narg, lapi.typename(tag), lapi.typename(curr_type) });
             } else {
                 if (fname) |name|
-                    return Zerrorf(L, "missing argument #{d} to '{s}' (expected {s})", .{ narg, name, lapi.typename(tag) })
+                    return Zerrorf(L, "missing argument #{d} to '{s}' ({s} expected)", .{ narg, name, lapi.typename(tag) })
                 else
-                    return Zerrorf(L, "missing argument #{d} (expected {s})", .{ narg, lapi.typename(tag) });
+                    return Zerrorf(L, "missing argument #{d} ({s} expected)", .{ narg, lapi.typename(tag) });
             }
         }
     } else {
