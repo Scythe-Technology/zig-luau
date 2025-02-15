@@ -637,6 +637,9 @@ pub const lua_State = extern struct {
     pub const Ztolstring = zapi.Ztolstring;
     pub const Ztolstringk = zapi.Ztolstringk;
     pub const Zcallmeta = zapi.Zcallmeta;
+    pub const Zchecktype = zapi.Zchecktype;
+    pub const Zcheckvalue = zapi.Zcheckvalue;
+    pub const Zcheckstack = zapi.Zcheckstack;
 
     pub inline fn deinit(L: *lua_State) void {
         L.close();
