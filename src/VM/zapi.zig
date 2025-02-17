@@ -451,9 +451,9 @@ pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32, comptime msg: ?[]
                 const min = std.math.minInt(T);
                 if (value > max or value < min) {
                     if (narg > 0) {
-                        return L.Zerrorf("invalid argument #{d} (expected number between {d} and {d}, got {d})", .{ narg, min, max, value });
+                        return L.Zerrorf("invalid argument #{d} (number expected between {d} and {d}, got {d})", .{ narg, min, max, value });
                     } else {
-                        return L.Zerrorf("{s} (expected number between {d} and {d}, got {d})", .{ msg orelse "invalid value", min, max, value });
+                        return L.Zerrorf("{s} (number expected between {d} and {d}, got {d})", .{ msg orelse "invalid value", min, max, value });
                     }
                 }
                 return @intCast(value);
@@ -602,7 +602,7 @@ test "toCFn + Zchecktype" {
 
         L.pushcclosure(toCFn(foo), "foo", 0);
         try std.testing.expectEqual(error.Runtime, L.pcall(0, 0, 0).check());
-        try std.testing.expectEqualStrings("missing argument #1 to 'foo' (expected number)", L.tostring(-1).?);
+        try std.testing.expectEqualStrings("missing argument #1 to 'foo' (number expected)", L.tostring(-1).?);
         defer L.pop(1);
     }
     if (comptime EXCEPTIONS_ENABLED) {
@@ -1107,16 +1107,16 @@ test Zcheckvalue {
         const checked_buf = try Zcheckvalue(L, []const u8, -1, null);
         try std.testing.expectEqualSlices(u8, "Test2", checked_buf);
         try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, []u8, @intCast(L.gettop()), null));
-        try std.testing.expectEqualStrings("invalid argument #2 (expected buffer, got string)", L.tostring(-1).?);
+        try std.testing.expectEqualStrings("invalid argument #2 (buffer expected, got string)", L.tostring(-1).?);
         L.pop(1);
         try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, []u8, @intCast(L.gettop()), "custom"));
-        try std.testing.expectEqualStrings("custom, argument #2 (expected buffer, got string)", L.tostring(-1).?);
+        try std.testing.expectEqualStrings("custom, argument #2 (buffer expected, got string)", L.tostring(-1).?);
         L.pop(1);
         try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, []u8, -1, null));
-        try std.testing.expectEqualStrings("invalid value (expected buffer, got string)", L.tostring(-1).?);
+        try std.testing.expectEqualStrings("invalid value (buffer expected, got string)", L.tostring(-1).?);
         L.pop(1);
         try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, []u8, -1, "custom"));
-        try std.testing.expectEqualStrings("custom (expected buffer, got string)", L.tostring(-1).?);
+        try std.testing.expectEqualStrings("custom (buffer expected, got string)", L.tostring(-1).?);
         L.pop(2);
     }
 
@@ -1125,13 +1125,13 @@ test Zcheckvalue {
         const num = try Zcheckvalue(L, u8, -1, null);
         try std.testing.expectEqual(255, num);
         try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, u2, @intCast(L.gettop()), null));
-        try std.testing.expectEqualStrings("invalid argument #2 (expected number between 0 and 3, got 255)", L.tostring(-1).?);
+        try std.testing.expectEqualStrings("invalid argument #2 (number expected between 0 and 3, got 255)", L.tostring(-1).?);
         L.pop(1);
         try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, i2, @intCast(L.gettop()), null));
-        try std.testing.expectEqualStrings("invalid argument #2 (expected number between -2 and 1, got 255)", L.tostring(-1).?);
+        try std.testing.expectEqualStrings("invalid argument #2 (number expected between -2 and 1, got 255)", L.tostring(-1).?);
         L.pop(1);
         try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, u2, -1, null));
-        try std.testing.expectEqualStrings("invalid value (expected number between 0 and 3, got 255)", L.tostring(-1).?);
+        try std.testing.expectEqualStrings("invalid value (number expected between 0 and 3, got 255)", L.tostring(-1).?);
         L.pop(2);
     }
     {
@@ -1139,13 +1139,13 @@ test Zcheckvalue {
         const num = try Zcheckvalue(L, i8, -1, null);
         try std.testing.expectEqual(-20, num);
         try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, u2, @intCast(L.gettop()), null));
-        try std.testing.expectEqualStrings("invalid argument #2 (expected number between 0 and 3, got -20)", L.tostring(-1).?);
+        try std.testing.expectEqualStrings("invalid argument #2 (number expected between 0 and 3, got -20)", L.tostring(-1).?);
         L.pop(1);
         try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, i2, @intCast(L.gettop()), null));
-        try std.testing.expectEqualStrings("invalid argument #2 (expected number between -2 and 1, got -20)", L.tostring(-1).?);
+        try std.testing.expectEqualStrings("invalid argument #2 (number expected between -2 and 1, got -20)", L.tostring(-1).?);
         L.pop(1);
         try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, i3, -1, null));
-        try std.testing.expectEqualStrings("invalid value (expected number between -4 and 3, got -20)", L.tostring(-1).?);
+        try std.testing.expectEqualStrings("invalid value (number expected between -4 and 3, got -20)", L.tostring(-1).?);
         L.pop(2);
     }
 }

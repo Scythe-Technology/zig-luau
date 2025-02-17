@@ -7,8 +7,8 @@
             .hash = "12206faa1744eef32c46b9f968e53ab3f7c400e91baee39ccc0f1f95db7f684d5670",
         },
         .@"luau-wasm" = .{
-            .url = "git+https://github.com/lodinukal/luau#7c15c09700f44d7380708f8db0555a30a46ddf8f",
-            .hash = "122015473f9deb29502aeaebfb66963338f602f68937c76a90b021a9f67d38648133",
+            .url = "git+https://github.com/lodinukal/luau#c8cbead755e036b98fe2809b14745ed57118393c",
+            .hash = "12200e320d0a20e7dea25f2c44d61d5522fd9b47062e57eeafb44c32a35946bf2316",
         },
     },
     .paths = .{

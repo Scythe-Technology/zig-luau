@@ -6,8 +6,8 @@ const Step = std.Build.Step;
 const LUAU_VERSION = std.SemanticVersion{ .major = 0, .minor = 661, .patch = 0 };
 const LUAU_HASH = "12206faa1744eef32c46b9f968e53ab3f7c400e91baee39ccc0f1f95db7f684d5670";
 
-const LUAU_WASM_VERSION = std.SemanticVersion{ .major = 0, .minor = 655, .patch = 0 };
-const LUAU_WASM_HASH = "122015473f9deb29502aeaebfb66963338f602f68937c76a90b021a9f67d38648133";
+const LUAU_WASM_VERSION = std.SemanticVersion{ .major = 0, .minor = 661, .patch = 0 };
+const LUAU_WASM_HASH = "12200e320d0a20e7dea25f2c44d61d5522fd9b47062e57eeafb44c32a35946bf2316";
 
 pub fn build(b: *Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -234,10 +234,6 @@ fn buildLuau(
     for (LUAU_VM_SOURCE_FILES) |file|
         FILES.append(file) catch @panic("OOM");
 
-    // TODO: Wasm luau build is outdated, add to LUAU_Ast_SOURCE_FILES when possible
-    if (!target.result.isWasm())
-        FILES.append("Ast/src/Cst.cpp") catch @panic("OOM");
-
     lib.addCSourceFiles(.{
         .root = dependency.path(""),
         .files = FILES.items,
@@ -266,6 +262,7 @@ const LUAU_Ast_HEADERS_DIRS = [_][]const u8{
 };
 const LUAU_Ast_SOURCE_FILES = [_][]const u8{
     "Ast/src/Ast.cpp",
+    "Ast/src/Cst.cpp",
     "Ast/src/Allocator.cpp",
     "Ast/src/Confusables.cpp",
     "Ast/src/Lexer.cpp",
