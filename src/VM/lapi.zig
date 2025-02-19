@@ -337,7 +337,7 @@ pub fn tolightuserdata(L: *lua.State, comptime T: type, idx: i32) ?*T {
     return if (!o.ttislightuserdata())
         null
     else
-        @ptrCast(o.pvalue());
+        @ptrCast(@alignCast(o.pvalue()));
 }
 
 pub fn tolightuserdatatagged(L: *lua.State, comptime T: type, idx: i32, tag: i32) ?*T {
@@ -345,7 +345,7 @@ pub fn tolightuserdatatagged(L: *lua.State, comptime T: type, idx: i32, tag: i32
     return if (!o.ttislightuserdata() or o.lightuserdatatag() != tag)
         null
     else
-        @ptrCast(o.pvalue());
+        @ptrCast(@alignCast(o.pvalue()));
 }
 
 pub fn touserdata(L: *lua.State, comptime T: type, idx: i32) ?*T {
