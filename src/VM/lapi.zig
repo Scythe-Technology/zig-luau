@@ -351,7 +351,7 @@ pub fn tolightuserdatatagged(L: *lua.State, comptime T: type, idx: i32, tag: i32
 pub fn touserdata(L: *lua.State, comptime T: type, idx: i32) ?*T {
     const o: *const lobject.TValue = index2addr(L, idx);
     if (o.ttisuserdata())
-        return @ptrCast(&o.uvalue().data)
+        return @ptrCast(@alignCast(&o.uvalue().data))
     else if (o.ttislightuserdata())
         return @ptrCast(@alignCast(o.pvalue()))
     else
@@ -363,7 +363,7 @@ pub fn touserdatatagged(L: *lua.State, comptime T: type, idx: i32, tag: i32) ?*T
     return if (!o.ttisuserdata() or @as(i32, @intCast(o.uvalue().tag)) != tag)
         null
     else
-        @ptrCast(&o.uvalue().data);
+        @ptrCast(@alignCast(&o.uvalue().data));
 }
 
 pub fn userdatatag(L: *lua.State, idx: i32) i32 {

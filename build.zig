@@ -3,8 +3,8 @@ const std = @import("std");
 const Build = std.Build;
 const Step = std.Build.Step;
 
-const LUAU_VERSION = std.SemanticVersion{ .major = 0, .minor = 661, .patch = 0 };
-const LUAU_HASH = "12206faa1744eef32c46b9f968e53ab3f7c400e91baee39ccc0f1f95db7f684d5670";
+const LUAU_VERSION = std.SemanticVersion{ .major = 0, .minor = 662, .patch = 0 };
+const LUAU_HASH = "1220524dbff1ad2c2c5cd986c5ee064be13b966d681533a771a930857cdb7818c716";
 
 const LUAU_WASM_VERSION = std.SemanticVersion{ .major = 0, .minor = 661, .patch = 0 };
 const LUAU_WASM_HASH = "12200e320d0a20e7dea25f2c44d61d5522fd9b47062e57eeafb44c32a35946bf2316";
