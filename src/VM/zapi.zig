@@ -19,7 +19,6 @@ pub fn LuaZigFn(comptime ReturnType: type) type {
 fn handleError(L: *lua.State, err: anyerror) noreturn {
     switch (err) {
         // else => @panic("Unknown error"),
-        error.RaiseLuauYieldError => L.LerrorL("attempt to yield across metamethod/C-call boundary", .{}),
         error.RaiseLuauError => L.raiseerror(),
         else => L.LerrorL("{s}", .{@errorName(err)}),
     }
@@ -186,6 +185,11 @@ pub inline fn Zpushfunction(L: *lua.State, comptime f: anytype, name: [:0]const 
 
 pub inline fn ZpushfunctionV(L: *lua.State, comptime f: anytype, name: [:0]const u8) void {
     L.pushcfunction(toCFnV(f), name);
+}
+
+pub fn Zyielderror(L: *lua.State) error{RaiseLuauError} {
+    L.pushlstring("attempt to yield across metamethod/C-call boundary");
+    return error.RaiseLuauError;
 }
 
 pub fn Zpushvalue(L: *lua.State, value: anytype) void {
@@ -1302,6 +1306,14 @@ test Zerror {
     try std.testing.expectEqual(error.RaiseLuauError, Zerror(L, "Test"));
     try std.testing.expectEqual(.String, L.typeOf(-1));
     try std.testing.expectEqualStrings("Test", L.tostring(-1).?);
+}
+
+test Zyielderror {
+    const L = try @import("lstate.zig").Lnewstate();
+    defer L.deinit();
+
+    try std.testing.expectEqual(error.RaiseLuauError, Zyielderror(L));
+    try std.testing.expectEqualStrings("attempt to yield across metamethod/C-call boundary", L.tostring(-1).?);
 }
 
 test Zerrorf {

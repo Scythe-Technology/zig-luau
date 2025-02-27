@@ -641,6 +641,7 @@ pub const lua_State = extern struct {
     pub const Zcheckvalue = zapi.Zcheckvalue;
     pub const Zcheckfield = zapi.Zcheckfield;
     pub const Zcheckstack = zapi.Zcheckstack;
+    pub const Zyielderror = zapi.Zyielderror;
 
     pub inline fn deinit(L: *lua_State) void {
         L.close();
