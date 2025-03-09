@@ -1,19 +1,16 @@
 .{
-    .name = "luau",
-    .version = "0.4.0+661",
+    .name = .luau,
+    .fingerprint = 0x5e07e249097356e4,
+    .version = "0.4.0+663",
     .dependencies = .{
         .luau = .{
-            .url = "https://github.com/luau-lang/luau/archive/refs/tags/0.662.tar.gz",
-            .hash = "1220524dbff1ad2c2c5cd986c5ee064be13b966d681533a771a930857cdb7818c716",
-        },
-        .@"luau-wasm" = .{
-            .url = "git+https://github.com/lodinukal/luau#c8cbead755e036b98fe2809b14745ed57118393c",
-            .hash = "12200e320d0a20e7dea25f2c44d61d5522fd9b47062e57eeafb44c32a35946bf2316",
+            .url = "git+https://github.com/luau-lang/luau#0.663",
+            .hash = "N-V-__8AAIRXmQA6_c6Gg-GtLFr2JCnOsWLcK7Jhk_Uianup",
         },
     },
     .paths = .{
         "src",
-        "license",
+        "LICENSE",
         "build.zig",
         "build.zig.zon",
     },

@@ -284,7 +284,7 @@ test {
 }
 
 comptime {
-    if (builtin.target.isWasm() and builtin.target.os.tag != .emscripten) {
+    if (builtin.target.cpu.arch.isWasm() and builtin.target.os.tag != .emscripten) {
         _ = struct {
             var exception_buf: [4096]u8 = undefined;
             var exception_fba = std.heap.FixedBufferAllocator.init(exception_buf[0..]);

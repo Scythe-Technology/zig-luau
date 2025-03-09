@@ -1,13 +1,8 @@
 const std = @import("std");
+const zon: ZonConfig = @import("build.zig.zon");
 
 const Build = std.Build;
 const Step = std.Build.Step;
-
-const LUAU_VERSION = std.SemanticVersion{ .major = 0, .minor = 662, .patch = 0 };
-const LUAU_HASH = "1220524dbff1ad2c2c5cd986c5ee064be13b966d681533a771a930857cdb7818c716";
-
-const LUAU_WASM_VERSION = std.SemanticVersion{ .major = 0, .minor = 661, .patch = 0 };
-const LUAU_WASM_HASH = "12200e320d0a20e7dea25f2c44d61d5522fd9b47062e57eeafb44c32a35946bf2316";
 
 pub fn build(b: *Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -16,17 +11,19 @@ pub fn build(b: *Build) !void {
     // Remove the default install and uninstall steps
     b.top_level_steps = .{};
 
-    const luau_dep = dep: {
-        // fetch package
-        if (target.result.isWasm())
-            break :dep b.dependency("luau-wasm", .{})
-        else
-            break :dep b.dependency("luau", .{});
-    };
-    const version = if (target.result.isWasm()) LUAU_WASM_VERSION else LUAU_VERSION;
-    const hash = if (target.result.isWasm()) LUAU_WASM_HASH else LUAU_HASH;
+    var tag_parts = std.mem.splitBackwardsScalar(u8, zon.dependencies.luau.url, '#');
+    var version_parts = std.mem.splitScalar(u8, tag_parts.first(), '.');
+    const major_parsed = try std.json.parseFromSlice(u32, b.allocator, version_parts.next().?, .{});
+    const minor_parsed = try std.json.parseFromSlice(u32, b.allocator, version_parts.next().?, .{});
 
-    std.debug.assert(std.mem.eql(u8, luau_dep.builder.pkg_hash, hash));
+    const major = major_parsed.value;
+    major_parsed.deinit();
+    const minor = minor_parsed.value;
+    minor_parsed.deinit();
+
+    const version = std.SemanticVersion{ .major = major, .minor = minor, .patch = 0 };
+
+    const luau_dep = b.dependency("luau", .{});
 
     const use_4_vector = b.option(bool, "use_4_vector", "Build Luau to use 4-vectors instead of the default 3-vector.") orelse false;
     const wasm_env_name = b.option([]const u8, "wasm_env", "The environment to import symbols from when building for WebAssembly.") orelse "env";
@@ -34,7 +31,7 @@ pub fn build(b: *Build) !void {
     // Expose build configuration to the zig-luau module
     const config = b.addOptions();
     config.addOption(bool, "use_4_vector", use_4_vector);
-    config.addOption(std.SemanticVersion, "luau_version", LUAU_VERSION);
+    config.addOption(std.SemanticVersion, "luau_version", version);
 
     // Luau C Headers
     const headers = b.addTranslateC(.{
@@ -44,7 +41,7 @@ pub fn build(b: *Build) !void {
     });
     headers.addIncludePath(luau_dep.path("Compiler/include"));
     headers.addIncludePath(luau_dep.path("VM/include"));
-    if (!target.result.isWasm())
+    if (!target.result.cpu.arch.isWasm())
         headers.addIncludePath(luau_dep.path("CodeGen/include"));
 
     const c_module = headers.createModule();
@@ -152,14 +149,14 @@ fn buildAndLinkModule(
 
     module.addIncludePath(dependency.path("Compiler/include"));
     module.addIncludePath(dependency.path("VM/include"));
-    if (!target.result.isWasm())
+    if (!target.result.cpu.arch.isWasm())
         module.addIncludePath(dependency.path("CodeGen/include"));
 
     module.linkLibrary(lib);
 }
 
 pub fn addModuleExportSymbols(b: *Build, module: *Build.Module) void {
-    if (module.resolved_target.?.result.isWasm()) {
+    if (module.resolved_target.?.result.cpu.arch.isWasm()) {
         var old_export_symbols = std.ArrayList([]const u8).init(b.allocator);
         old_export_symbols.appendSlice(module.export_symbol_names) catch @panic("OOM");
         old_export_symbols.appendSlice(&.{
@@ -199,7 +196,7 @@ fn buildLuau(
     for (LUAU_Compiler_HEADERS_DIRS) |dir|
         lib.addIncludePath(dependency.path(dir));
     // CodeGen is not supported on WASM
-    if (!target.result.isWasm())
+    if (!target.result.cpu.arch.isWasm())
         for (LUAU_CodeGen_HEADERS_DIRS) |dir|
             lib.addIncludePath(dependency.path(dir));
     for (LUAU_VM_HEADERS_DIRS) |dir|
@@ -207,13 +204,13 @@ fn buildLuau(
 
     var FLAGS = std.ArrayList([]const u8).init(b.allocator);
 
-    FLAGS.append("-DLUA_USE_LONGJMP=" ++ if (!target.result.isWasm()) "1" else "0") catch @panic("OOM");
+    FLAGS.append("-DLUA_USE_LONGJMP=" ++ if (!target.result.cpu.arch.isWasm()) "1" else "0") catch @panic("OOM");
     FLAGS.append("-DLUA_API=extern\"C\"") catch @panic("OOM");
     FLAGS.append("-DLUACODE_API=extern\"C\"") catch @panic("OOM");
     FLAGS.append("-DLUACODEGEN_API=extern\"C\"") catch @panic("OOM");
     if (options.use_4_vector)
         FLAGS.append("-DLUA_VECTOR_SIZE=4") catch @panic("OOM");
-    if (target.result.isWasm()) {
+    if (target.result.cpu.arch.isWasm()) {
         if (target.result.os.tag == .emscripten)
             FLAGS.append("-fexceptions") catch @panic("OOM");
         FLAGS.append(b.fmt("-DLUAU_WASM_ENV_NAME=\"{s}\"", .{options.wasm_env_name})) catch @panic("OOM");
@@ -228,7 +225,7 @@ fn buildLuau(
     for (LUAU_Compiler_SOURCE_FILES) |file|
         FILES.append(file) catch @panic("OOM");
     // CodeGen is not supported on WASM
-    if (!target.result.isWasm())
+    if (!target.result.cpu.arch.isWasm())
         for (LUAU_CodeGen_SOURCE_FILES) |file|
             FILES.append(file) catch @panic("OOM");
     for (LUAU_VM_SOURCE_FILES) |file|
@@ -251,7 +248,7 @@ fn buildLuau(
     lib.installHeader(dependency.path("VM/include/lua.h"), "lua.h");
     lib.installHeader(dependency.path("VM/include/lualib.h"), "lualib.h");
     lib.installHeader(dependency.path("VM/include/luaconf.h"), "luaconf.h");
-    if (!target.result.isWasm())
+    if (!target.result.cpu.arch.isWasm())
         lib.installHeader(dependency.path("CodeGen/include/luacodegen.h"), "luacodegen.h");
 
     return lib;
@@ -375,4 +372,14 @@ const LUAU_VM_SOURCE_FILES = [_][]const u8{
     "VM/src/lveclib.cpp",
     "VM/src/lvmload.cpp",
     "VM/src/lvmutils.cpp",
+};
+
+const ZonConfig = struct {
+    name: enum { luau },
+    fingerprint: u64,
+    version: []const u8,
+    dependencies: struct {
+        luau: struct { url: []const u8, hash: []const u8 },
+    },
+    paths: []const []const u8,
 };
