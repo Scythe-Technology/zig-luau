@@ -1,2 +1,6 @@
 .zig-cache/
 zig-out/
+
+.envrc
+.direnv/
+.vscode/
