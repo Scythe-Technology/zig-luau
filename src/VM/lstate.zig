@@ -272,12 +272,12 @@ pub const global_State = extern struct {
     ecb: ExecutionCallbacks,
 
     /// for each userdata tag, a gc callback to be called immediately before freeing memory
-    udatagc: [config.UTAG_LIMIT]*const fn (*lua_State, *anyopaque) callconv(.C) void,
+    udatagc: [config.UTAG_LIMIT]?*const fn (*lua_State, ?*anyopaque) callconv(.c) void,
     /// metatables for tagged userdata
-    udatamt: [config.UTAG_LIMIT]*lobject.LuaTable,
+    udatamt: [config.UTAG_LIMIT]?*lobject.LuaTable,
 
     /// names for tagged lightuserdata
-    lightuserdataname: [config.LUTAG_LIMIT]*lobject.TString,
+    lightuserdataname: [config.LUTAG_LIMIT]?*lobject.TString,
 
     gcstats: GCStats,
 

@@ -61,7 +61,7 @@ pub noinline fn pseudo2addr(L: *State, idx: i32) lobject.StkId {
 
 pub inline fn index2addr(L: *State, idx: i32) lobject.StkId {
     if (idx > 0) {
-        const o: usize = @intFromPtr(L.base.add_num(@intCast(idx - 1)));
+        const o: usize = @intFromPtr(L.base.add_num(idx - 1));
         check(L, idx <= L.ci.?.top.sub(L.base));
         if (o >= @intFromPtr(L.top))
             return @constCast(lobject.Onilobject)
@@ -69,10 +69,7 @@ pub inline fn index2addr(L: *State, idx: i32) lobject.StkId {
             return @ptrFromInt(o);
     } else if (idx > lua.REGISTRYINDEX) {
         check(L, idx != 0 and -idx <= L.top.sub(L.base));
-        if (idx < 0)
-            return L.top.sub_num(@abs(idx))
-        else
-            return L.top.add_num(@intCast(idx));
+        return L.top.add_num(idx);
     } else {
         return pseudo2addr(L, idx);
     }
@@ -131,35 +128,66 @@ pub fn mainthread(L: *lua.State) *lua.State {
 // basic stack manipulation
 //
 
-pub inline fn absindex(L: *lua.State, idx: i32) i32 {
-    return c.lua_absindex(@ptrCast(L), idx);
+pub fn absindex(L: *lua.State, idx: i32) i32 {
+    check(L, (idx > 0 and idx <= L.top.sub(L.base)) or (idx < 0 and -idx <= L.top.sub(L.base)) or lua.ispseudo(idx));
+    return if (idx > 0 or lua.ispseudo(idx))
+        idx
+    else
+        @as(i32, @intCast(L.top.sub(L.base))) + idx + 1;
 }
 
 pub fn gettop(L: *lua.State) usize {
     return L.top.sub(L.base);
 }
 
-pub inline fn settop(L: *lua.State, idx: i32) void {
-    c.lua_settop(@ptrCast(L), idx);
+pub fn settop(L: *lua.State, idx: i32) void {
+    if (idx >= 0) {
+        check(L, idx <= L.stack_last.sub(L.base));
+        const t = L.base.add_num(idx);
+        while (@intFromPtr(L.top) < @intFromPtr(t)) : (L.top = L.top.add_num(1))
+            L.top.setnilvalue();
+        L.top = t;
+    } else {
+        check(L, -(idx + 1) <= L.top.sub(L.base));
+        L.top = L.top.add_num(idx + 1); // `subtract' index (index is negative)
+    }
 }
 pub inline fn pop(L: *lua.State, n: i32) void {
     settop(L, -n - 1);
 }
 
-pub inline fn remove(L: *lua.State, idx: i32) void {
-    c.lua_remove(@ptrCast(L), idx);
+pub fn remove(L: *lua.State, idx: i32) void {
+    var p = index2addr(L, idx);
+    checkvalidindex(L, p);
+    p = p.add_num(1);
+    while (@intFromPtr(p) < @intFromPtr(L.top)) : (p = p.add_num(1)) {
+        p.sub_num(1).setobj(L, p);
+    }
+    L.top = L.top.sub_num(1);
 }
 
-pub inline fn insert(L: *lua.State, idx: i32) void {
-    c.lua_insert(@ptrCast(L), idx);
+pub fn insert(L: *lua.State, idx: i32) void {
+    lgc.Cthreadbarrier(L);
+    const p = index2addr(L, idx);
+    checkvalidindex(L, p);
+    var q = L.top;
+    while (@intFromPtr(q) > @intFromPtr(p)) {
+        const n = q.sub_num(1);
+        q.setobj(L, n);
+        q = n;
+    }
+    p.setobj(L, L.top);
 }
 
 pub inline fn replace(L: *lua.State, idx: i32) void {
     c.lua_replace(@ptrCast(L), idx);
 }
 
-pub inline fn pushvalue(L: *lua.State, idx: i32) void {
-    c.lua_pushvalue(@ptrCast(L), idx);
+pub fn pushvalue(L: *lua.State, idx: i32) void {
+    lgc.Cthreadbarrier(L);
+    const o = index2addr(L, idx);
+    L.top.setobj(L, o);
+    incr_top(L);
 }
 
 //
@@ -219,8 +247,10 @@ pub fn isLfunction(L: *lua.State, idx: i32) bool {
     return o.isLfunction();
 }
 
-pub inline fn isnumber(L: *lua.State, idx: i32) bool {
-    return c.lua_isnumber(@ptrCast(L), idx) != 0;
+pub fn isnumber(L: *lua.State, idx: i32) bool {
+    var n: lobject.TValue = undefined;
+    const o: *const lobject.TValue = index2addr(L, idx);
+    return o.ttisnumber() and lvmutils.Vtonumber(o, &n) != null;
 }
 
 pub fn isstring(L: *lua.State, idx: i32) bool {
@@ -662,8 +692,20 @@ pub inline fn status(L: *lua.State) lua.Status {
     return @enumFromInt(L.curr_status);
 }
 
-pub inline fn costatus(L: *lua.State, co: *lua.State) lua.CoStatus {
-    return @enumFromInt(c.lua_costatus(@ptrCast(L), @ptrCast(co)));
+pub fn costatus(L: *lua.State, co: *lua.State) lua.CoStatus {
+    if (co == L)
+        return .Running;
+    switch (co.status()) {
+        .Yield => return .Suspended,
+        .Break => return .Normal,
+        .Ok => {},
+        else => return .FinishedErr, // some error occurred
+    }
+    if (co.ci != co.base_ci) // does it have frames?
+        return .Normal;
+    if (co.top == co.base) // is it empty?
+        return .Finished;
+    return .Suspended; // initial state
 }
 
 pub fn getthreaddata(L: *lua.State, comptime T: type) T {
@@ -751,6 +793,11 @@ pub inline fn setupvalue(L: *lua.State, funcidx: i32, n: i32) ?[:0]const u8 {
     return null;
 }
 
+pub fn encodepointer(L: *lua.State, p: usize) usize {
+    const g = L.global;
+    return @intCast(g.ptrenckey[0] * p + g.ptrenckey[2] ^ (g.ptrenckey[1] * p + g.ptrenckey[3]));
+}
+
 pub fn ref(L: *lua.State, idx: i32) ?i32 {
     const ref_id = c.lua_ref(@ptrCast(L), idx);
     if (ref_id == lua.REFNIL)
@@ -762,43 +809,52 @@ pub inline fn unref(L: *lua.State, r: i32) void {
     c.lua_unref(@ptrCast(L), r);
 }
 
-pub inline fn setuserdatatag(L: *lua.State, idx: i32, tag: i32) void {
-    c.lua_setuserdatatag(@ptrCast(L), idx, tag);
+pub fn setuserdatatag(L: *lua.State, idx: i32, tag: u8) void {
+    check(L, tag < lua.config.UTAG_LIMIT);
+    const o = index2addr(L, idx);
+    check(L, o.ttisuserdata());
+    o.uvalue().tag = tag;
 }
 
-pub inline fn setuserdatadtor(L: *lua.State, comptime T: type, tag: i32, comptime dtorfn: ?*const fn (L: *lua.State, ptr: *T) void) void {
-    if (dtorfn) |dtor| {
-        c.lua_setuserdatadtor(@ptrCast(L), tag, struct {
-            fn inner(state: ?*c.lua_State, ptr: ?*anyopaque) callconv(.C) void {
-                @call(.always_inline, dtor, .{
-                    @as(*lua.State, @ptrCast(@alignCast(state.?))),
-                    @as(*T, @ptrCast(@alignCast(ptr.?))),
-                });
-            }
-        }.inner);
-    } else c.lua_setuserdatadtor(@ptrCast(L), tag, null);
+pub fn setuserdatadtor(L: *lua.State, comptime T: type, tag: u32, comptime dtorfn: ?*const fn (L: *lua.State, ptr: *T) void) void {
+    check(L, tag < lua.config.UTAG_LIMIT);
+    L.global.udatagc[tag] = dtorfn;
 }
 
-pub inline fn getuserdatadtor(L: *lua.State, tag: i32) ?lua.Destructor {
-    return c.lua_getuserdatadtor(@ptrCast(L), tag);
+pub fn getuserdatadtor(L: *lua.State, tag: u32) ?lua.Destructor {
+    check(L, tag < lua.config.UTAG_LIMIT);
+    return L.global.udatagc[tag];
 }
 
-pub inline fn setuserdatametatable(L: *lua.State, tag: i32, idx: i32) void {
-    c.lua_setuserdatametatable(@ptrCast(L), tag, idx);
+pub fn setuserdatametatable(L: *lua.State, tag: u32) void {
+    check(L, tag < lua.config.UTAG_LIMIT);
+    check(L, L.global.udatamt[tag] == null);
+    check(L, L.top.sub_num(1).ttistable()); // reassignment not supported
+    L.global.udatamt[tag] = L.top.hvalue();
+    L.top = L.top.sub_num(1);
 }
 
-pub inline fn getuserdatametatable(L: *lua.State, tag: i32) void {
-    c.lua_getuserdatametatable(@ptrCast(L), tag);
+pub fn getuserdatametatable(L: *lua.State, tag: u8) void {
+    check(L, tag < lua.config.UTAG_LIMIT);
+    lgc.Cthreadbarrier(L);
+
+    if (L.global.udatamt[tag]) |h|
+        L.top.sethvalue(L, h)
+    else
+        L.top.setnilvalue();
+
+    incr_top(L);
 }
 
 pub inline fn setlightuserdataname(L: *lua.State, tag: i32, name: [:0]const u8) void {
     c.lua_setlightuserdataname(@ptrCast(L), tag, name.ptr);
 }
 
-pub inline fn getlightuserdataname(L: *lua.State, tag: i32) ?[:0]const u8 {
-    const name = c.lua_getlightuserdataname(@ptrCast(L), tag);
-    return if (name != null)
-        std.mem.span(name)
+pub fn getlightuserdataname(L: *lua.State, tag: u32) ?[:0]const u8 {
+    check(L, tag < lua.config.LUTAG_LIMIT);
+    const name = L.global.lightuserdataname[tag];
+    return if (name) |s|
+        std.mem.span(s.getstr())
     else
         null;
 }
@@ -815,18 +871,26 @@ pub inline fn clonetable(L: *lua.State, idx: i32) void {
     c.lua_clonetable(@ptrCast(L), idx);
 }
 
-pub inline fn callbacks(L: *lua.State) *lua.Callbacks {
-    return @ptrCast(c.lua_callbacks(@ptrCast(L)));
+pub fn callbacks(L: *lua.State) *lua.Callbacks {
+    return &L.global.cb;
 }
 
-pub inline fn setmemcat(L: *lua.State, category: i32) void {
-    c.lua_setmemcat(@ptrCast(L), category);
+pub fn setmemcat(L: *lua.State, category: u8) void {
+    check(L, category < lua.config.MEMORY_CATEGORIES);
+    L.activememcat = category;
 }
 
-pub inline fn totalbytes(L: *lua.State, category: i32) usize {
-    return c.lua_totalbytes(@ptrCast(L), category);
+pub fn totalbytes(L: *lua.State, category: i32) usize {
+    check(L, category < lua.config.MEMORY_CATEGORIES);
+    return if (category < 0)
+        L.global.totalbytes
+    else
+        L.global.memcatbytes[@intCast(category)];
 }
 
-pub inline fn getallocf(L: *lua.State, ud: ?**anyopaque) ?lua.Alloc {
-    return c.lua_getallocf(@ptrCast(L), @ptrCast(ud));
+pub fn getallocf(L: *lua.State, ud: ?**anyopaque) ?lua.Alloc {
+    const f = L.global.frealloc;
+    if (ud) |ptr|
+        ptr.* = L.global.ud;
+    return f;
 }

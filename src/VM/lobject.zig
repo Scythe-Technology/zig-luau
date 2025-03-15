@@ -43,14 +43,40 @@ pub const TValue = extern struct {
     pub inline fn add(this: *TValue, n: void) *TValue {
         return @ptrFromInt(@intFromPtr(this) + n);
     }
-    pub inline fn add_num(this: *TValue, n: usize) *TValue {
-        return @ptrFromInt(@intFromPtr(this) + (n * @sizeOf(TValue)));
+    pub inline fn add_num(this: *TValue, n: anytype) *TValue {
+        switch (@typeInfo(@TypeOf(n))) {
+            .comptime_int => return @ptrFromInt(@intFromPtr(this) + (n * @sizeOf(TValue))),
+            .int => |i| {
+                if (i.signedness == .unsigned)
+                    return @ptrFromInt(@intFromPtr(this) + @as(usize, @intCast(n * @sizeOf(TValue))))
+                else {
+                    if (n < 0)
+                        return @ptrFromInt(@intFromPtr(this) - @as(usize, @intCast(-n * @sizeOf(TValue))))
+                    else
+                        return @ptrFromInt(@intFromPtr(this) + @as(usize, @intCast(n * @sizeOf(TValue))));
+                }
+            },
+            else => @compileError("n must be an integer"),
+        }
     }
     pub inline fn sub(this: *TValue, ptr: *TValue) usize {
         return @divExact(@intFromPtr(this) - @intFromPtr(ptr), @sizeOf(TValue));
     }
-    pub inline fn sub_num(this: *TValue, n: usize) *TValue {
-        return @ptrFromInt(@intFromPtr(this) - (n * @sizeOf(TValue)));
+    pub inline fn sub_num(this: *TValue, n: anytype) *TValue {
+        switch (@typeInfo(@TypeOf(n))) {
+            .comptime_int => return @ptrFromInt(@intFromPtr(this) - (n * @sizeOf(TValue))),
+            .int => |i| {
+                if (i.signedness == .unsigned)
+                    return @ptrFromInt(@intFromPtr(this) - @as(usize, @intCast(n * @sizeOf(TValue))))
+                else {
+                    if (n < 0)
+                        return @ptrFromInt(@intFromPtr(this) + @as(usize, @intCast(-n * @sizeOf(TValue))))
+                    else
+                        return @ptrFromInt(@intFromPtr(this) - @as(usize, @intCast(n * @sizeOf(TValue))));
+                }
+            },
+            else => @compileError("n must be an integer"),
+        }
     }
 
     pub inline fn ttype(this: *const TValue) c_int {
