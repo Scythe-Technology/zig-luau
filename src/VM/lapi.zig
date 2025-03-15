@@ -835,10 +835,11 @@ pub fn getuserdatadtor(L: *lua.State, tag: u32) ?lua.Destructor {
 
 pub fn setuserdatametatable(L: *lua.State, tag: u32) void {
     check(L, tag < lua.config.UTAG_LIMIT);
-    check(L, L.global.udatamt[tag] == null);
-    check(L, L.top.sub_num(1).ttistable()); // reassignment not supported
-    L.global.udatamt[tag] = L.top.hvalue();
-    L.top = L.top.sub_num(1);
+    check(L, L.global.udatamt[tag] == null); // reassignment not supported
+    check(L, L.top.sub_num(1).ttistable());
+    const n = L.top.sub_num(1);
+    L.global.udatamt[tag] = n.hvalue();
+    L.top = n;
 }
 
 pub fn getuserdatametatable(L: *lua.State, tag: u8) void {
