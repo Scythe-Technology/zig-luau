@@ -819,9 +819,9 @@ pub fn setuserdatatag(L: *lua.State, idx: i32, tag: u8) void {
 pub fn setuserdatadtor(L: *lua.State, comptime T: type, tag: u32, comptime dtorfn: ?*const fn (L: *lua.State, ptr: *T) void) void {
     check(L, tag < lua.config.UTAG_LIMIT);
     L.global.udatagc[tag] = if (dtorfn) |dtor| struct {
-        fn inner(state: ?*c.lua_State, ptr: ?*anyopaque) callconv(.C) void {
+        fn inner(state: *lua.State, ptr: ?*anyopaque) callconv(.c) void {
             @call(.always_inline, dtor, .{
-                @as(*lua.State, @ptrCast(@alignCast(state.?))),
+                state,
                 @as(*T, @ptrCast(@alignCast(ptr.?))),
             });
         }
