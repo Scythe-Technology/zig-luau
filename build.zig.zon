@@ -5,7 +5,7 @@
     .dependencies = .{
         .luau = .{
             .url = "git+https://github.com/luau-lang/luau#0.665",
-            .hash = "N-V-__8AAIRXmQA6_c6Gg-GtLFr2JCnOsWLcK7Jhk_Uianup",
+            .hash = "N-V-__8AAENCmgDqBdDiqpb0jCQwbOP_qFNLRR5MP2PXKj5y",
         },
     },
     .paths = .{
