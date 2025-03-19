@@ -242,7 +242,7 @@ pub const Callbacks = extern struct {
     panic: ?*const fn (L: *State, errcode: c_int) callconv(.C) void,
 
     /// gets called when L is created (LP == parent) or destroyed (LP == NULL)
-    userthread: ?*const fn (LP: *State, L: *State) callconv(.C) void,
+    userthread: ?*const fn (LP: ?*State, L: *State) callconv(.C) void,
     /// gets called when a string is created; returned atom can be retrieved via tostringatom
     useratom: ?*const fn (s: [*c]const u8, l: usize) callconv(.C) i16,
 
