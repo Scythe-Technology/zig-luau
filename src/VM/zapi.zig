@@ -274,9 +274,10 @@ pub fn Zpushvalue(L: *lua.State, value: anytype) void {
         .@"struct" => |s| {
             L.createtable(0, s.fields.len);
             inline for (s.fields) |field| {
-                Zpushvalue(L, field.name);
-                Zpushvalue(L, @field(value, field.name));
-                L.settable(-3);
+                switch (@typeInfo(field.type)) {
+                    .@"fn" => Zsetfieldfn(L, -1, field.name, @field(value, field.name)),
+                    else => Zsetfield(L, -1, field.name, @field(value, field.name)),
+                }
             }
         },
         .null => L.pushnil(),
@@ -912,6 +913,25 @@ test Zpushvalue {
         try std.testing.expectEqual(.Number, L.getfield(-1, "y"));
         try std.testing.expectEqual(2, L.tointeger(-1).?);
         L.pop(1);
+    }
+
+    {
+        const foo = struct {
+            fn inner(l: *lua.State) i32 {
+                std.testing.expectEqual(6, l.tonumber(1).?) catch @panic("failed");
+                l.pushnumber(2);
+                return 1;
+            }
+        }.inner;
+
+        Zpushvalue(L, .{
+            .foo = foo,
+        });
+
+        try std.testing.expectEqual(.Function, L.getfield(-1, "foo"));
+        L.pushnumber(6);
+        L.call(1, 1);
+        try std.testing.expectEqual(2, L.tonumber(-1).?);
     }
 
     if (comptime lua.config.VECTOR_SIZE == 3) {
