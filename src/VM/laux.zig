@@ -95,8 +95,14 @@ pub inline fn Lcheckoption(L: *lua.State, comptime T: type, narg: i32, def: ?T) 
 }
 
 /// Returns true if metatable was created, false if it already exists.
-pub inline fn Lnewmetatable(L: *lua.State, tname: [:0]const u8) bool {
-    return c.luaL_newmetatable(@ptrCast(L), tname.ptr) != 0;
+pub fn Lnewmetatable(L: *lua.State, tname: [:0]const u8) bool {
+    if (L.getfield(lua.REGISTRYINDEX, tname) != .Nil) // get registry.name, name already in use?
+        return false; // leave previous value on top, but return false
+    L.pop(1);
+    L.newtable(); // create metatable
+    L.pushvalue(-1);
+    L.setfield(lua.REGISTRYINDEX, tname); // registry.name = metatable
+    return true;
 }
 
 pub inline fn Lgetmetatable(L: *lua.State, tname: [:0]const u8) lua.Type {

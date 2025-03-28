@@ -586,6 +586,19 @@ pub fn Zcheckfield(L: *lua.State, comptime T: type, idx: i32, comptime field: [:
     return try Zcheckvalue(L, T, -1, "invalid field '" ++ field ++ "'");
 }
 
+/// Returns true if metatable was created, false if it already exists.
+pub fn Znewmetatable(L: *lua.State, tname: [:0]const u8, value: anytype) bool {
+    if (L.getfield(lua.REGISTRYINDEX, tname) != .Nil)
+        return false;
+    L.pop(1);
+    if (@typeInfo(@TypeOf(value)) != .@"struct")
+        @compileError("value must be a struct");
+    L.Zpushvalue(value);
+    L.pushvalue(-1);
+    L.setfield(lua.REGISTRYINDEX, tname);
+    return true;
+}
+
 const EXCEPTIONS_ENABLED = !@import("builtin").cpu.arch.isWasm();
 
 test "toCFn + Zchecktype" {
@@ -1489,5 +1502,21 @@ test Ztolstring {
         try std.testing.expectEqual(error.BadReturnType, Ztolstring(L, -1));
         try std.testing.expectEqual(.Table, L.typeOf(-1));
         L.pop(2);
+    }
+}
+
+test Znewmetatable {
+    const L = try @import("lstate.zig").Lnewstate();
+    defer L.deinit();
+
+    {
+        try std.testing.expect(Znewmetatable(L, "MAIN", .{ .a = 2, .b = 3 }));
+        try std.testing.expectEqual(.Table, L.typeOf(-1));
+        try std.testing.expectEqual(.Number, L.getfield(-1, "a"));
+        try std.testing.expectEqual(2, L.tointeger(-1).?);
+        L.pop(1);
+        try std.testing.expectEqual(.Number, L.getfield(-1, "b"));
+        try std.testing.expectEqual(3, L.tointeger(-1).?);
+        L.pop(1);
     }
 }
