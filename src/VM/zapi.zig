@@ -557,7 +557,10 @@ pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32, comptime msg: ?[]
                 return tag_error(L, narg, .Table, msg);
             var val: T = std.mem.zeroes(T);
             inline for (s.fields) |field| {
-                @field(val, field.name) = try Zcheckfield(L, field.type, narg, field.name);
+                @field(val, field.name) = if (comptime field.defaultValue()) |default|
+                    try Zcheckfield(L, ?field.type, narg, field.name) orelse default
+                else
+                    try Zcheckfield(L, field.type, narg, field.name);
                 L.pop(1);
             }
             return val;
@@ -604,6 +607,7 @@ const EXCEPTIONS_ENABLED = !@import("builtin").cpu.arch.isWasm();
 test "toCFn + Zchecktype" {
     const L = try @import("lstate.zig").Lnewstate();
     defer L.deinit();
+    errdefer std.debug.print("{s}\n", .{L.tostring(-1) orelse "No lua error"});
 
     {
         const foo = struct {
@@ -662,6 +666,7 @@ test "toCFn + Zchecktype" {
 test toCFnV {
     const L = try @import("lstate.zig").Lnewstate();
     defer L.deinit();
+    errdefer std.debug.print("{s}\n", .{L.tostring(-1) orelse "No lua error"});
 
     {
         const foo = struct {
@@ -823,6 +828,7 @@ test toCFnV {
 test Zpushfunction {
     const L = try @import("lstate.zig").Lnewstate();
     defer L.deinit();
+    errdefer std.debug.print("{s}\n", .{L.tostring(-1) orelse "No lua error"});
 
     {
         const foo = struct {
@@ -843,6 +849,7 @@ test Zpushfunction {
 test Zpushvalue {
     const L = try @import("lstate.zig").Lnewstate();
     defer L.deinit();
+    errdefer std.debug.print("{s}\n", .{L.tostring(-1) orelse "No lua error"});
 
     Zpushvalue(L, 455);
     try std.testing.expectEqual(.Number, L.typeOf(-1));
@@ -1078,6 +1085,7 @@ test Zpushvalue {
 test Zcheckvalue {
     const L = try @import("lstate.zig").Lnewstate();
     defer L.deinit();
+    errdefer std.debug.print("{s}\n", .{L.tostring(-1) orelse "No lua error"});
 
     Zpushvalue(L, 455);
     try std.testing.expectEqual(455, try Zcheckvalue(L, i32, -1, null));
@@ -1134,6 +1142,22 @@ test Zcheckvalue {
     try std.testing.expectEqual(2, val2.top.y);
     try std.testing.expectEqual(3, val2.bottom.x);
     try std.testing.expectEqual(4, val2.bottom.y);
+    L.pop(1);
+
+    const structDefaults = struct { x: i32, y: i32, z: ?i32 = 5 };
+    Zpushvalue(L, @as(structDefaults, .{ .x = 1, .y = 2 }));
+    const val3 = try Zcheckvalue(L, structDefaults, -1, null);
+    try std.testing.expectEqual(1, val3.x);
+    try std.testing.expectEqual(2, val3.y);
+    try std.testing.expectEqual(5, val3.z);
+    L.pop(1);
+
+    const structDefaults2 = struct { x: i32, y: i32, z: i32 = 5 };
+    Zpushvalue(L, @as(structDefaults2, .{ .x = 1, .y = 2 }));
+    const val4 = try Zcheckvalue(L, structDefaults2, -1, null);
+    try std.testing.expectEqual(1, val4.x);
+    try std.testing.expectEqual(2, val4.y);
+    try std.testing.expectEqual(5, val4.z);
     L.pop(1);
 
     {
@@ -1241,6 +1265,7 @@ test Zcheckvalue {
 test Zsetfield {
     const L = try @import("lstate.zig").Lnewstate();
     defer L.deinit();
+    errdefer std.debug.print("{s}\n", .{L.tostring(-1) orelse "No lua error"});
 
     {
         L.newtable();
@@ -1283,6 +1308,7 @@ test Zsetfield {
 test Zsetglobal {
     const L = try @import("lstate.zig").Lnewstate();
     defer L.deinit();
+    errdefer std.debug.print("{s}\n", .{L.tostring(-1) orelse "No lua error"});
 
     Zsetglobal(L, "a", 455);
     Zsetglobal(L, "b", "str");
@@ -1298,6 +1324,7 @@ test Zsetglobal {
 test Zsetfieldfn {
     const L = try @import("lstate.zig").Lnewstate();
     defer L.deinit();
+    errdefer std.debug.print("{s}\n", .{L.tostring(-1) orelse "No lua error"});
 
     {
         const foo = struct {
@@ -1320,6 +1347,7 @@ test Zsetfieldfn {
 test Zsetglobalfn {
     const L = try @import("lstate.zig").Lnewstate();
     defer L.deinit();
+    errdefer std.debug.print("{s}\n", .{L.tostring(-1) orelse "No lua error"});
 
     {
         const foo = struct {
@@ -1341,6 +1369,7 @@ test Zsetglobalfn {
 test Zpushbuffer {
     const L = try @import("lstate.zig").Lnewstate();
     defer L.deinit();
+    errdefer std.debug.print("{s}\n", .{L.tostring(-1) orelse "No lua error"});
 
     Zpushbuffer(L, "Test");
     try std.testing.expectEqual(.Buffer, L.typeOf(-1));
@@ -1350,6 +1379,7 @@ test Zpushbuffer {
 test Zresumeerror {
     const L = try @import("lstate.zig").Lnewstate();
     defer L.deinit();
+    errdefer std.debug.print("{s}\n", .{L.tostring(-1) orelse "No lua error"});
 
     {
         const foo = struct {
@@ -1368,6 +1398,7 @@ test Zresumeerror {
 test Zresumeferror {
     const L = try @import("lstate.zig").Lnewstate();
     defer L.deinit();
+    errdefer std.debug.print("{s}\n", .{L.tostring(-1) orelse "No lua error"});
 
     {
         const foo = struct {
@@ -1386,6 +1417,7 @@ test Zresumeferror {
 test Zerror {
     const L = try @import("lstate.zig").Lnewstate();
     defer L.deinit();
+    errdefer std.debug.print("{s}\n", .{L.tostring(-1) orelse "No lua error"});
 
     try std.testing.expectEqual(error.RaiseLuauError, Zerror(L, "Test"));
     try std.testing.expectEqual(.String, L.typeOf(-1));
@@ -1395,6 +1427,7 @@ test Zerror {
 test Zyielderror {
     const L = try @import("lstate.zig").Lnewstate();
     defer L.deinit();
+    errdefer std.debug.print("{s}\n", .{L.tostring(-1) orelse "No lua error"});
 
     try std.testing.expectEqual(error.RaiseLuauError, Zyielderror(L));
     try std.testing.expectEqualStrings("attempt to yield across metamethod/C-call boundary", L.tostring(-1).?);
@@ -1403,6 +1436,7 @@ test Zyielderror {
 test Zerrorf {
     const L = try @import("lstate.zig").Lnewstate();
     defer L.deinit();
+    errdefer std.debug.print("{s}\n", .{L.tostring(-1) orelse "No lua error"});
 
     try std.testing.expectEqual(error.RaiseLuauError, Zerrorf(L, "Test {s}", .{"Fmt"}));
     try std.testing.expectEqual(.String, L.typeOf(-1));
@@ -1508,6 +1542,7 @@ test Ztolstring {
 test Znewmetatable {
     const L = try @import("lstate.zig").Lnewstate();
     defer L.deinit();
+    errdefer std.debug.print("{s}\n", .{L.tostring(-1) orelse "No lua error"});
 
     {
         try std.testing.expect(Znewmetatable(L, "MAIN", .{ .a = 2, .b = 3 }));
