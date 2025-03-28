@@ -551,6 +551,16 @@ pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32, comptime msg: ?[]
                 else => @compileError("Unsupported enum type " ++ @tagName(e.tag_type)),
             }
         },
+        .@"struct" => |s| {
+            if (!L.istable(narg))
+                return tag_error(L, narg, .Table, msg);
+            var val: T = std.mem.zeroes(T);
+            inline for (s.fields) |field| {
+                @field(val, field.name) = try Zcheckfield(L, field.type, narg, field.name);
+                L.pop(1);
+            }
+            return val;
+        },
         .null => if (L.typeOf(narg) == .Nil)
             return null
         else
@@ -571,6 +581,7 @@ pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32, comptime msg: ?[]
 
 pub fn Zcheckfield(L: *lua.State, comptime T: type, idx: i32, comptime field: [:0]const u8) !T {
     _ = L.getfield(idx, field);
+    errdefer L.remove(-2);
     return try Zcheckvalue(L, T, -1, "invalid field '" ++ field ++ "'");
 }
 
@@ -1073,6 +1084,25 @@ test Zcheckvalue {
     try std.testing.expectEqual(signed_e.B, try Zcheckvalue(L, signed_e, -1, null));
     L.pop(1);
 
+    const structA = struct { x: i32, y: i32 };
+    Zpushvalue(L, @as(structA, .{ .x = 1, .y = 2 }));
+    const val = try Zcheckvalue(L, structA, -1, null);
+    try std.testing.expectEqual(1, val.x);
+    try std.testing.expectEqual(2, val.y);
+    L.pop(1);
+
+    const structB = struct { top: structA, bottom: structA };
+    Zpushvalue(L, @as(structB, .{
+        .top = .{ .x = 1, .y = 2 },
+        .bottom = .{ .x = 3, .y = 4 },
+    }));
+    const val2 = try Zcheckvalue(L, structB, -1, null);
+    try std.testing.expectEqual(1, val2.top.x);
+    try std.testing.expectEqual(2, val2.top.y);
+    try std.testing.expectEqual(3, val2.bottom.x);
+    try std.testing.expectEqual(4, val2.bottom.y);
+    L.pop(1);
+
     {
         const ud = struct { b: i32, c: i32 };
         const ptr = L.newuserdata(ud);
@@ -1150,6 +1180,27 @@ test Zcheckvalue {
         L.pop(1);
         try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, i3, -1, null));
         try std.testing.expectEqualStrings("invalid value (number expected between -4 and 3, got -20)", L.tostring(-1).?);
+        L.pop(2);
+    }
+    {
+        Zpushvalue(L, .{ .x = 1 });
+        try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, structA, -1, null));
+        try std.testing.expectEqualStrings("invalid field 'y' (number expected, got nil)", L.tostring(-1).?);
+        L.pop(2);
+
+        Zpushvalue(L, .{
+            .top = .{ .x = 1, .y = 2 },
+        });
+        try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, structB, -1, null));
+        try std.testing.expectEqualStrings("invalid field 'bottom' (table expected, got nil)", L.tostring(-1).?);
+        L.pop(2);
+
+        Zpushvalue(L, .{
+            .top = .{ .x = 1, .y = 2 },
+            .bottom = .{ .x = 3 },
+        });
+        try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, structB, -1, null));
+        try std.testing.expectEqualStrings("invalid field 'y' (number expected, got nil)", L.tostring(-1).?);
         L.pop(2);
     }
 }
