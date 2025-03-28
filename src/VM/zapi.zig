@@ -13,7 +13,7 @@ pub fn LuaZigFn(comptime ReturnType: type) type {
         },
         else => {},
     }
-    return *const fn (state: *lua.State) ReturnType;
+    return fn (state: *lua.State) ReturnType;
 }
 
 fn handleError(L: *lua.State, err: anyerror) noreturn {
@@ -1517,6 +1517,6 @@ test Znewmetatable {
         L.pop(1);
         try std.testing.expectEqual(.Number, L.getfield(-1, "b"));
         try std.testing.expectEqual(3, L.tointeger(-1).?);
-        L.pop(1);
+        L.pop(2);
     }
 }
