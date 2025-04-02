@@ -183,6 +183,21 @@ pub inline fn Zpushfunction(L: *lua.State, comptime f: anytype, name: [:0]const 
     L.pushcfunction(toCFn(f), name);
 }
 
+pub inline fn Zpushclosure(L: *lua.State, comptime f: anytype, name: [:0]const u8, nup: i32) void {
+    L.pushcclosure(toCFn(f), name, nup);
+}
+
+pub fn Zpushclosurek(L: *lua.State, comptime f: anytype, name: [:0]const u8, nup: i32, comptime cont: ?fn (L: *lua.State, status: i32) i32) void {
+    L.pushcclosurek(toCFn(f), name, nup, if (cont) |cont_f|
+        struct {
+            fn inner(l: *lua.State, status: c_int) callconv(.C) c_int {
+                return @call(.always_inline, cont_f, .{ l, status });
+            }
+        }.inner
+    else
+        null);
+}
+
 pub inline fn ZpushfunctionV(L: *lua.State, comptime f: anytype, name: [:0]const u8) void {
     L.pushcfunction(toCFnV(f), name);
 }

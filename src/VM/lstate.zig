@@ -621,6 +621,8 @@ pub const lua_State = extern struct {
 
     // zig api
     pub const Zpushfunction = zapi.Zpushfunction;
+    pub const Zpushclosure = zapi.Zpushclosure;
+    pub const Zpushclosurek = zapi.Zpushclosurek;
     pub const ZpushfunctionV = zapi.ZpushfunctionV;
     pub const Zpushvalue = zapi.Zpushvalue;
     pub const Zsetfield = zapi.Zsetfield;

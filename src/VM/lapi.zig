@@ -9,7 +9,7 @@ const lvmutils = @import("lvmutils.zig");
 
 const State = lua.State;
 
-pub inline fn check(L: *State, cond: bool) void {
+pub fn check(L: *State, cond: bool) void {
     _ = L;
     std.debug.assert(cond);
 }
