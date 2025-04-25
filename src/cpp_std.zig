@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 extern "c" fn zig_string_size(self: *const String) usize;
 extern "c" fn zig_string_c_str(self: *const String) [*c]const u8;
@@ -62,8 +63,17 @@ pub fn BasicString(comptime value_type: type) type {
 // data: [24]u8 align(8),
 pub const String = BasicString(u8);
 comptime {
-    std.testing.expectEqual(24, @sizeOf(String)) catch @panic("String must be 24 bytes");
-    std.testing.expectEqual(8, @alignOf(String)) catch @panic("String must be 8-byte aligned");
+    switch (@sizeOf(usize)) {
+        4 => {
+            std.testing.expectEqual(12, @sizeOf(String)) catch @panic("String must be 12 bytes");
+            std.testing.expectEqual(4, @alignOf(String)) catch @panic("String must be 4-byte aligned");
+        },
+        8 => {
+            std.testing.expectEqual(24, @sizeOf(String)) catch @panic("String must be 24 bytes");
+            std.testing.expectEqual(8, @alignOf(String)) catch @panic("String must be 8-byte aligned");
+        },
+        else => @compileError("Unsupported pointer size"),
+    }
 }
 
 pub fn Exception(comptime T: type) type {
