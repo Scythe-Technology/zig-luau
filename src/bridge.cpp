@@ -1,3 +1,5 @@
+#include <bridge.h>
+
 #include "Luau/Common.h"
 #include "ldo.h"
 
@@ -12,17 +14,37 @@ static int assertionHandler(const char *expr, const char *file, int line, const 
     return 1;
 }
 
-extern "C" void zig_registerAssertionHandler()
+ZIG_EXPORT void zig_registerAssertionHandler()
 {
     Luau::assertHandler() = assertionHandler;
 }
 
-extern "C" void zig_luau_free(void *ptr)
+ZIG_EXPORT void ZIG_FN(luau_free)(void *ptr)
 {
     free(ptr);
 }
 
-extern "C" bool zig_luau_setflag_bool(const char *name, size_t nameLen, bool value)
+ZIG_EXPORT void ZIG_FN(delete_any)(void* value)
+{
+    operator delete(value);
+}
+
+ZIG_EXPORT void* ZIG_FN(new_any)(size_t size)
+{
+    return operator new(size);
+}
+
+ZIG_EXPORT size_t ZIG_FN(string_size)(std::string *str)
+{
+    return str->size();
+}
+
+ZIG_EXPORT const char* ZIG_FN(string_c_str)(std::string *str)
+{
+    return str->c_str();
+}
+
+ZIG_EXPORT bool zig_luau_setflag_bool(const char *name, size_t nameLen, bool value)
 {
     std::string flagName(name, nameLen);
     for (Luau::FValue<bool> *flag = Luau::FValue<bool>::list; flag; flag = flag->next)
@@ -34,7 +56,7 @@ extern "C" bool zig_luau_setflag_bool(const char *name, size_t nameLen, bool val
     return false;
 }
 
-extern "C" bool zig_luau_setflag_int(const char *name, size_t nameLen, int value)
+ZIG_EXPORT bool zig_luau_setflag_int(const char *name, size_t nameLen, int value)
 {
     std::string flagName(name, nameLen);
     for (Luau::FValue<int> *flag = Luau::FValue<int>::list; flag; flag = flag->next)
@@ -46,7 +68,7 @@ extern "C" bool zig_luau_setflag_int(const char *name, size_t nameLen, int value
     return false;
 }
 
-extern "C" bool zig_luau_getflag_bool(const char *name, size_t nameLen, bool *value)
+ZIG_EXPORT bool zig_luau_getflag_bool(const char *name, size_t nameLen, bool *value)
 {
     std::string flagName(name, nameLen);
     for (Luau::FValue<bool> *flag = Luau::FValue<bool>::list; flag; flag = flag->next)
@@ -58,7 +80,7 @@ extern "C" bool zig_luau_getflag_bool(const char *name, size_t nameLen, bool *va
     return false;
 }
 
-extern "C" bool zig_luau_getflag_int(const char *name, size_t nameLen, int *value)
+ZIG_EXPORT bool zig_luau_getflag_int(const char *name, size_t nameLen, int *value)
 {
     std::string flagName(name, nameLen);
     for (Luau::FValue<int> *flag = Luau::FValue<int>::list; flag; flag = flag->next)
@@ -70,14 +92,14 @@ extern "C" bool zig_luau_getflag_int(const char *name, size_t nameLen, int *valu
     return false;
 }
 
-extern "C" struct FlagGroup
+ZIG_EXPORT struct FlagGroup
 {
     const char **names;
     int *types;
     size_t size;
 };
 
-extern "C" FlagGroup zig_luau_getflags()
+ZIG_EXPORT FlagGroup zig_luau_getflags()
 {
     std::vector<std::string> names_list;
     std::vector<int> types_list;
@@ -109,7 +131,7 @@ extern "C" FlagGroup zig_luau_getflags()
     return {names, types, size};
 }
 
-extern "C" void zig_luau_freeflags(FlagGroup group)
+ZIG_EXPORT void zig_luau_freeflags(FlagGroup group)
 {
     for (size_t i = 0; i < group.size; i++)
     {
@@ -120,15 +142,15 @@ extern "C" void zig_luau_freeflags(FlagGroup group)
 }
 
 // Internal API
-extern "C" void zig_luau_luaD_checkstack(lua_State *L, int n)
+ZIG_EXPORT void zig_luau_luaD_checkstack(lua_State *L, int n)
 {
     luaD_checkstack(L, n);
 }
-extern "C" void zig_luau_expandstacklimit(lua_State *L, int n)
+ZIG_EXPORT void zig_luau_expandstacklimit(lua_State *L, int n)
 {
     expandstacklimit(L, L->top + n);
 }
-extern "C" int zig_luau_luaG_isnative(lua_State *L, int level)
+ZIG_EXPORT int zig_luau_luaG_isnative(lua_State *L, int level)
 {
     return luaG_isnative(L, level);
 }
@@ -165,12 +187,12 @@ void zig_luau_throw_js(const std::exception &e)
     zig_luau_throw_js_impl(&e);
 }
 
-extern "C" void zig_luau_try_impl(TryCatchContext *context)
+ZIG_EXPORT void zig_luau_try_impl(TryCatchContext *context)
 {
     context->trying();
 }
 
-extern "C" void zig_luau_catch_impl(TryCatchContext *context, const std::exception &e)
+ZIG_EXPORT void zig_luau_catch_impl(TryCatchContext *context, const std::exception &e)
 {
     context->catching(e);
 }

@@ -1,152 +1,87 @@
 const std = @import("std");
 
+const cpp_std = @import("../cpp_std.zig");
+
+const Ast = @import("Ast.zig");
 const Lexer = @import("Lexer.zig");
-const Allocator = @import("Allocator.zig").Allocator;
+const Location = @import("Location.zig").Location;
+const Allocator = @import("Allocator.zig");
+const DenseHash = @import("../Common/DenseHash.zig");
 
-const zig_Position = extern struct {
-    line: c_uint,
-    column: c_uint,
+const ParseError = cpp_std.Exception(extern struct {
+    location: Location,
+    message: cpp_std.String,
+});
+
+const ParseErrors = cpp_std.Exception(extern struct {
+    errors: cpp_std.Vector(ParseError),
+    message: cpp_std.String,
+});
+
+const HotComment = extern struct {
+    header: bool,
+    location: Location,
+    content: cpp_std.String,
 };
 
-const zig_Location = extern struct {
-    begin: zig_Position,
-    end: zig_Position,
-};
-
-const zig_ParseResult_HotComment = extern struct {
-    header: c_int,
-    location: zig_Location,
-    content: [*c]const u8,
-    contentLen: usize,
-};
-
-const zig_ParseResult_HotComments = extern struct {
-    values: [*c]zig_ParseResult_HotComment,
-    size: usize,
-};
-
-const zig_ParseResult_Error = extern struct {
-    location: zig_Location,
-    message: [*c]const u8,
-    messageLen: usize,
-};
-
-const zig_ParseResult_Errors = extern struct {
-    values: [*c]zig_ParseResult_Error,
-    size: usize,
+const Comment = extern struct {
+    type: Lexer.Lexeme.Type, // Comment, BlockComment, or BrokenComment
+    location: Location,
 };
 
 extern "c" fn zig_Luau_Ast_Parser_parse([*]const u8, usize, *Lexer.AstNameTable, *Allocator) *ParseResult;
-extern "c" fn zig_Luau_Ast_ParseResult_free(*ParseResult) void;
-extern "c" fn zig_Luau_Ast_ParseResult_get_hotcomments(*ParseResult) zig_ParseResult_HotComments;
-extern "c" fn zig_Luau_Ast_ParseResult_free_hotcomments(zig_ParseResult_HotComments) void;
-extern "c" fn zig_Luau_Ast_ParseResult_get_errors(*ParseResult) zig_ParseResult_Errors;
-extern "c" fn zig_Luau_Ast_ParseResult_free_errors(zig_ParseResult_Errors) void;
-extern "c" fn zig_Luau_Ast_ParseResult_hasNativeFunction(*ParseResult) bool;
+extern "c" fn zig_Luau_Ast_Parser_parseExpr([*]const u8, usize, *Lexer.AstNameTable, *Allocator) *ParseExprResult;
+extern "c" fn zig_Luau_Ast_ParseResult_dtor(*ParseResult) void;
+extern "c" fn zig_Luau_Ast_ParseExprResult_dtor(*ParseExprResult) void;
 
 pub fn parse(source: []const u8, nameTable: *Lexer.AstNameTable, allocator: *Allocator) *ParseResult {
-    return zig_Luau_Ast_Parser_parse(
-        source.ptr,
-        source.len,
-        nameTable,
-        allocator,
-    );
+    return zig_Luau_Ast_Parser_parse(source.ptr, source.len, nameTable, allocator);
 }
 
-pub const ParseResult = opaque {
-    pub const HotComment = struct {
-        header: bool,
-        location: zig_Location,
-        content: []const u8,
-    };
+pub fn parseExpr(source: []const u8, nameTable: *Lexer.AstNameTable, allocator: *Allocator) *ParseExprResult {
+    return zig_Luau_Ast_Parser_parseExpr(source.ptr, source.len, nameTable, allocator);
+}
 
-    pub const HotComments = struct {
-        allocator: std.mem.Allocator,
-        values: []const HotComment,
+pub const CstNodeMap = DenseHash.DenseHashMap(?*Ast.Node, *anyopaque, struct {});
 
-        pub fn deinit(self: HotComments) void {
-            for (self.values) |value|
-                self.allocator.free(value.content);
-            self.allocator.free(self.values);
-        }
-    };
+pub const ParseResult = extern struct {
+    root: *Ast.StatBlock,
+    lines: usize = 0,
 
-    pub const ParseError = struct {
-        location: zig_Location,
-        message: []const u8,
-    };
+    hotcomments: cpp_std.Vector(HotComment),
+    errors: cpp_std.Vector(ParseError),
 
-    pub const ParseErrors = struct {
-        allocator: std.mem.Allocator,
-        values: []const ParseError,
+    commentLocations: cpp_std.Vector(Comment),
 
-        pub fn deinit(self: ParseErrors) void {
-            for (self.values) |value|
-                self.allocator.free(value.message);
-            self.allocator.free(self.values);
-        }
-    };
+    cstNodeMap: CstNodeMap = .init(null, 0),
 
     pub inline fn deinit(self: *ParseResult) void {
-        zig_Luau_Ast_ParseResult_free(self);
+        zig_Luau_Ast_ParseResult_dtor(self);
     }
+};
 
-    pub fn getHotcomments(self: *ParseResult, allocator: std.mem.Allocator) !HotComments {
-        const hotcomments = zig_Luau_Ast_ParseResult_get_hotcomments(self);
-        defer zig_Luau_Ast_ParseResult_free_hotcomments(hotcomments);
+pub const ParseExprResult = extern struct {
+    expr: *Ast.StatExpr,
+    lines: usize = 0,
 
-        const arr = try allocator.alloc(HotComment, hotcomments.size);
-        errdefer allocator.free(arr);
-        errdefer for (arr) |comment| allocator.free(comment.content);
+    hotcomments: cpp_std.Vector(HotComment),
+    errors: cpp_std.Vector(ParseError),
 
-        for (0..hotcomments.size) |i| {
-            const hotcomment = hotcomments.values[i];
-            arr[i] = .{
-                .header = hotcomment.header != 0,
-                .location = hotcomment.location,
-                .content = try allocator.dupe(u8, hotcomment.content[0..hotcomment.contentLen]),
-            };
-        }
+    commentLocations: cpp_std.Vector(Comment),
 
-        return .{
-            .allocator = allocator,
-            .values = arr,
-        };
-    }
+    cstNodeMap: CstNodeMap = .init(null, 0),
 
-    pub fn getErrors(self: *ParseResult, allocator: std.mem.Allocator) !ParseErrors {
-        const errors = zig_Luau_Ast_ParseResult_get_errors(self);
-        defer zig_Luau_Ast_ParseResult_free_errors(errors);
-
-        const arr = try allocator.alloc(ParseError, errors.size);
-        errdefer allocator.free(arr);
-        errdefer for (arr) |comment| allocator.free(comment.message);
-
-        for (0..errors.size) |i| {
-            const err = errors.values[i];
-            arr[i] = .{
-                .location = err.location,
-                .message = try allocator.dupe(u8, err.message[0..err.messageLen]),
-            };
-        }
-
-        return .{
-            .allocator = allocator,
-            .values = arr,
-        };
-    }
-
-    pub fn hasNativeFunction(self: *ParseResult) bool {
-        return zig_Luau_Ast_ParseResult_hasNativeFunction(self);
+    pub inline fn deinit(self: *ParseExprResult) void {
+        zig_Luau_Ast_ParseExprResult_dtor(self);
     }
 };
 
 test ParseResult {
     {
-        var allocator = Allocator.init();
+        const allocator = Allocator.init();
         defer allocator.deinit();
 
-        var astNameTable = Lexer.AstNameTable.init(allocator);
+        const astNameTable = Lexer.AstNameTable.init(allocator);
         defer astNameTable.deinit();
         const source =
             \\--!test
@@ -158,50 +93,34 @@ test ParseResult {
         var parseResult = parse(source, astNameTable, allocator);
         defer parseResult.deinit();
 
-        try std.testing.expect(parseResult.hasNativeFunction() == false);
         {
-            const hotcomments = try parseResult.getHotcomments(std.testing.allocator);
-            defer hotcomments.deinit();
+            var iter = parseResult.hotcomments.iterator();
+            var count: usize = 0;
+            while (iter.next()) |comment| : (count += 1) {
+                const string = comment.content.slice();
+                try std.testing.expectEqualStrings("test", string);
+                try std.testing.expectEqual(true, comment.header);
+                try std.testing.expectEqual(0, comment.location.begin.line);
+                try std.testing.expectEqual(0, comment.location.begin.column);
+                try std.testing.expectEqual(0, comment.location.end.line);
+                try std.testing.expectEqual(7, comment.location.end.column);
+            }
 
-            try std.testing.expectEqual(1, hotcomments.values.len);
-            const first = hotcomments.values[0];
-            try std.testing.expectEqualStrings("test", first.content);
-            try std.testing.expectEqual(true, first.header);
-            try std.testing.expectEqual(0, first.location.begin.line);
-            try std.testing.expectEqual(0, first.location.begin.column);
-            try std.testing.expectEqual(0, first.location.end.line);
-            try std.testing.expectEqual(7, first.location.end.column);
+            try std.testing.expectEqual(1, count);
         }
 
         {
-            const errors = try parseResult.getErrors(std.testing.allocator);
-            defer errors.deinit();
-
-            try std.testing.expectEqual(1, errors.values.len);
-            const first = errors.values[0];
-            try std.testing.expectEqualStrings("Expected identifier when parsing expression, got <eof>", first.message);
+            try std.testing.expectEqual(1, parseResult.errors.size());
+            const first = parseResult.errors.at(0).value;
+            try std.testing.expectEqualStrings("Expected identifier when parsing expression, got <eof>", first.message.slice());
             try std.testing.expectEqual(3, first.location.begin.line);
             try std.testing.expectEqual(0, first.location.begin.column);
             try std.testing.expectEqual(3, first.location.end.line);
             try std.testing.expectEqual(0, first.location.end.column);
         }
     }
-    {
-        var allocator = Allocator.init();
-        defer allocator.deinit();
-
-        var astNameTable = Lexer.AstNameTable.init(allocator);
-        defer astNameTable.deinit();
-        const source =
-            \\@native
-            \\function test()
-            \\end
-            \\
-        ;
-
-        var parseResult = parse(source, astNameTable, allocator);
-        defer parseResult.deinit();
-
-        try std.testing.expect(parseResult.hasNativeFunction() == true);
-    }
 }
+
+// sources:
+// https://github.com/luau-lang/luau/blob/a2303a6ae68c53035eccf230c4450b9f068536af/Ast/include/Luau/Parser.h
+// https://github.com/luau-lang/luau/blob/a2303a6ae68c53035eccf230c4450b9f068536af/Ast/src/Parser.cpp

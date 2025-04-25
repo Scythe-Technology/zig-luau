@@ -25,6 +25,12 @@ pub fn build(b: *Build) !void {
 
     const luau_dep = b.dependency("luau", .{});
 
+    const build_Ast = b.option(bool, "Ast", "Build Luau Ast") orelse true;
+    const build_CodeGen = b.option(bool, "CodeGen", "Build Luau CodeGen") orelse true;
+    const build_Analysis = b.option(bool, "Analysis", "Build Luau Analysis") orelse true;
+    const build_Compiler = b.option(bool, "Compiler", "Build Luau Compiler") orelse true;
+    const build_VM = b.option(bool, "VM", "Build Luau VM") orelse true;
+
     const use_4_vector = b.option(bool, "use_4_vector", "Build Luau to use 4-vectors instead of the default 3-vector.") orelse false;
     const wasm_env_name = b.option([]const u8, "wasm_env", "The environment to import symbols from when building for WebAssembly.") orelse "env";
 
@@ -33,9 +39,15 @@ pub fn build(b: *Build) !void {
     config.addOption(bool, "use_4_vector", use_4_vector);
     config.addOption(std.SemanticVersion, "luau_version", version);
 
+    config.addOption(bool, "buildAst", build_Ast);
+    config.addOption(bool, "buildCodeGen", build_CodeGen);
+    config.addOption(bool, "buildAnalysis", build_Analysis);
+    config.addOption(bool, "buildCompiler", build_Compiler);
+    config.addOption(bool, "buildVM", build_VM);
+
     // Luau C Headers
     const headers = b.addTranslateC(.{
-        .root_source_file = b.path("src/luau.h"),
+        .root_source_file = b.path("src/bridge.h"),
         .target = target,
         .optimize = optimize,
     });
@@ -46,10 +58,46 @@ pub fn build(b: *Build) !void {
 
     const c_module = headers.createModule();
 
-    const lib = try buildLuau(b, target, luau_dep, optimize, version, .{
-        .use_4_vector = use_4_vector,
-        .wasm_env_name = wasm_env_name,
-    });
+    var FLAGS = std.ArrayList([]const u8).init(b.allocator);
+
+    FLAGS.append("-DLUA_USE_LONGJMP=" ++ if (!target.result.cpu.arch.isWasm()) "1" else "0") catch @panic("OOM");
+    FLAGS.append("-DLUA_API=extern\"C\"") catch @panic("OOM");
+    FLAGS.append("-DLUACODE_API=extern\"C\"") catch @panic("OOM");
+    FLAGS.append("-DLUACODEGEN_API=extern\"C\"") catch @panic("OOM");
+    if (use_4_vector)
+        FLAGS.append("-DLUA_VECTOR_SIZE=4") catch @panic("OOM");
+    if (target.result.cpu.arch.isWasm()) {
+        if (target.result.os.tag == .emscripten)
+            FLAGS.append("-fexceptions") catch @panic("OOM");
+        // else
+        // FLAGS.append("-fwasm-exceptions") catch @panic("OOM");
+        FLAGS.append(b.fmt("-DLUAU_WASM_ENV_NAME=\"{s}\"", .{wasm_env_name})) catch @panic("OOM");
+    }
+
+    const compile_flags = FLAGS.items;
+
+    const libCommon = buildCommon(b, target, luau_dep, optimize, version);
+    const libAst = buildAst(b, target, luau_dep, optimize, version, compile_flags, libCommon);
+    const libConfig = buildConfig(b, target, luau_dep, optimize, version, compile_flags, libAst);
+    const libEqSat = buildEqSat(b, target, luau_dep, optimize, version, compile_flags, libCommon);
+    const libCompiler = buildCompiler(b, target, luau_dep, optimize, version, compile_flags, libAst);
+    const libVM = buildVM(b, target, luau_dep, optimize, version, compile_flags, libCommon);
+    const libCodeGen = buildCodeGen(b, target, luau_dep, optimize, version, compile_flags, libVM);
+    const libAnalysis = try buildAnalysis(b, target, luau_dep, optimize, version, compile_flags, libAst, libEqSat, libConfig, libCompiler, libVM);
+
+    const lib = try buildLuau(
+        b,
+        target,
+        luau_dep,
+        optimize,
+        version,
+        compile_flags,
+        if (build_Ast) libAst else null,
+        if (build_Analysis) libAnalysis else null,
+        if (build_CodeGen) libCodeGen else null,
+        if (build_Compiler) libCompiler else null,
+        if (build_VM) libVM else null,
+    );
     b.installArtifact(lib);
 
     // Zig module
@@ -167,10 +215,286 @@ pub fn addModuleExportSymbols(b: *Build, module: *Build.Module) void {
     }
 }
 
-const LuauBuildOptions = struct {
-    use_4_vector: bool,
-    wasm_env_name: []const u8,
-};
+fn linkIncludePath(
+    target: *Step.Compile,
+    source: *Step.Compile,
+) void {
+    for (source.root_module.include_dirs.items) |dir|
+        switch (dir) {
+            .path => |path| blk: {
+                for (target.root_module.include_dirs.items) |target_dir|
+                    if (target_dir == .path and
+                        path == .dependency and target_dir.path == .dependency and
+                        path.dependency.dependency == target_dir.path.dependency.dependency and
+                        std.mem.eql(u8, path.dependency.sub_path, target_dir.path.dependency.sub_path))
+                        break :blk;
+
+                target.addIncludePath(path);
+            },
+            else => {},
+        };
+}
+
+fn buildCommon(
+    b: *Build,
+    target: Build.ResolvedTarget,
+    dependency: *Build.Dependency,
+    optimize: std.builtin.OptimizeMode,
+    version: std.SemanticVersion,
+) *Step.Compile {
+    const lib = b.addStaticLibrary(.{
+        .name = "Common",
+        .target = target,
+        .optimize = optimize,
+        .version = version,
+    });
+
+    for (LUAU_Common_HEADERS_DIRS) |dir|
+        lib.addIncludePath(dependency.path(dir));
+
+    return lib;
+}
+
+fn buildAst(
+    b: *Build,
+    target: Build.ResolvedTarget,
+    dependency: *Build.Dependency,
+    optimize: std.builtin.OptimizeMode,
+    version: std.SemanticVersion,
+    flags: []const []const u8,
+    libCommon: *Step.Compile,
+) *Step.Compile {
+    const lib = b.addStaticLibrary(.{
+        .name = "Ast",
+        .target = target,
+        .optimize = optimize,
+        .version = version,
+    });
+
+    linkIncludePath(lib, libCommon);
+
+    lib.linkLibCpp();
+
+    for (LUAU_Ast_HEADERS_DIRS) |dir|
+        lib.addIncludePath(dependency.path(dir));
+
+    lib.addCSourceFiles(.{
+        .root = dependency.path(""),
+        .files = &LUAU_Ast_SOURCE_FILES,
+        .flags = flags,
+    });
+
+    return lib;
+}
+
+fn buildCompiler(
+    b: *Build,
+    target: Build.ResolvedTarget,
+    dependency: *Build.Dependency,
+    optimize: std.builtin.OptimizeMode,
+    version: std.SemanticVersion,
+    flags: []const []const u8,
+    libAst: *Step.Compile,
+) *Step.Compile {
+    const lib = b.addStaticLibrary(.{
+        .name = "Compiler",
+        .target = target,
+        .optimize = optimize,
+        .version = version,
+    });
+
+    linkIncludePath(lib, libAst);
+    lib.linkLibrary(libAst);
+
+    lib.linkLibCpp();
+
+    for (LUAU_Compiler_HEADERS_DIRS) |dir|
+        lib.addIncludePath(dependency.path(dir));
+
+    lib.addCSourceFiles(.{
+        .root = dependency.path(""),
+        .files = &LUAU_Compiler_SOURCE_FILES,
+        .flags = flags,
+    });
+
+    return lib;
+}
+
+fn buildConfig(
+    b: *Build,
+    target: Build.ResolvedTarget,
+    dependency: *Build.Dependency,
+    optimize: std.builtin.OptimizeMode,
+    version: std.SemanticVersion,
+    flags: []const []const u8,
+    libAst: *Step.Compile,
+) *Step.Compile {
+    const lib = b.addStaticLibrary(.{
+        .name = "Config",
+        .target = target,
+        .optimize = optimize,
+        .version = version,
+    });
+
+    linkIncludePath(lib, libAst);
+    lib.linkLibrary(libAst);
+
+    lib.linkLibCpp();
+
+    for (LUAU_Config_HEADERS_DIRS) |dir|
+        lib.addIncludePath(dependency.path(dir));
+
+    lib.addCSourceFiles(.{
+        .root = dependency.path(""),
+        .files = &LUAU_Config_SOURCE_FILES,
+        .flags = flags,
+    });
+
+    return lib;
+}
+
+fn buildAnalysis(
+    b: *Build,
+    target: Build.ResolvedTarget,
+    dependency: *Build.Dependency,
+    optimize: std.builtin.OptimizeMode,
+    version: std.SemanticVersion,
+    flags: []const []const u8,
+    libAst: *Step.Compile,
+    libEqSat: *Step.Compile,
+    libConfig: *Step.Compile,
+    libCompiler: *Step.Compile,
+    libVM: *Step.Compile,
+) !*Step.Compile {
+    const lib = b.addStaticLibrary(.{
+        .name = "Analysis",
+        .target = target,
+        .optimize = optimize,
+        .version = version,
+    });
+
+    linkIncludePath(lib, libAst);
+    linkIncludePath(lib, libEqSat);
+    linkIncludePath(lib, libConfig);
+    linkIncludePath(lib, libCompiler);
+    linkIncludePath(lib, libVM);
+
+    lib.linkLibrary(libAst);
+    lib.linkLibrary(libEqSat);
+    lib.linkLibrary(libConfig);
+    lib.linkLibrary(libCompiler);
+    lib.linkLibrary(libVM);
+
+    lib.linkLibCpp();
+
+    for (LUAU_Analysis_HEADERS_DIRS) |dir|
+        lib.addIncludePath(dependency.path(dir));
+
+    lib.addCSourceFiles(.{
+        .root = dependency.path(""),
+        .files = &LUAU_Analysis_SOURCE_FILES,
+        .flags = flags,
+    });
+
+    return lib;
+}
+
+fn buildEqSat(
+    b: *Build,
+    target: Build.ResolvedTarget,
+    dependency: *Build.Dependency,
+    optimize: std.builtin.OptimizeMode,
+    version: std.SemanticVersion,
+    flags: []const []const u8,
+    libCommon: *Step.Compile,
+) *Step.Compile {
+    const lib = b.addStaticLibrary(.{
+        .name = "EqSat",
+        .target = target,
+        .optimize = optimize,
+        .version = version,
+    });
+
+    linkIncludePath(lib, libCommon);
+
+    lib.linkLibCpp();
+
+    for (LUAU_EqSat_HEADERS_DIRS) |dir|
+        lib.addIncludePath(dependency.path(dir));
+
+    lib.addCSourceFiles(.{
+        .root = dependency.path(""),
+        .files = &LUAU_EqSat_SOURCE_FILES,
+        .flags = flags,
+    });
+
+    return lib;
+}
+
+fn buildCodeGen(
+    b: *Build,
+    target: Build.ResolvedTarget,
+    dependency: *Build.Dependency,
+    optimize: std.builtin.OptimizeMode,
+    version: std.SemanticVersion,
+    flags: []const []const u8,
+    libVM: *Step.Compile,
+) *Step.Compile {
+    const lib = b.addStaticLibrary(.{
+        .name = "CodeGen",
+        .target = target,
+        .optimize = optimize,
+        .version = version,
+    });
+
+    linkIncludePath(lib, libVM);
+    lib.linkLibrary(libVM);
+
+    lib.linkLibCpp();
+
+    for (LUAU_CodeGen_HEADERS_DIRS) |dir|
+        lib.addIncludePath(dependency.path(dir));
+
+    lib.addCSourceFiles(.{
+        .root = dependency.path(""),
+        .files = &LUAU_CodeGen_SOURCE_FILES,
+        .flags = flags,
+    });
+
+    return lib;
+}
+
+fn buildVM(
+    b: *Build,
+    target: Build.ResolvedTarget,
+    dependency: *Build.Dependency,
+    optimize: std.builtin.OptimizeMode,
+    version: std.SemanticVersion,
+    flags: []const []const u8,
+    libCommon: *Step.Compile,
+) *Step.Compile {
+    const lib = b.addStaticLibrary(.{
+        .name = "VM",
+        .target = target,
+        .optimize = optimize,
+        .version = version,
+    });
+
+    linkIncludePath(lib, libCommon);
+
+    lib.linkLibCpp();
+
+    for (LUAU_VM_HEADERS_DIRS) |dir|
+        lib.addIncludePath(dependency.path(dir));
+
+    lib.addCSourceFiles(.{
+        .root = dependency.path(""),
+        .files = &LUAU_VM_SOURCE_FILES,
+        .flags = flags,
+    });
+
+    return lib;
+}
 
 /// Luau has diverged enough from Lua (C++, project structure, ...) that it is easier to separate the build logic
 fn buildLuau(
@@ -179,7 +503,12 @@ fn buildLuau(
     dependency: *Build.Dependency,
     optimize: std.builtin.OptimizeMode,
     version: std.SemanticVersion,
-    options: LuauBuildOptions,
+    flags: []const []const u8,
+    libAst: ?*Step.Compile,
+    libAnalysis: ?*Step.Compile,
+    libCodeGen: ?*Step.Compile,
+    libCompiler: ?*Step.Compile,
+    libVM: ?*Step.Compile,
 ) !*Step.Compile {
     const lib = b.addStaticLibrary(.{
         .name = "luau",
@@ -188,61 +517,35 @@ fn buildLuau(
         .version = version,
     });
 
-    lib.addIncludePath(b.path("src/Lib"));
-    for (LUAU_Ast_HEADERS_DIRS) |dir|
-        lib.addIncludePath(dependency.path(dir));
-    for (LUAU_Common_HEADERS_DIRS) |dir|
-        lib.addIncludePath(dependency.path(dir));
-    for (LUAU_Compiler_HEADERS_DIRS) |dir|
-        lib.addIncludePath(dependency.path(dir));
-    // CodeGen is not supported on WASM
-    if (!target.result.cpu.arch.isWasm())
-        for (LUAU_CodeGen_HEADERS_DIRS) |dir|
-            lib.addIncludePath(dependency.path(dir));
-    for (LUAU_VM_HEADERS_DIRS) |dir|
-        lib.addIncludePath(dependency.path(dir));
-
-    var FLAGS = std.ArrayList([]const u8).init(b.allocator);
-
-    FLAGS.append("-DLUA_USE_LONGJMP=" ++ if (!target.result.cpu.arch.isWasm()) "1" else "0") catch @panic("OOM");
-    FLAGS.append("-DLUA_API=extern\"C\"") catch @panic("OOM");
-    FLAGS.append("-DLUACODE_API=extern\"C\"") catch @panic("OOM");
-    FLAGS.append("-DLUACODEGEN_API=extern\"C\"") catch @panic("OOM");
-    if (options.use_4_vector)
-        FLAGS.append("-DLUA_VECTOR_SIZE=4") catch @panic("OOM");
-    if (target.result.cpu.arch.isWasm()) {
-        if (target.result.os.tag == .emscripten)
-            FLAGS.append("-fexceptions") catch @panic("OOM");
-        FLAGS.append(b.fmt("-DLUAU_WASM_ENV_NAME=\"{s}\"", .{options.wasm_env_name})) catch @panic("OOM");
-    }
+    lib.addIncludePath(b.path("src"));
 
     lib.linkLibCpp();
 
-    var FILES = std.ArrayList([]const u8).init(b.allocator);
+    lib.addCSourceFile(.{ .file = b.path("src/bridge.cpp"), .flags = flags });
 
-    for (LUAU_Ast_SOURCE_FILES) |file|
-        FILES.append(file) catch @panic("OOM");
-    for (LUAU_Compiler_SOURCE_FILES) |file|
-        FILES.append(file) catch @panic("OOM");
-    // CodeGen is not supported on WASM
-    if (!target.result.cpu.arch.isWasm())
-        for (LUAU_CodeGen_SOURCE_FILES) |file|
-            FILES.append(file) catch @panic("OOM");
-    for (LUAU_VM_SOURCE_FILES) |file|
-        FILES.append(file) catch @panic("OOM");
-
-    lib.addCSourceFiles(.{
-        .root = dependency.path(""),
-        .files = FILES.items,
-        .flags = FLAGS.items,
-    });
-    lib.addCSourceFile(.{ .file = b.path("src/luau.cpp"), .flags = FLAGS.items });
-
-    // Modules
-    lib.addCSourceFile(.{ .file = b.path("src/Ast/Allocator.cpp"), .flags = FLAGS.items });
-    lib.addCSourceFile(.{ .file = b.path("src/Ast/Lexer.cpp"), .flags = FLAGS.items });
-    lib.addCSourceFile(.{ .file = b.path("src/Ast/Parser.cpp"), .flags = FLAGS.items });
-    lib.addCSourceFile(.{ .file = b.path("src/Compiler/Compiler.cpp"), .flags = FLAGS.items });
+    if (libAst) |mod| {
+        lib.linkLibrary(mod);
+        lib.addCSourceFile(.{ .file = b.path("src/Ast/Ast.cpp"), .flags = flags });
+        linkIncludePath(lib, mod);
+    }
+    if (libAnalysis) |mod| {
+        lib.linkLibrary(mod);
+        lib.addCSourceFile(.{ .file = b.path("src/Analysis/Analysis.cpp"), .flags = flags });
+        linkIncludePath(lib, mod);
+    }
+    if (libCodeGen) |mod| {
+        lib.linkLibrary(mod);
+        linkIncludePath(lib, mod);
+    }
+    if (libCompiler) |mod| {
+        lib.linkLibrary(mod);
+        lib.addCSourceFile(.{ .file = b.path("src/Compiler/Compiler.cpp"), .flags = flags });
+        linkIncludePath(lib, mod);
+    }
+    if (libVM) |mod| {
+        lib.linkLibrary(mod);
+        linkIncludePath(lib, mod);
+    }
 
     // It may not be as likely that other software links against Luau, but might as well expose these anyway
     lib.installHeader(dependency.path("VM/include/lua.h"), "lua.h");
@@ -253,6 +556,91 @@ fn buildLuau(
 
     return lib;
 }
+
+const LUAU_Config_HEADERS_DIRS = [_][]const u8{
+    "Config/include/",
+};
+const LUAU_Config_SOURCE_FILES = [_][]const u8{
+    "Config/src/Config.cpp",
+    "Config/src/LinterConfig.cpp",
+};
+
+const LUAU_Analysis_HEADERS_DIRS = [_][]const u8{
+    "Analysis/include/",
+    "Analysis/src/",
+};
+const LUAU_Analysis_SOURCE_FILES = [_][]const u8{
+    "Analysis/src/Anyification.cpp",
+    "Analysis/src/ApplyTypeFunction.cpp",
+    "Analysis/src/AstJsonEncoder.cpp",
+    "Analysis/src/AstQuery.cpp",
+    "Analysis/src/Autocomplete.cpp",
+    "Analysis/src/BuiltinDefinitions.cpp",
+    "Analysis/src/Clone.cpp",
+    "Analysis/src/Constraint.cpp",
+    "Analysis/src/ConstraintGenerator.cpp",
+    "Analysis/src/ConstraintSolver.cpp",
+    "Analysis/src/DataFlowGraph.cpp",
+    "Analysis/src/DcrLogger.cpp",
+    "Analysis/src/Def.cpp",
+    "Analysis/src/Differ.cpp",
+    "Analysis/src/EmbeddedBuiltinDefinitions.cpp",
+    "Analysis/src/EqSatSimplification.cpp",
+    "Analysis/src/Error.cpp",
+    "Analysis/src/FileResolver.cpp",
+    "Analysis/src/FragmentAutocomplete.cpp",
+    "Analysis/src/Frontend.cpp",
+    "Analysis/src/Generalization.cpp",
+    "Analysis/src/GlobalTypes.cpp",
+    "Analysis/src/InferPolarity.cpp",
+    "Analysis/src/Instantiation.cpp",
+    "Analysis/src/Instantiation2.cpp",
+    "Analysis/src/IostreamHelpers.cpp",
+    "Analysis/src/Linter.cpp",
+    "Analysis/src/LValue.cpp",
+    "Analysis/src/Module.cpp",
+    "Analysis/src/NonStrictTypeChecker.cpp",
+    "Analysis/src/Normalize.cpp",
+    "Analysis/src/OverloadResolution.cpp",
+    "Analysis/src/Quantify.cpp",
+    "Analysis/src/Refinement.cpp",
+    "Analysis/src/RequireTracer.cpp",
+    "Analysis/src/Scope.cpp",
+    "Analysis/src/Simplify.cpp",
+    "Analysis/src/Substitution.cpp",
+    "Analysis/src/Subtyping.cpp",
+    "Analysis/src/Symbol.cpp",
+    "Analysis/src/TableLiteralInference.cpp",
+    "Analysis/src/ToDot.cpp",
+    "Analysis/src/TopoSortStatements.cpp",
+    "Analysis/src/ToString.cpp",
+    "Analysis/src/Transpiler.cpp",
+    "Analysis/src/TxnLog.cpp",
+    "Analysis/src/Type.cpp",
+    "Analysis/src/TypeArena.cpp",
+    "Analysis/src/TypeAttach.cpp",
+    "Analysis/src/TypeChecker2.cpp",
+    "Analysis/src/TypedAllocator.cpp",
+    "Analysis/src/TypeFunction.cpp",
+    "Analysis/src/TypeFunctionReductionGuesser.cpp",
+    "Analysis/src/TypeFunctionRuntime.cpp",
+    "Analysis/src/TypeFunctionRuntimeBuilder.cpp",
+    "Analysis/src/TypeInfer.cpp",
+    "Analysis/src/TypeOrPack.cpp",
+    "Analysis/src/TypePath.cpp",
+    "Analysis/src/TypeUtils.cpp",
+    "Analysis/src/Unifiable.cpp",
+    "Analysis/src/Unifier.cpp",
+    "Analysis/src/Unifier2.cpp",
+};
+
+const LUAU_EqSat_HEADERS_DIRS = [_][]const u8{
+    "EqSat/include/",
+};
+const LUAU_EqSat_SOURCE_FILES = [_][]const u8{
+    "EqSat/src/Id.cpp",
+    "EqSat/src/UnionFind.cpp",
+};
 
 const LUAU_Ast_HEADERS_DIRS = [_][]const u8{
     "Ast/include/",

@@ -1630,29 +1630,26 @@ test "yielding error" {
 }
 
 test "Ast/Parser - HotComments" {
-    const allocator = testing.allocator;
-
     const src =
         \\--!HotComments
         \\--!optimize 2
     ;
 
-    const luau_allocator = luau.Ast.Allocator.Allocator.init();
+    const luau_allocator = luau.Ast.Allocator.init();
     defer luau_allocator.deinit();
 
     const names = luau.Ast.Lexer.AstNameTable.init(luau_allocator);
     defer names.deinit();
 
-    const result = luau.Ast.Parser.parse(src, names, luau_allocator);
+    var result = luau.Ast.Parser.parse(src, names, luau_allocator);
     defer result.deinit();
 
-    const hotcomments = try result.getHotcomments(allocator);
-    defer hotcomments.deinit();
+    try testing.expectEqual(2, result.hotcomments.size());
 
-    try expectEqual(2, hotcomments.values.len);
-
-    try expectEqualStrings("HotComments", hotcomments.values[0].content);
-    try expectEqualStrings("optimize 2", hotcomments.values[1].content);
+    {
+        try expectEqualStrings("HotComments", result.hotcomments.at(0).content.slice());
+        try expectEqualStrings("optimize 2", result.hotcomments.at(1).content.slice());
+    }
 }
 
 test "Thread Data" {

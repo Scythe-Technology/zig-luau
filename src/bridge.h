@@ -9,4 +9,8 @@
 #include "luacodegen.h"
 #endif
 
+#define ZIG_EXPORT extern "C"
+
+#define ZIG_FN(name) zig_##name
+
 #endif // LUAU_HEADERS

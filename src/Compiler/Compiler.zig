@@ -46,13 +46,14 @@ pub fn compileParseResult(
 }
 
 test compileParseResult {
-    const Allocator = @import("../Ast/Allocator.zig").Allocator;
+    const Allocator = @import("../Ast/Allocator.zig");
 
-    var allocator = Allocator.init();
+    const allocator = Allocator.init();
     defer allocator.deinit();
 
-    var astNameTable = Lexer.AstNameTable.init(allocator);
+    const astNameTable = Lexer.AstNameTable.init(allocator);
     defer astNameTable.deinit();
+
     const source =
         \\--!test
         \\-- This is a test comment
@@ -60,7 +61,7 @@ test compileParseResult {
         \\
     ;
 
-    var parseResult = Parser.parse(source, astNameTable, allocator);
+    const parseResult = Parser.parse(source, astNameTable, allocator);
     defer parseResult.deinit();
 
     const zig_allocator = std.testing.allocator;
@@ -68,5 +69,9 @@ test compileParseResult {
     defer zig_allocator.free(bytes);
 
     try std.testing.expect(bytes[0] == 0);
-    try std.testing.expectEqualStrings(bytes[1..], ":4: Expected identifier when parsing expression, got <eof>");
+    try std.testing.expectEqualStrings(":4: Expected identifier when parsing expression, got <eof>", bytes[1..]);
 }
+
+// sources:
+// https://github.com/luau-lang/luau/blob/a2303a6ae68c53035eccf230c4450b9f068536af/Compiler/include/Luau/Compiler.h
+// https://github.com/luau-lang/luau/blob/a2303a6ae68c53035eccf230c4450b9f068536af/Compiler/src/Compiler.cpp

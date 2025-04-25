@@ -19,3 +19,7 @@ pub fn compile(allocator: std.mem.Allocator, source: []const u8, options: Compil
     defer zig_luau_free(bytecode);
     return try allocator.dupe(u8, bytecode[0..size]);
 }
+
+// sources:
+// https://github.com/luau-lang/luau/blob/a2303a6ae68c53035eccf230c4450b9f068536af/Compiler/include/luacode.h
+// https://github.com/luau-lang/luau/blob/a2303a6ae68c53035eccf230c4450b9f068536af/Compiler/src/lcode.cpp
