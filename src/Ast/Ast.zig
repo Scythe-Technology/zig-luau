@@ -1976,7 +1976,7 @@ pub const Visitor = struct {
         return null;
     }
 
-    fn getParent(comptime ast: type) ?type {
+    fn getParent(comptime ast: type) type {
         const namespace = @typeName(Ast);
         const ast_name = @typeName(ast)[namespace.len + 1 ..];
         if (std.mem.eql(u8, ast_name, "Attr") or
@@ -1993,7 +1993,7 @@ pub const Visitor = struct {
             return Ast.TypePack
         else if (std.mem.startsWith(u8, ast_name, "Type"))
             return Ast.Type;
-        return null;
+        @compileError("Invalid Ast type");
     }
 
     pub fn selfVisit(self: anytype, this: anytype) void {
@@ -2014,21 +2014,26 @@ pub const Visitor = struct {
         comptime if (!std.mem.startsWith(u8, @typeName(ast_type), @typeName(Ast)))
             @compileError("Invalid Ast type");
 
+        const namespace = @typeName(Ast);
         if (ast_type == Ast.Node) {
             if (comptime hasVistDecl(@TypeOf(self), "visit"))
                 return callVisitorDecl(self, "visit", this);
+            return true;
+        } else if (ast_type == Ast.Type or ast_type == Ast.TypePack) {
+            const ast_name = @typeName(ast_type)[namespace.len + 1 ..];
+            if (comptime hasVistDecl(@TypeOf(self), "visit" ++ ast_name))
+                return callVisitorDecl(self, "visit" ++ ast_name, this);
+            return false;
         } else {
-            if (visitByName(self, @typeName(ast_type), this)) |result|
-                return result;
+            const ast_name = @typeName(ast_type)[namespace.len + 1 ..];
+            const fn_name = "visit" ++ ast_name;
 
-            if (getParent(ast_type)) |parent|
-                return Visitor.visit(self, @as(*parent, @ptrCast(@alignCast(this))));
+            if (comptime hasVistDecl(@TypeOf(self), fn_name))
+                return callVisitorDecl(self, fn_name, this);
+
+            const parent = comptime getParent(ast_type);
+            return Visitor.visit(self, @as(*parent, @ptrCast(@alignCast(this))));
         }
-
-        return if (ast_type == Ast.Node)
-            true
-        else
-            false;
     }
 };
 
