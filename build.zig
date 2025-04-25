@@ -26,8 +26,8 @@ pub fn build(b: *Build) !void {
     const luau_dep = b.dependency("luau", .{});
 
     const build_Ast = b.option(bool, "Ast", "Build Luau Ast") orelse true;
-    const build_CodeGen = b.option(bool, "CodeGen", "Build Luau CodeGen") orelse true;
-    const build_Analysis = b.option(bool, "Analysis", "Build Luau Analysis") orelse true;
+    const build_CodeGen = b.option(bool, "CodeGen", "Build Luau CodeGen") orelse !target.result.cpu.arch.isWasm();
+    const build_Analysis = b.option(bool, "Analysis", "Build Luau Analysis") orelse !target.result.cpu.arch.isWasm();
     const build_Compiler = b.option(bool, "Compiler", "Build Luau Compiler") orelse true;
     const build_VM = b.option(bool, "VM", "Build Luau VM") orelse true;
 
