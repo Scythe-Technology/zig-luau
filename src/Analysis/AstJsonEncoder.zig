@@ -31,7 +31,7 @@ test toJson {
             \\
         ;
 
-        var parse_result = Parser.parse(source, table, allocator);
+        var parse_result = Parser.parse(source, table, allocator, .{});
         defer parse_result.deinit();
 
         const root = parse_result.root;

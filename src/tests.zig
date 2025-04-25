@@ -1641,7 +1641,7 @@ test "Ast/Parser - HotComments" {
     const names = luau.Ast.Lexer.AstNameTable.init(luau_allocator);
     defer names.deinit();
 
-    var result = luau.Ast.Parser.parse(src, names, luau_allocator);
+    var result = luau.Ast.Parser.parse(src, names, luau_allocator, .{});
     defer result.deinit();
 
     try testing.expectEqual(2, result.hotcomments.size());

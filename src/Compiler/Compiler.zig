@@ -61,7 +61,7 @@ test compileParseResult {
         \\
     ;
 
-    const parseResult = Parser.parse(source, astNameTable, allocator);
+    const parseResult = Parser.parse(source, astNameTable, allocator, .{});
     defer parseResult.deinit();
 
     const zig_allocator = std.testing.allocator;

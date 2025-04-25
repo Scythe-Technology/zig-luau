@@ -95,6 +95,8 @@ pub fn Optional(comptime T: type) type {
                 return null;
             }
         }
+
+        pub const nullopt = @This(){ .has = false };
     };
 }
 

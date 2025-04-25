@@ -29,17 +29,33 @@ const Comment = extern struct {
     location: Location,
 };
 
-extern "c" fn zig_Luau_Ast_Parser_parse([*]const u8, usize, *Lexer.AstNameTable, *Allocator) *ParseResult;
-extern "c" fn zig_Luau_Ast_Parser_parseExpr([*]const u8, usize, *Lexer.AstNameTable, *Allocator) *ParseExprResult;
+const ParseOptions = extern struct {
+    allowDeclarationSyntax: bool = false,
+    captureComments: bool = false,
+    parseFragment: cpp_std.Optional(FragmentParseResumeSettings) = .nullopt,
+    storeCstData: bool = false,
+    noErrorLimit: bool = false,
+
+    pub const FragmentParseResumeSettings = extern struct {
+        localMap: DenseHash.DenseHashMap(Ast.Name, *Ast.Local, struct {}) = .init(.{ .value = "" }, 0),
+        localStack: cpp_std.Vector(*Ast.Local) = undefined,
+        resumePosition: Location.Position,
+    };
+};
+
+extern "c" fn zig_Luau_Ast_Parser_parse([*]const u8, usize, *Lexer.AstNameTable, *Allocator, *ParseOptions) *ParseResult;
+extern "c" fn zig_Luau_Ast_Parser_parseExpr([*]const u8, usize, *Lexer.AstNameTable, *Allocator, *ParseOptions) *ParseExprResult;
 extern "c" fn zig_Luau_Ast_ParseResult_dtor(*ParseResult) void;
 extern "c" fn zig_Luau_Ast_ParseExprResult_dtor(*ParseExprResult) void;
 
-pub fn parse(source: []const u8, nameTable: *Lexer.AstNameTable, allocator: *Allocator) *ParseResult {
-    return zig_Luau_Ast_Parser_parse(source.ptr, source.len, nameTable, allocator);
+pub fn parse(source: []const u8, nameTable: *Lexer.AstNameTable, allocator: *Allocator, options: ParseOptions) *ParseResult {
+    var opts = options;
+    return zig_Luau_Ast_Parser_parse(source.ptr, source.len, nameTable, allocator, &opts);
 }
 
-pub fn parseExpr(source: []const u8, nameTable: *Lexer.AstNameTable, allocator: *Allocator) *ParseExprResult {
-    return zig_Luau_Ast_Parser_parseExpr(source.ptr, source.len, nameTable, allocator);
+pub fn parseExpr(source: []const u8, nameTable: *Lexer.AstNameTable, allocator: *Allocator, options: ParseOptions) *ParseExprResult {
+    var opts = options;
+    return zig_Luau_Ast_Parser_parseExpr(source.ptr, source.len, nameTable, allocator, &opts);
 }
 
 pub const CstNodeMap = DenseHash.DenseHashMap(?*Ast.Node, *anyopaque, struct {});
@@ -90,7 +106,7 @@ test ParseResult {
             \\
         ;
 
-        var parseResult = parse(source, astNameTable, allocator);
+        var parseResult = parse(source, astNameTable, allocator, .{});
         defer parseResult.deinit();
 
         {
