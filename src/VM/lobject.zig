@@ -307,7 +307,7 @@ pub const Udata = extern struct {
 
     metatable: ?*LuaTable,
 
-    data: [*]align(8) u8,
+    data: [1]u8 align(8),
 };
 
 pub const Buffer = extern struct {
@@ -315,7 +315,7 @@ pub const Buffer = extern struct {
 
     len: c_int,
 
-    data: [*]align(8) u8,
+    data: [1]u8 align(8),
 };
 
 ///

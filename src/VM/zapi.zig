@@ -1194,7 +1194,7 @@ test Zcheckvalue {
         try std.testing.expectEqual(1.0, checked_vec[0]);
         try std.testing.expectEqual(2.0, checked_vec[1]);
         try std.testing.expectEqual(3.0, checked_vec[2]);
-        if (lua.config.VECTOR_SIZE == 4)
+        if (comptime lua.config.VECTOR_SIZE == 4)
             try std.testing.expectEqual(4.0, checked_vec[3]);
         L.pop(1);
     }
