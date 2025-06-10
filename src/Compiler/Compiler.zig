@@ -18,9 +18,17 @@ extern "c" fn zig_Luau_Compiler_compileLoad_ParseResult(
     *const Lexer.AstNameTable,
     *lua.State,
     [*c]const u8,
-    c_int,
     ?*c.lua_CompileOptions,
+    c_int,
     ?*anyopaque,
+) c_int;
+extern "c" fn zig_Luau_Compiler_compileLoad(
+    *lua.State,
+    [*c]const u8,
+    [*c]const u8,
+    usize,
+    ?*c.lua_CompileOptions,
+    c_int,
 ) c_int;
 extern "c" fn zig_Luau_Compiler_compile_free(*anyopaque) void;
 
@@ -62,16 +70,28 @@ pub fn compileParseResult(
     return try allocator.dupe(u8, bytes[0..size]);
 }
 
-pub fn loadCompileParseResult(
+pub fn compileLoadParseResult(
     L: *lua.State,
     moduleName: [:0]const u8,
-    env: i32,
     parseResult: *Parser.ParseResult,
     namesTable: *Lexer.AstNameTable,
     options: ?CompileOptions,
+    env: i32,
 ) error{Fail}!void {
     var opts = if (options) |o| o.toC() else null;
-    if (zig_Luau_Compiler_compileLoad_ParseResult(parseResult, namesTable, L, moduleName, env, if (opts) |*o| o else null, null) != 0)
+    if (zig_Luau_Compiler_compileLoad_ParseResult(parseResult, namesTable, L, moduleName, if (opts) |*o| o else null, env, null) != 0)
+        return error.Fail;
+}
+
+pub fn compileLoad(
+    L: *lua.State,
+    moduleName: [:0]const u8,
+    source: []const u8,
+    options: ?CompileOptions,
+    env: i32,
+) error{Fail}!void {
+    var opts = if (options) |o| o.toC() else null;
+    if (zig_Luau_Compiler_compileLoad(L, moduleName, source.ptr, source.len, if (opts) |*o| o else null, env) != 0)
         return error.Fail;
 }
 

@@ -67,8 +67,8 @@ ZIG_EXPORT int ZIG_LUAU_COMPILER(compileLoad_ParseResult)(
     const Luau::AstNameTable* names,
     lua_State* L,
     const char* moduleName,
-    int env,
     lua_CompileOptions* options,
+    int env,
     Luau::BytecodeEncoder* encoder = nullptr
 ) {
     Luau::CompileOptions opts;
@@ -105,6 +105,26 @@ ZIG_EXPORT int ZIG_LUAU_COMPILER(compileLoad_ParseResult)(
         std::string bytecode = Luau::BytecodeBuilder::getError(error);
         return luau_load(L, moduleName, bytecode.data(), bytecode.size(), env);
     }
+}
+
+ZIG_EXPORT int ZIG_LUAU_COMPILER(compileLoad)(
+    lua_State* L,
+    const char* moduleName,
+    const char* contents,
+    size_t len,
+    lua_CompileOptions* options,
+    int env
+) {
+    Luau::CompileOptions opts;
+
+    if (options)
+    {
+        static_assert(sizeof(lua_CompileOptions) == sizeof(Luau::CompileOptions), "C and C++ interface must match");
+        memcpy(static_cast<void*>(&opts), options, sizeof(opts));
+    }
+
+    std::string bytecode = Luau::compile(std::string(contents, len), opts);
+    return luau_load(L, moduleName, bytecode.data(), bytecode.size(), env);
 }
 
 ZIG_EXPORT void ZIG_LUAU_COMPILER(compile_free)(void *ptr)
