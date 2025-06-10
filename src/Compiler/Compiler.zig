@@ -1,10 +1,27 @@
 const std = @import("std");
+
+const lua = @import("../VM/lua.zig");
 const Parser = @import("../Ast/Parser.zig");
 const Lexer = @import("../Ast/Lexer.zig");
 
 const c = @import("c");
 
-extern "c" fn zig_Luau_Compiler_compile_ParseResult(*const Parser.ParseResult, *const Lexer.AstNameTable, *usize, ?*c.lua_CompileOptions, ?*anyopaque) ?[*]const u8;
+extern "c" fn zig_Luau_Compiler_compile_ParseResult(
+    *const Parser.ParseResult,
+    *const Lexer.AstNameTable,
+    *usize,
+    ?*c.lua_CompileOptions,
+    ?*anyopaque,
+) ?[*]const u8;
+extern "c" fn zig_Luau_Compiler_compileLoad_ParseResult(
+    *const Parser.ParseResult,
+    *const Lexer.AstNameTable,
+    *lua.State,
+    [*c]const u8,
+    c_int,
+    ?*c.lua_CompileOptions,
+    ?*anyopaque,
+) c_int;
 extern "c" fn zig_Luau_Compiler_compile_free(*anyopaque) void;
 
 pub const CompileOptions = struct {
@@ -43,6 +60,19 @@ pub fn compileParseResult(
     const bytes = zig_Luau_Compiler_compile_ParseResult(parseResult, namesTable, &size, if (opts) |*o| o else null, null) orelse return error.OutOfMemory;
     defer zig_Luau_Compiler_compile_free(@ptrCast(@constCast(bytes)));
     return try allocator.dupe(u8, bytes[0..size]);
+}
+
+pub fn loadCompileParseResult(
+    L: *lua.State,
+    moduleName: [:0]const u8,
+    env: i32,
+    parseResult: *Parser.ParseResult,
+    namesTable: *Lexer.AstNameTable,
+    options: ?CompileOptions,
+) error{Fail}!void {
+    var opts = if (options) |o| o.toC() else null;
+    if (zig_Luau_Compiler_compileLoad_ParseResult(parseResult, namesTable, L, moduleName, env, if (opts) |*o| o else null, null) != 0)
+        return error.Fail;
 }
 
 test compileParseResult {

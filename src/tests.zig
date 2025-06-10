@@ -1347,6 +1347,54 @@ test "Luau JIT/CodeGen" {
     _ = lua.pcall(0, 0, 0); // CALL main()
 }
 
+test "Luau JIT/CodeGen ParseResult" {
+    // Skip this test if the Luau NCG is not supported on machine
+    if (!luau.CodeGen.Supported())
+        return error.SkipZigTest;
+
+    var lua = try luau.init(&std.testing.allocator);
+    defer lua.deinit();
+    luau.CodeGen.Create(lua);
+
+    lua.openbase();
+
+    lua.Zsetglobalfn("test", struct {
+        fn inner(L: *State) !i32 {
+            L.pushboolean(L.Gisnative(@intCast(L.Loptinteger(1, 0))));
+            return 1;
+        }
+    }.inner);
+
+    const src =
+        \\
+        \\local function func(): ()
+        \\  assert(native == test())
+        \\  return
+        \\end
+        \\
+        \\pcall(func)
+        \\
+    ;
+
+    const luau_allocator = luau.Ast.Allocator.init();
+    defer luau_allocator.deinit();
+
+    const astNameTable = luau.Ast.Lexer.AstNameTable.init(luau_allocator);
+    defer astNameTable.deinit();
+
+    const parseResult = luau.Ast.Parser.parse(src, astNameTable, luau_allocator, .{});
+    defer parseResult.deinit();
+
+    try luau.Compiler.Compiler.loadCompileParseResult(lua, "module", 0, parseResult, astNameTable, .{
+        .debug_level = 2,
+        .optimization_level = 2,
+    });
+
+    luau.CodeGen.Compile(lua, -1);
+
+    _ = lua.pcall(0, 0, 0); // CALL main()
+}
+
 test "Readonly table" {
     if (!EXCEPTIONS_ENABLED)
         return error.SkipZigTest;

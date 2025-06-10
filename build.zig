@@ -60,18 +60,18 @@ pub fn build(b: *Build) !void {
 
     var FLAGS = std.ArrayList([]const u8).init(b.allocator);
 
-    FLAGS.append("-DLUA_USE_LONGJMP=" ++ if (!target.result.cpu.arch.isWasm()) "1" else "0") catch @panic("OOM");
-    FLAGS.append("-DLUA_API=extern\"C\"") catch @panic("OOM");
-    FLAGS.append("-DLUACODE_API=extern\"C\"") catch @panic("OOM");
-    FLAGS.append("-DLUACODEGEN_API=extern\"C\"") catch @panic("OOM");
+    try FLAGS.append("-DLUA_USE_LONGJMP=" ++ if (!target.result.cpu.arch.isWasm()) "1" else "0");
+    try FLAGS.append("-DLUA_API=extern\"C\"");
+    try FLAGS.append("-DLUACODE_API=extern\"C\"");
+    try FLAGS.append("-DLUACODEGEN_API=extern\"C\"");
     if (use_4_vector)
-        FLAGS.append("-DLUA_VECTOR_SIZE=4") catch @panic("OOM");
+        try FLAGS.append("-DLUA_VECTOR_SIZE=4");
     if (target.result.cpu.arch.isWasm()) {
         if (target.result.os.tag == .emscripten)
-            FLAGS.append("-fexceptions") catch @panic("OOM");
+            try FLAGS.append("-fexceptions");
         // else
-        // FLAGS.append("-fwasm-exceptions") catch @panic("OOM");
-        FLAGS.append(b.fmt("-DLUAU_WASM_ENV_NAME=\"{s}\"", .{wasm_env_name})) catch @panic("OOM");
+        // try FLAGS.append("-fwasm-exceptions");
+        try FLAGS.append(b.fmt("-DLUAU_WASM_ENV_NAME=\"{s}\"", .{wasm_env_name}));
     }
 
     const compile_flags = FLAGS.items;
@@ -583,10 +583,10 @@ const LUAU_Analysis_SOURCE_FILES = [_][]const u8{
     "Analysis/src/DataFlowGraph.cpp",
     "Analysis/src/DcrLogger.cpp",
     "Analysis/src/Def.cpp",
-    "Analysis/src/Differ.cpp",
     "Analysis/src/EmbeddedBuiltinDefinitions.cpp",
     "Analysis/src/EqSatSimplification.cpp",
     "Analysis/src/Error.cpp",
+    "Analysis/src/ExpectedTypeVisitor.cpp",
     "Analysis/src/FileResolver.cpp",
     "Analysis/src/FragmentAutocomplete.cpp",
     "Analysis/src/Frontend.cpp",
@@ -625,6 +625,7 @@ const LUAU_Analysis_SOURCE_FILES = [_][]const u8{
     "Analysis/src/TypeFunctionReductionGuesser.cpp",
     "Analysis/src/TypeFunctionRuntime.cpp",
     "Analysis/src/TypeFunctionRuntimeBuilder.cpp",
+    "Analysis/src/TypeIds.cpp",
     "Analysis/src/TypeInfer.cpp",
     "Analysis/src/TypeOrPack.cpp",
     "Analysis/src/TypePath.cpp",

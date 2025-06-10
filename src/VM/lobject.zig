@@ -307,12 +307,7 @@ pub const Udata = extern struct {
 
     metatable: ?*LuaTable,
 
-    data: extern union {
-        /// userdata is allocated right after the header
-        data: [*]u8,
-        /// ensures maximum alignment for data
-        dummy: lcommon.L_Umaxalign,
-    },
+    data: [*]align(8) u8,
 };
 
 pub const Buffer = extern struct {
@@ -320,12 +315,7 @@ pub const Buffer = extern struct {
 
     len: c_int,
 
-    data: extern union {
-        /// userdata is allocated right after the header
-        data: [*]u8,
-        /// ensures maximum alignment for data
-        dummy: lcommon.L_Umaxalign,
-    },
+    data: [*]align(8) u8,
 };
 
 ///

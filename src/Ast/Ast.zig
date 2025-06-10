@@ -86,7 +86,7 @@ pub const Node = extern struct {
         stat_type_function,
         stat_declare_global,
         stat_declare_function,
-        stat_declare_class,
+        stat_declare_extern_type,
         type_reference,
         type_table,
         type_function,
@@ -147,7 +147,7 @@ pub const Node = extern struct {
                 .stat_type_function => StatTypeFunction,
                 .stat_declare_global => StatDeclareGlobal,
                 .stat_declare_function => StatDeclareFunction,
-                .stat_declare_class => StatDeclareClass,
+                .stat_declare_extern_type => StatDeclareExternType,
                 .type_reference => TypeReference,
                 .type_table => TypeTable,
                 .type_function => TypeFunction,
@@ -213,7 +213,7 @@ pub const Node = extern struct {
                 .stat_type_function,
                 .stat_declare_global,
                 .stat_declare_function,
-                .stat_declare_class,
+                .stat_declare_extern_type,
                 .stat_error,
                 => Stat,
                 .type_reference,
@@ -640,7 +640,8 @@ pub const ExprFunction = extern struct {
     genericPacks: Array(*GenericTypePack),
     self: *Local,
     args: Array(*Local),
-    returnAnnotation: cpp_std.Optional(TypeList),
+    returnAnnotation_DEPCREATED: cpp_std.Optional(TypeList),
+    returnAnnotation: ?*TypePack,
     vararg: bool = false,
     varargLocation: Location,
     varargAnnotation: ?*TypePack,
@@ -664,8 +665,8 @@ pub const ExprFunction = extern struct {
             if (self.varargAnnotation) |node|
                 node.visit(visitor);
 
-            if (self.returnAnnotation.has)
-                Visitor.visitTypeList(visitor, self.returnAnnotation.value);
+            if (self.returnAnnotation) |annotation|
+                annotation.visit(visitor);
 
             self.body.visit(visitor);
         }
@@ -1412,7 +1413,8 @@ pub const StatDeclareFunction = extern struct {
     paramNames: Array(ArgumentName),
     vararg: bool = false,
     varargLocation: Location,
-    retTypes: TypeList,
+    retTypes: *TypePack,
+    retTypes_DEPRECATED: TypeList,
 
     pub const is = IsFn;
     pub const as = AsCastFn;
@@ -1423,7 +1425,7 @@ pub const StatDeclareFunction = extern struct {
     pub fn visit(self: *@This(), visitor: anytype) void {
         if (Visitor.visit(visitor, self)) {
             Visitor.visitTypeList(visitor, self.params);
-            Visitor.visitTypeList(visitor, self.retTypes);
+            self.retTypes.visit(visitor);
         }
     }
 
@@ -1444,7 +1446,7 @@ pub const StatDeclareFunction = extern struct {
     }
 };
 
-pub const DeclaredClassProp = extern struct {
+pub const DeclaredExternTypeProperty = extern struct {
     name: Name,
     nameLocation: Location,
     ty: *Type = undefined,
@@ -1478,7 +1480,7 @@ pub const TableIndexer = extern struct {
     accessLocation: cpp_std.Optional(Location),
 };
 
-pub const StatDeclareClass = extern struct {
+pub const StatDeclareExternType = extern struct {
     vtable: *const anyopaque,
 
     classIndex: Node.Kind,
@@ -1487,7 +1489,7 @@ pub const StatDeclareClass = extern struct {
 
     name: Name,
     superName: cpp_std.Optional(Name),
-    props: Array(DeclaredClassProp),
+    props: Array(DeclaredExternTypeProperty),
     indexer: *TableIndexer,
 
     pub const is = IsFn;
@@ -1605,7 +1607,8 @@ pub const TypeFunction = extern struct {
     genericPacks: Array(*GenericTypePack),
     argTypes: TypeList,
     argNames: Array(cpp_std.Optional(ArgumentName)),
-    returnTypes: TypeList,
+    returnTypes_DEPRECATED: TypeList,
+    returnTypes: *TypePack,
 
     pub const is = IsFn;
     pub const as = AsCastFn;
@@ -1616,7 +1619,7 @@ pub const TypeFunction = extern struct {
     pub fn visit(self: *@This(), visitor: anytype) void {
         if (Visitor.visit(visitor, self)) {
             Visitor.visitTypeList(visitor, self.argTypes);
-            Visitor.visitTypeList(visitor, self.returnTypes);
+            self.returnTypes.visit(visitor);
         }
     }
 

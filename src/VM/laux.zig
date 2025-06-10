@@ -67,6 +67,7 @@ pub fn Lwhere(L: *lua.State, level: i32) void {
             return;
         }
     }
+    L.rawcheckstack(1);
     L.pushstring("");
 }
 

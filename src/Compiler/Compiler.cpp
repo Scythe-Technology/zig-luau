@@ -62,6 +62,51 @@ ZIG_EXPORT const char* ZIG_LUAU_COMPILER(compile_ParseResult)(
     }
 }
 
+ZIG_EXPORT int ZIG_LUAU_COMPILER(compileLoad_ParseResult)(
+    const Luau::ParseResult* result,
+    const Luau::AstNameTable* names,
+    lua_State* L,
+    const char* moduleName,
+    int env,
+    lua_CompileOptions* options,
+    Luau::BytecodeEncoder* encoder = nullptr
+) {
+    Luau::CompileOptions opts;
+
+    if (options)
+    {
+        static_assert(sizeof(lua_CompileOptions) == sizeof(Luau::CompileOptions), "C and C++ interface must match");
+        memcpy(static_cast<void*>(&opts), options, sizeof(opts));
+    }
+
+    LUAU_TIMETRACE_SCOPE("compile", "Compiler");
+
+    if (!result->errors.empty())
+    {
+        // Users of this function expect only a single error message
+        const Luau::ParseError& parseError = result->errors.front();
+        std::string error = Luau::format(":%d: %s", parseError.getLocation().begin.line + 1, parseError.what());
+
+        std::string bytecode = Luau::BytecodeBuilder::getError(error);
+        return luau_load(L, moduleName, bytecode.data(), bytecode.size(), env);
+    }
+
+    try
+    {
+        Luau::BytecodeBuilder bcb(encoder);
+        Luau::compileOrThrow(bcb, *result, *names, opts);
+
+        std::string bytecode = bcb.getBytecode();
+        return luau_load(L, moduleName, bytecode.data(), bytecode.size(), env);
+    }
+    catch (Luau::CompileError& e)
+    {
+        std::string error = Luau::format(":%d: %s", e.getLocation().begin.line + 1, e.what());
+        std::string bytecode = Luau::BytecodeBuilder::getError(error);
+        return luau_load(L, moduleName, bytecode.data(), bytecode.size(), env);
+    }
+}
+
 ZIG_EXPORT void ZIG_LUAU_COMPILER(compile_free)(void *ptr)
 {
     free(ptr);
