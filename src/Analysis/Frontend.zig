@@ -53,7 +53,7 @@ extern "c" fn zig_Luau_Analysis_Frontend_checkQueuedModules(*Frontend, ?*anyopaq
 extern "c" fn zig_Luau_Analysis_Frontend_getCheckResult(*Frontend, [*c]const u8, usize, bool, bool, ?*anyopaque, *const CheckedResultFn) u8;
 extern "c" fn zig_Luau_Analysis_Frontend_dtor(*Frontend) void;
 
-const Frontend = opaque {
+pub const Frontend = opaque {
     pub fn registerBuiltinGlobals(self: *Frontend) void {
         zig_Luau_Analysis_Frontend_registerBuiltinGlobals(self);
     }
