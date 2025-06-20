@@ -135,7 +135,7 @@ fn validateobj(g: *const lstate.global_State, o: *lstate.GCObject) void {
     }
 }
 
-fn validategraylist(g: *const lstate.global_State, obj: *lstate.GCObject) void {
+fn validategraylist(g: *const lstate.global_State, obj: ?*lstate.GCObject) void {
     if (!lgc.keepinvariant(g))
         return;
 

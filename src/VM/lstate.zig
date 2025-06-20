@@ -210,11 +210,11 @@ pub const global_State = extern struct {
     gcstate: u8,
 
     /// list of gray objects
-    gray: *GCObject,
+    gray: ?*GCObject,
     /// list of objects to be traversed atomically
-    grayagain: *GCObject,
+    grayagain: ?*GCObject,
     /// list of weak tables (to be cleared)
-    weak: *GCObject,
+    weak: ?*GCObject,
 
     /// when totalbytes > GCthreshold, run GC step
     GCthreshold: usize,
