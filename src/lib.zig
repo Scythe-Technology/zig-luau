@@ -136,7 +136,7 @@ fn FValue(comptime T: type) type {
             }
         };
 
-        pub fn iter(self: *Self) Iterator {
+        pub fn iterator(self: *Self) Iterator {
             return .{
                 .state = self,
             };
@@ -165,8 +165,8 @@ export fn __deregister_frame(frame: *const u8) void {
     _ = frame;
 }
 
-pub const Flags = struct {
-    pub fn GetFlagList(comptime T: type) *FValue(if (T == i32) c_int else T) {
+pub const FFlags = struct {
+    pub fn Get(comptime T: type) *FValue(if (T == i32) c_int else T) {
         if (T == bool)
             return zig_luau_getFValueList_bool()
         else if (T == c_int or T == i32)
@@ -175,8 +175,8 @@ pub const Flags = struct {
             @compileError("Unsupported type");
     }
 
-    pub fn SetFlag(comptime T: type, name: []const u8, value: T) !void {
-        var iter = GetFlagList(T).iter();
+    pub fn SetByName(comptime T: type, name: []const u8, value: T) !void {
+        var iter = Get(T).iterator();
         while (iter.next()) |flag| {
             if (std.mem.eql(u8, std.mem.span(flag.name), name)) {
                 flag.value = value;
@@ -186,8 +186,8 @@ pub const Flags = struct {
         return error.UnknownFlag;
     }
 
-    pub fn GetFlag(comptime T: type, name: []const u8) ?*FValue(if (T == i32) c_int else T) {
-        var iter = GetFlagList(T).iter();
+    pub fn GetByName(comptime T: type, name: []const u8) ?*FValue(if (T == i32) c_int else T) {
+        var iter = Get(T).iterator();
         while (iter.next()) |flag| {
             if (std.mem.eql(u8, std.mem.span(flag.name), name))
                 return flag;

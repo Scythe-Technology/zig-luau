@@ -1587,34 +1587,34 @@ test "getfieldObject" {
 }
 
 test "FFlags" {
-    try expectError(error.UnknownFlag, luau.Flags.SetFlag(bool, "someunknownflag", true));
-    try expectError(error.UnknownFlag, luau.Flags.SetFlag(i32, "someunknownflag", 1));
-    try expectError(error.UnknownFlag, luau.Flags.SetFlag(c_int, "someunknownflag", 1));
+    try expectError(error.UnknownFlag, luau.FFlags.SetByName(bool, "someunknownflag", true));
+    try expectError(error.UnknownFlag, luau.FFlags.SetByName(i32, "someunknownflag", 1));
+    try expectError(error.UnknownFlag, luau.FFlags.SetByName(c_int, "someunknownflag", 1));
 
-    try expectEqual(null, luau.Flags.GetFlag(bool, "someunknownflag"));
-    try expectEqual(null, luau.Flags.GetFlag(i32, "someunknownflag"));
-    try expectEqual(null, luau.Flags.GetFlag(c_int, "someunknownflag"));
+    try expectEqual(null, luau.FFlags.GetByName(bool, "someunknownflag"));
+    try expectEqual(null, luau.FFlags.GetByName(i32, "someunknownflag"));
+    try expectEqual(null, luau.FFlags.GetByName(c_int, "someunknownflag"));
 
-    var bool_flags = luau.Flags.GetFlagList(bool).iter();
+    var bool_flags = luau.FFlags.Get(bool).iterator();
     while (bool_flags.next()) |flag| {
         const name: []const u8 = std.mem.span(flag.name);
         try expect(name.len > 0);
         const current = flag.value;
         flag.value = !current;
-        try expectEqual(!current, luau.Flags.GetFlag(bool, name).?.value);
+        try expectEqual(!current, luau.FFlags.GetByName(bool, name).?.value);
         flag.value = current;
-        try expectEqual(current, luau.Flags.GetFlag(bool, name).?.value);
+        try expectEqual(current, luau.FFlags.GetByName(bool, name).?.value);
     }
 
-    var int_flags = luau.Flags.GetFlagList(i32).iter();
+    var int_flags = luau.FFlags.Get(i32).iterator();
     while (int_flags.next()) |flag| {
         const name: []const u8 = std.mem.span(flag.name);
         try expect(name.len > 0);
         const current = flag.value;
         flag.value = current - 1;
-        try expectEqual(current - 1, luau.Flags.GetFlag(i32, name).?.value);
+        try expectEqual(current - 1, luau.FFlags.GetByName(i32, name).?.value);
         flag.value = current;
-        try expectEqual(current, luau.Flags.GetFlag(i32, name).?.value);
+        try expectEqual(current, luau.FFlags.GetByName(i32, name).?.value);
     }
 }
 
