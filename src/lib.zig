@@ -6,7 +6,10 @@ const build_config = @import("config");
 pub const codegen = @import("CodeGen/lcodegen.zig");
 
 pub const Analysis = if (build_config.buildAnalysis) struct {
+    pub const Frontend = @import("Analysis/Frontend.zig");
+    pub const FileResolver = @import("Analysis/FileResolver.zig");
     pub const AstJsonEncoder = @import("Analysis/AstJsonEncoder.zig");
+    pub const GenericConfigResolver = @import("Analysis/GenericConfigResolver.zig");
     test {
         inline for (@typeInfo(@This()).@"struct".decls) |decl|
             std.testing.refAllDecls(@field(@This(), decl.name));
@@ -108,18 +111,44 @@ const c_FlagGroup = extern struct {
     size: usize,
 };
 
+fn FValue(comptime T: type) type {
+    return extern struct {
+        const Self = @This();
+
+        value: T,
+        dynamic: bool,
+        name: [*c]const u8,
+        next: ?*Self,
+
+        pub const Iterator = struct {
+            state: *Self,
+            consumed: bool = false,
+
+            pub fn next(self: *Iterator) ?*Self {
+                const state = self.state;
+                if (!self.consumed) {
+                    self.consumed = true;
+                    return state;
+                }
+                const n = state.next orelse return null;
+                self.state = n;
+                return n;
+            }
+        };
+
+        pub fn iter(self: *Self) Iterator {
+            return .{
+                .state = self,
+            };
+        }
+    };
+}
+
 /// This function is defined in luau.cpp and must be called to define the assertion printer
 extern "c" fn zig_registerAssertionHandler() void;
 
-/// This function is defined in luau.cpp and ensures Zig uses the correct free when compiling luau code
-extern "c" fn zig_luau_freeflags(c_FlagGroup) void;
-
-extern "c" fn zig_luau_setflag_bool([*]const u8, usize, bool) bool;
-extern "c" fn zig_luau_setflag_int([*]const u8, usize, c_int) bool;
-extern "c" fn zig_luau_getflag_bool([*]const u8, usize, *bool) bool;
-extern "c" fn zig_luau_getflag_int([*]const u8, usize, *c_int) bool;
-
-extern "c" fn zig_luau_getflags() c_FlagGroup;
+extern "c" fn zig_luau_getFValueList_bool() *FValue(bool);
+extern "c" fn zig_luau_getFValueList_int() *FValue(c_int);
 
 // Internal API
 extern "c" fn zig_luau_luaD_checkstack(*anyopaque, c_int) void;
@@ -137,70 +166,33 @@ export fn __deregister_frame(frame: *const u8) void {
 }
 
 pub const Flags = struct {
-    allocator: std.mem.Allocator,
-    flags: []Flag,
-
-    pub const FlagType = enum {
-        boolean,
-        integer,
-    };
-
-    pub const Flag = struct {
-        name: []const u8,
-        type: FlagType,
-    };
-
-    pub fn setBoolean(name: []const u8, value: bool) !void {
-        if (!zig_luau_setflag_bool(name.ptr, name.len, value)) return error.UnknownFlag;
+    pub fn GetFlagList(comptime T: type) *FValue(if (T == i32) c_int else T) {
+        if (T == bool)
+            return zig_luau_getFValueList_bool()
+        else if (T == c_int or T == i32)
+            return zig_luau_getFValueList_int()
+        else
+            @compileError("Unsupported type");
     }
 
-    pub fn setInteger(name: []const u8, value: i32) !void {
-        if (!zig_luau_setflag_int(name.ptr, name.len, @intCast(value))) return error.UnknownFlag;
-    }
-
-    pub fn getBoolean(name: []const u8) !bool {
-        var value: bool = undefined;
-        if (!zig_luau_getflag_bool(name.ptr, name.len, &value)) return error.UnknownFlag;
-        return value;
-    }
-
-    pub fn getInteger(name: []const u8) !i32 {
-        var value: c_int = undefined;
-        if (!zig_luau_getflag_int(name.ptr, name.len, &value)) return error.UnknownFlag;
-        return @intCast(value);
-    }
-
-    pub fn getFlags(allocator: std.mem.Allocator) !Flags {
-        const cflags = zig_luau_getflags();
-        defer zig_luau_freeflags(cflags);
-
-        var list = std.ArrayList(Flag).init(allocator);
-        defer list.deinit();
-        errdefer for (list.items) |flag| allocator.free(flag.name);
-
-        const names = cflags.names;
-
-        for (0..cflags.size) |i| {
-            const name = try allocator.dupe(u8, std.mem.span(names[i]));
-            errdefer allocator.free(name);
-            const ttype: FlagType = @enumFromInt(cflags.types[i]);
-            try list.append(.{
-                .name = name,
-                .type = ttype,
-            });
+    pub fn SetFlag(comptime T: type, name: []const u8, value: T) !void {
+        var iter = GetFlagList(T).iter();
+        while (iter.next()) |flag| {
+            if (std.mem.eql(u8, std.mem.span(flag.name), name)) {
+                flag.value = value;
+                return;
+            }
         }
-
-        return .{
-            .allocator = allocator,
-            .flags = try list.toOwnedSlice(),
-        };
+        return error.UnknownFlag;
     }
 
-    pub fn deinit(self: Flags) void {
-        for (self.flags) |flag| {
-            self.allocator.free(flag.name);
+    pub fn GetFlag(comptime T: type, name: []const u8) ?*FValue(if (T == i32) c_int else T) {
+        var iter = GetFlagList(T).iter();
+        while (iter.next()) |flag| {
+            if (std.mem.eql(u8, std.mem.span(flag.name), name))
+                return flag;
         }
-        self.allocator.free(self.flags);
+        return null;
     }
 };
 
@@ -276,7 +268,7 @@ fn alloc(data: ?*anyopaque, ptr: ?*anyopaque, osize: usize, nsize: usize) callco
         return null;
     } else {
         // ptr is null, allocate a new block of memory
-        const new_ptr = allocator_ptr.alignedAlloc(u8, alignment, nsize) catch return null;
+        const new_ptr = allocator_ptr.alignedAlloc(u8, .fromByteUnits(alignment), nsize) catch return null;
         return new_ptr.ptr;
     }
 }

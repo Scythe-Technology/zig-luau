@@ -38,7 +38,7 @@ fn alloc(data: ?*anyopaque, ptr: ?*anyopaque, osize: usize, nsize: usize) callco
     } else if (nsize == 0) {
         return null;
     } else {
-        const new_ptr = testing.allocator.alignedAlloc(u8, alignment, nsize) catch return null;
+        const new_ptr = testing.allocator.alignedAlloc(u8, .fromByteUnits(alignment), nsize) catch return null;
         return new_ptr.ptr;
     }
 }
@@ -1586,33 +1586,35 @@ test "getfieldObject" {
     // } else @panic("Failed");
 }
 
-test "SetFlags" {
-    const allocator = testing.allocator;
-    try expectError(error.UnknownFlag, luau.Flags.setBoolean("someunknownflag", true));
-    try expectError(error.UnknownFlag, luau.Flags.setInteger("someunknownflag", 1));
+test "FFlags" {
+    try expectError(error.UnknownFlag, luau.Flags.SetFlag(bool, "someunknownflag", true));
+    try expectError(error.UnknownFlag, luau.Flags.SetFlag(i32, "someunknownflag", 1));
+    try expectError(error.UnknownFlag, luau.Flags.SetFlag(c_int, "someunknownflag", 1));
 
-    try expectError(error.UnknownFlag, luau.Flags.getBoolean("someunknownflag"));
-    try expectError(error.UnknownFlag, luau.Flags.getInteger("someunknownflag"));
+    try expectEqual(null, luau.Flags.GetFlag(bool, "someunknownflag"));
+    try expectEqual(null, luau.Flags.GetFlag(i32, "someunknownflag"));
+    try expectEqual(null, luau.Flags.GetFlag(c_int, "someunknownflag"));
 
-    const flags = try luau.Flags.getFlags(allocator);
-    defer flags.deinit();
-    for (flags.flags) |flag| {
-        try expect(flag.name.len > 0);
+    var bool_flags = luau.Flags.GetFlagList(bool).iter();
+    while (bool_flags.next()) |flag| {
+        const name: []const u8 = std.mem.span(flag.name);
+        try expect(name.len > 0);
+        const current = flag.value;
+        flag.value = !current;
+        try expectEqual(!current, luau.Flags.GetFlag(bool, name).?.value);
+        flag.value = current;
+        try expectEqual(current, luau.Flags.GetFlag(bool, name).?.value);
+    }
 
-        switch (flag.type) {
-            .boolean => {
-                const current = try luau.Flags.getBoolean(flag.name);
-                try luau.Flags.setBoolean(flag.name, !current);
-                try expectEqual(!current, try luau.Flags.getBoolean(flag.name));
-                try luau.Flags.setBoolean(flag.name, current);
-            },
-            .integer => {
-                const current = try luau.Flags.getInteger(flag.name);
-                try luau.Flags.setInteger(flag.name, current - 1);
-                try expectEqual(current - 1, try luau.Flags.getInteger(flag.name));
-                try luau.Flags.setInteger(flag.name, current);
-            },
-        }
+    var int_flags = luau.Flags.GetFlagList(i32).iter();
+    while (int_flags.next()) |flag| {
+        const name: []const u8 = std.mem.span(flag.name);
+        try expect(name.len > 0);
+        const current = flag.value;
+        flag.value = current - 1;
+        try expectEqual(current - 1, luau.Flags.GetFlag(i32, name).?.value);
+        flag.value = current;
+        try expectEqual(current, luau.Flags.GetFlag(i32, name).?.value);
     }
 }
 

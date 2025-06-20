@@ -496,6 +496,72 @@ fn buildVM(
     return lib;
 }
 
+fn buildRequire(
+    b: *Build,
+    target: Build.ResolvedTarget,
+    dependency: *Build.Dependency,
+    optimize: std.builtin.OptimizeMode,
+    version: std.SemanticVersion,
+    flags: []const []const u8,
+    libVM: *Step.Compile,
+    libRequireNavigator: *Step.Compile,
+) *Step.Compile {
+    const lib = b.addStaticLibrary(.{
+        .name = "Require",
+        .target = target,
+        .optimize = optimize,
+        .version = version,
+    });
+
+    linkIncludePath(lib, libVM);
+    linkIncludePath(lib, libRequireNavigator);
+
+    lib.linkLibCpp();
+
+    for (LUAU_Require_HEADERS_DIRS) |dir|
+        lib.addIncludePath(dependency.path(dir));
+
+    lib.addCSourceFiles(.{
+        .root = dependency.path(""),
+        .files = &LUAU_Require_SOURCE_FILES,
+        .flags = flags,
+    });
+
+    return lib;
+}
+
+fn buildRequireNavigator(
+    b: *Build,
+    target: Build.ResolvedTarget,
+    dependency: *Build.Dependency,
+    optimize: std.builtin.OptimizeMode,
+    version: std.SemanticVersion,
+    flags: []const []const u8,
+    libConfig: *Step.Compile,
+) *Step.Compile {
+    const lib = b.addStaticLibrary(.{
+        .name = "RequireNavigator",
+        .target = target,
+        .optimize = optimize,
+        .version = version,
+    });
+
+    linkIncludePath(lib, libConfig);
+
+    lib.linkLibCpp();
+
+    for (LUAU_RequireNavigator_HEADERS_DIRS) |dir|
+        lib.addIncludePath(dependency.path(dir));
+
+    lib.addCSourceFiles(.{
+        .root = dependency.path(""),
+        .files = &LUAU_RequireNavigator_SOURCE_FILES,
+        .flags = flags,
+    });
+
+    return lib;
+}
+
 /// Luau has diverged enough from Lua (C++, project structure, ...) that it is easier to separate the build logic
 fn buildLuau(
     b: *Build,
@@ -525,12 +591,22 @@ fn buildLuau(
 
     if (libAst) |mod| {
         lib.linkLibrary(mod);
-        lib.addCSourceFile(.{ .file = b.path("src/Ast/Ast.cpp"), .flags = flags });
+        lib.addCSourceFiles(.{ .flags = flags, .root = b.path("src/Ast/"), .files = &.{
+            "Allocator.cpp",
+            "Lexer.cpp",
+            "Parser.cpp",
+        } });
         linkIncludePath(lib, mod);
     }
     if (libAnalysis) |mod| {
         lib.linkLibrary(mod);
-        lib.addCSourceFile(.{ .file = b.path("src/Analysis/Analysis.cpp"), .flags = flags });
+        lib.addCSourceFiles(.{ .flags = flags, .root = b.path("src/Analysis/"), .files = &.{
+            "FileUtils.cpp",
+            "AstJsonEncoder.cpp",
+            "Frontend.cpp",
+            "FileResolver.cpp",
+            "GenericConfigResolver.cpp",
+        } });
         linkIncludePath(lib, mod);
     }
     if (libCodeGen) |mod| {
@@ -557,14 +633,6 @@ fn buildLuau(
     return lib;
 }
 
-const LUAU_Config_HEADERS_DIRS = [_][]const u8{
-    "Config/include/",
-};
-const LUAU_Config_SOURCE_FILES = [_][]const u8{
-    "Config/src/Config.cpp",
-    "Config/src/LinterConfig.cpp",
-};
-
 const LUAU_Analysis_HEADERS_DIRS = [_][]const u8{
     "Analysis/include/",
     "Analysis/src/",
@@ -575,6 +643,7 @@ const LUAU_Analysis_SOURCE_FILES = [_][]const u8{
     "Analysis/src/AstJsonEncoder.cpp",
     "Analysis/src/AstQuery.cpp",
     "Analysis/src/Autocomplete.cpp",
+    "Analysis/src/AutocompleteCore.cpp",
     "Analysis/src/BuiltinDefinitions.cpp",
     "Analysis/src/Clone.cpp",
     "Analysis/src/Constraint.cpp",
@@ -596,6 +665,7 @@ const LUAU_Analysis_SOURCE_FILES = [_][]const u8{
     "Analysis/src/Instantiation.cpp",
     "Analysis/src/Instantiation2.cpp",
     "Analysis/src/IostreamHelpers.cpp",
+    "Analysis/src/JsonEmitter.cpp",
     "Analysis/src/Linter.cpp",
     "Analysis/src/LValue.cpp",
     "Analysis/src/Module.cpp",
@@ -628,19 +698,12 @@ const LUAU_Analysis_SOURCE_FILES = [_][]const u8{
     "Analysis/src/TypeIds.cpp",
     "Analysis/src/TypeInfer.cpp",
     "Analysis/src/TypeOrPack.cpp",
+    "Analysis/src/TypePack.cpp",
     "Analysis/src/TypePath.cpp",
     "Analysis/src/TypeUtils.cpp",
     "Analysis/src/Unifiable.cpp",
     "Analysis/src/Unifier.cpp",
     "Analysis/src/Unifier2.cpp",
-};
-
-const LUAU_EqSat_HEADERS_DIRS = [_][]const u8{
-    "EqSat/include/",
-};
-const LUAU_EqSat_SOURCE_FILES = [_][]const u8{
-    "EqSat/src/Id.cpp",
-    "EqSat/src/UnionFind.cpp",
 };
 
 const LUAU_Ast_HEADERS_DIRS = [_][]const u8{
@@ -656,27 +719,6 @@ const LUAU_Ast_SOURCE_FILES = [_][]const u8{
     "Ast/src/Parser.cpp",
     "Ast/src/StringUtils.cpp",
     "Ast/src/TimeTrace.cpp",
-};
-
-const LUAU_Common_HEADERS_DIRS = [_][]const u8{
-    "Common/include/",
-};
-
-const LUAU_Compiler_HEADERS_DIRS = [_][]const u8{
-    "Compiler/include/",
-    "Compiler/src/",
-};
-const LUAU_Compiler_SOURCE_FILES = [_][]const u8{
-    "Compiler/src/BuiltinFolding.cpp",
-    "Compiler/src/Builtins.cpp",
-    "Compiler/src/BytecodeBuilder.cpp",
-    "Compiler/src/Compiler.cpp",
-    "Compiler/src/ConstantFolding.cpp",
-    "Compiler/src/CostModel.cpp",
-    "Compiler/src/TableShape.cpp",
-    "Compiler/src/Types.cpp",
-    "Compiler/src/ValueTracking.cpp",
-    "Compiler/src/lcode.cpp",
 };
 
 const LUAU_CodeGen_HEADERS_DIRS = [_][]const u8{
@@ -720,6 +762,61 @@ const LUAU_CodeGen_SOURCE_FILES = [_][]const u8{
     "CodeGen/src/BytecodeAnalysis.cpp",
     "CodeGen/src/BytecodeSummary.cpp",
     "CodeGen/src/SharedCodeAllocator.cpp",
+};
+
+const LUAU_Common_HEADERS_DIRS = [_][]const u8{
+    "Common/include/",
+};
+
+const LUAU_Compiler_HEADERS_DIRS = [_][]const u8{
+    "Compiler/include/",
+    "Compiler/src/",
+};
+const LUAU_Compiler_SOURCE_FILES = [_][]const u8{
+    "Compiler/src/BuiltinFolding.cpp",
+    "Compiler/src/Builtins.cpp",
+    "Compiler/src/BytecodeBuilder.cpp",
+    "Compiler/src/Compiler.cpp",
+    "Compiler/src/ConstantFolding.cpp",
+    "Compiler/src/CostModel.cpp",
+    "Compiler/src/TableShape.cpp",
+    "Compiler/src/Types.cpp",
+    "Compiler/src/ValueTracking.cpp",
+    "Compiler/src/lcode.cpp",
+};
+
+const LUAU_Config_HEADERS_DIRS = [_][]const u8{
+    "Config/include/",
+};
+const LUAU_Config_SOURCE_FILES = [_][]const u8{
+    "Config/src/Config.cpp",
+    "Config/src/LinterConfig.cpp",
+};
+
+const LUAU_EqSat_HEADERS_DIRS = [_][]const u8{
+    "EqSat/include/",
+};
+const LUAU_EqSat_SOURCE_FILES = [_][]const u8{
+    "EqSat/src/Id.cpp",
+    "EqSat/src/UnionFind.cpp",
+};
+
+const LUAU_Require_HEADERS_DIRS = [_][]const u8{
+    "Require/Runtime/include/",
+    "Require/Runtime/src/",
+};
+const LUAU_Require_SOURCE_FILES = [_][]const u8{
+    "Require/Runtime/src/Navigation.cpp",
+    "Require/Runtime/src/Require.cpp",
+    "Require/Runtime/src/RequireImpl.cpp",
+};
+
+const LUAU_RequireNavigator_HEADERS_DIRS = [_][]const u8{
+    "Require/Navigator/include/",
+};
+const LUAU_RequireNavigator_SOURCE_FILES = [_][]const u8{
+    "Require/Navigator/src/PathUtilities.cpp",
+    "Require/Navigator/src/RequireNavigator.cpp",
 };
 
 const LUAU_VM_HEADERS_DIRS = [_][]const u8{

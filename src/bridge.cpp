@@ -44,101 +44,14 @@ ZIG_EXPORT const char* ZIG_FN(string_c_str)(std::string *str)
     return str->c_str();
 }
 
-ZIG_EXPORT bool zig_luau_setflag_bool(const char *name, size_t nameLen, bool value)
+ZIG_EXPORT Luau::FValue<bool>* zig_luau_getFValueList_bool()
 {
-    std::string flagName(name, nameLen);
-    for (Luau::FValue<bool> *flag = Luau::FValue<bool>::list; flag; flag = flag->next)
-        if (flagName == flag->name)
-        {
-            flag->value = value;
-            return true;
-        }
-    return false;
+    return Luau::FValue<bool>::list;
 }
 
-ZIG_EXPORT bool zig_luau_setflag_int(const char *name, size_t nameLen, int value)
+ZIG_EXPORT Luau::FValue<int>* zig_luau_getFValueList_int()
 {
-    std::string flagName(name, nameLen);
-    for (Luau::FValue<int> *flag = Luau::FValue<int>::list; flag; flag = flag->next)
-        if (flagName == flag->name)
-        {
-            flag->value = value;
-            return true;
-        }
-    return false;
-}
-
-ZIG_EXPORT bool zig_luau_getflag_bool(const char *name, size_t nameLen, bool *value)
-{
-    std::string flagName(name, nameLen);
-    for (Luau::FValue<bool> *flag = Luau::FValue<bool>::list; flag; flag = flag->next)
-        if (flagName == flag->name)
-        {
-            *value = flag->value;
-            return true;
-        }
-    return false;
-}
-
-ZIG_EXPORT bool zig_luau_getflag_int(const char *name, size_t nameLen, int *value)
-{
-    std::string flagName(name, nameLen);
-    for (Luau::FValue<int> *flag = Luau::FValue<int>::list; flag; flag = flag->next)
-        if (flagName == flag->name)
-        {
-            *value = flag->value;
-            return true;
-        }
-    return false;
-}
-
-ZIG_EXPORT struct FlagGroup
-{
-    const char **names;
-    int *types;
-    size_t size;
-};
-
-ZIG_EXPORT FlagGroup zig_luau_getflags()
-{
-    std::vector<std::string> names_list;
-    std::vector<int> types_list;
-
-    for (Luau::FValue<bool> *flag = Luau::FValue<bool>::list; flag; flag = flag->next)
-    {
-        names_list.push_back(flag->name);
-        types_list.push_back(0);
-    }
-    for (Luau::FValue<int> *flag = Luau::FValue<int>::list; flag; flag = flag->next)
-    {
-        names_list.push_back(flag->name);
-        types_list.push_back(1);
-    }
-
-    size_t size = names_list.size();
-
-    const char **names = new const char *[size];
-    int *types = new int[size];
-
-    int i = 0;
-
-    for (size_t i = 0; i < size; ++i)
-    {
-        names[i] = strdup(names_list[i].c_str());
-        types[i] = types_list[i];
-    }
-
-    return {names, types, size};
-}
-
-ZIG_EXPORT void zig_luau_freeflags(FlagGroup group)
-{
-    for (size_t i = 0; i < group.size; i++)
-    {
-        free((void *)group.names[i]);
-    }
-    delete[] group.names;
-    delete[] group.types;
+    return Luau::FValue<int>::list;
 }
 
 // Internal API

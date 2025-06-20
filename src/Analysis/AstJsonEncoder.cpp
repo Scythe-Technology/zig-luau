@@ -1,6 +1,5 @@
 #include <bridge.h>
 
-#include "Luau/Ast.h"
 #include "Luau/AstJsonEncoder.h"
 
 #define ZIG_LUAU_ANALYSIS(name) ZIG_FN(Luau_Analysis_##name)
