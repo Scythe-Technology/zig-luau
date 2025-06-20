@@ -268,7 +268,7 @@ fn alloc(data: ?*anyopaque, ptr: ?*anyopaque, osize: usize, nsize: usize) callco
         return null;
     } else {
         // ptr is null, allocate a new block of memory
-        const new_ptr = allocator_ptr.alignedAlloc(u8, .fromByteUnits(alignment), nsize) catch return null;
+        const new_ptr = allocator_ptr.alignedAlloc(u8, alignment, nsize) catch return null;
         return new_ptr.ptr;
     }
 }
