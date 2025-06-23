@@ -941,7 +941,7 @@ test "compile and run bytecode" {
     defer testing.allocator.free(bc1);
 
     const options = luau.CompileOptions{
-        .mutable_globals = &[_:null]?[*:0]const u8{ "Foo", "Bar" },
+        .mutableGlobals = &[_:null]?[*:0]const u8{ "Foo", "Bar" },
     };
     const bc2 = try luau.compile(testing.allocator, src2, options);
     defer testing.allocator.free(bc2);
@@ -1029,7 +1029,7 @@ test "debug stacktrace luau" {
     ;
 
     const bc = try luau.compile(testing.allocator, src, .{
-        .debug_level = 2,
+        .debugLevel = 2,
     });
     defer testing.allocator.free(bc);
 
@@ -1089,7 +1089,7 @@ test "buffers" {
     ;
 
     const bc = try luau.compile(testing.allocator, src, .{
-        .debug_level = 2,
+        .debugLevel = 2,
     });
     defer testing.allocator.free(bc);
 
@@ -1162,10 +1162,10 @@ test "Set Api" {
     ;
 
     const bc = try luau.compile(testing.allocator, src, .{
-        .debug_level = 2,
-        .optimization_level = 0,
-        .vector_ctor = "vector",
-        .vector_type = "vector",
+        .debugLevel = 2,
+        .optimizationLevel = 0,
+        .vectorCtor = "vector",
+        .vectorType = "vector",
     });
     defer testing.allocator.free(bc);
 
@@ -1269,10 +1269,10 @@ test "Vectors" {
     ;
 
     const bc = try luau.compile(testing.allocator, src, .{
-        .debug_level = 2,
-        .optimization_level = 0,
-        .vector_ctor = "vector",
-        .vector_type = "vector",
+        .debugLevel = 2,
+        .optimizationLevel = 0,
+        .vectorCtor = "vector",
+        .vectorType = "vector",
     });
     defer testing.allocator.free(bc);
 
@@ -1335,8 +1335,8 @@ test "Luau JIT/CodeGen" {
         \\
     ;
     const bc = try luau.compile(testing.allocator, src, .{
-        .debug_level = 2,
-        .optimization_level = 2,
+        .debugLevel = 2,
+        .optimizationLevel = 2,
     });
     defer testing.allocator.free(bc);
 
@@ -1377,8 +1377,8 @@ test "Luau JIT/CodeGen compileLoad" {
     ;
 
     try luau.Compiler.Compiler.compileLoad(lua, "module", src, .{
-        .debug_level = 2,
-        .optimization_level = 2,
+        .debugLevel = 2,
+        .optimizationLevel = 2,
     }, 0);
 
     luau.CodeGen.Compile(lua, -1);
@@ -1425,8 +1425,8 @@ test "Luau JIT/CodeGen ParseResult" {
     defer parseResult.deinit();
 
     try luau.Compiler.Compiler.compileLoadParseResult(lua, "module", parseResult, astNameTable, .{
-        .debug_level = 2,
-        .optimization_level = 2,
+        .debugLevel = 2,
+        .optimizationLevel = 2,
     }, 0);
 
     luau.CodeGen.Compile(lua, -1);
@@ -1449,8 +1449,8 @@ test "Readonly table" {
         \\List[1] = "test"
     ;
     const bc = try luau.compile(testing.allocator, src, .{
-        .debug_level = 2,
-        .optimization_level = 2,
+        .debugLevel = 2,
+        .optimizationLevel = 2,
     });
     defer testing.allocator.free(bc);
 
@@ -1632,8 +1632,8 @@ test "State getInfo" {
         \\MyFunction()
     ;
     const bc = try luau.compile(testing.allocator, src, .{
-        .debug_level = 2,
-        .optimization_level = 2,
+        .debugLevel = 2,
+        .optimizationLevel = 2,
     });
     defer testing.allocator.free(bc);
 
@@ -1668,8 +1668,8 @@ test "yielding error" {
             \\assert(res == "error")
         ;
         const bc = try luau.compile(testing.allocator, src, .{
-            .debug_level = 2,
-            .optimization_level = 2,
+            .debugLevel = 2,
+            .optimizationLevel = 2,
         });
         defer testing.allocator.free(bc);
 
@@ -1700,8 +1700,8 @@ test "yielding error" {
             \\assert(res == "fmt error 10")
         ;
         const bc = try luau.compile(testing.allocator, src, .{
-            .debug_level = 2,
-            .optimization_level = 2,
+            .debugLevel = 2,
+            .optimizationLevel = 2,
         });
         defer testing.allocator.free(bc);
 

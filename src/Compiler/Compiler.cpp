@@ -67,7 +67,7 @@ ZIG_EXPORT int ZIG_LUAU_COMPILER(compileLoad_ParseResult)(
     const Luau::AstNameTable* names,
     lua_State* L,
     const char* moduleName,
-    lua_CompileOptions* options,
+    const lua_CompileOptions* options,
     int env,
     Luau::BytecodeEncoder* encoder = nullptr
 ) {
@@ -112,7 +112,7 @@ ZIG_EXPORT int ZIG_LUAU_COMPILER(compileLoad)(
     const char* moduleName,
     const char* contents,
     size_t len,
-    lua_CompileOptions* options,
+    const lua_CompileOptions* options,
     int env
 ) {
     Luau::CompileOptions opts;

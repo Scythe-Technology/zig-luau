@@ -640,7 +640,6 @@ pub const ExprFunction = extern struct {
     genericPacks: Array(*GenericTypePack),
     self: *Local,
     args: Array(*Local),
-    returnAnnotation_DEPCREATED: cpp_std.Optional(TypeList),
     returnAnnotation: ?*TypePack,
     vararg: bool = false,
     varargLocation: Location,
@@ -1414,7 +1413,6 @@ pub const StatDeclareFunction = extern struct {
     vararg: bool = false,
     varargLocation: Location,
     retTypes: *TypePack,
-    retTypes_DEPRECATED: TypeList,
 
     pub const is = IsFn;
     pub const as = AsCastFn;
@@ -1607,7 +1605,6 @@ pub const TypeFunction = extern struct {
     genericPacks: Array(*GenericTypePack),
     argTypes: TypeList,
     argNames: Array(cpp_std.Optional(ArgumentName)),
-    returnTypes_DEPRECATED: TypeList,
     returnTypes: *TypePack,
 
     pub const is = IsFn;
