@@ -38,7 +38,7 @@ fn alloc(data: ?*anyopaque, ptr: ?*anyopaque, osize: usize, nsize: usize) callco
     } else if (nsize == 0) {
         return null;
     } else {
-        const new_ptr = testing.allocator.alignedAlloc(u8, .fromByteUnits(alignment), nsize) catch return null;
+        const new_ptr = testing.allocator.alignedAlloc(u8, alignment, nsize) catch return null;
         return new_ptr.ptr;
     }
 }
