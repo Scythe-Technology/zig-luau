@@ -102,11 +102,11 @@ pub inline fn breakpoint(L: *lua.State, funcindex: i32, line: i32, enabled: bool
 pub fn getcoverage(
     L: *lua.State,
     comptime T: type,
-    funcindex: i32,
     context: *T,
-    callback: *const fn (
+    funcindex: i32,
+    comptime callback: *const fn (
         ctx: *T,
-        func: [:0]const u8,
+        func: ?[:0]const u8,
         line: i32,
         depth: i32,
         hits: []const i32,
@@ -115,15 +115,15 @@ pub fn getcoverage(
     c.lua_getcoverage(@ptrCast(L), funcindex, context, struct {
         fn inner(
             ctx: ?*anyopaque,
-            func: [*]const u8,
+            func: [*c]const u8,
             line: c_int,
             depth: c_int,
             hits: [*c]const c_int,
             size: usize,
         ) callconv(.C) void {
             @call(.always_inline, callback, .{
-                @as(*T, @ptrCast(ctx.?)),
-                std.mem.span(func),
+                @as(*T, @ptrCast(@alignCast(ctx.?))),
+                if (func != null) std.mem.span(func) else null,
                 line,
                 depth,
                 hits[0..size],

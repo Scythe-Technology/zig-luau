@@ -592,7 +592,7 @@ pub const lua_State = extern struct {
     pub const Gisnative = ldebug.Gisnative;
     pub const singlestep = ldebug.singlestep;
     pub const breakpoint = ldebug.breakpoint;
-    pub const coverage = ldebug.coverage;
+    pub const getcoverage = ldebug.getcoverage;
     pub const debugtrace = ldebug.debugtrace;
 
     // linit
