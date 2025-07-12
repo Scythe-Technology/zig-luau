@@ -1,30 +1,40 @@
 const c = @import("c");
 const std = @import("std");
 
+const lua = @import("lua.zig");
+
+const lstring = @import("lstring.zig");
 const lgc = @import("lgc.zig");
 const ltm = @import("ltm.zig");
-const lua = @import("lua.zig");
+const ldo = @import("ldo.zig");
+const lvm = @import("lvm.zig");
+const ltable = @import("ltable.zig");
 const lobject = @import("lobject.zig");
 const lvmutils = @import("lvmutils.zig");
 
 const State = lua.State;
 
-pub fn check(L: *State, cond: bool) void {
+pub fn api_check(L: *State, cond: bool) void {
     _ = L;
     std.debug.assert(cond);
 }
 
-pub inline fn incr_top(L: *State) void {
-    check(L, @intFromPtr(L.top) <= @intFromPtr(L.stack_last));
+pub inline fn api_checknelems(L: *State, n: u32) void {
+    api_check(L, n <= L.top.sub(L.base));
+}
+
+pub inline fn api_checkvalidindex(L: *State, obj: *const lobject.TValue) void {
+    api_check(L, obj != lobject.Onilobject);
+}
+
+pub inline fn api_incr_top(L: *State) void {
+    api_check(L, @intFromPtr(L.top) <= @intFromPtr(L.stack_last));
     L.top = L.top.add_num(1);
 }
 
-pub inline fn checknelems(L: *State, n: u32) void {
-    check(L, n <= @intFromPtr(L.top) - @intFromPtr(L.base));
-}
-
-pub inline fn checkvalidindex(L: *State, obj: *const lobject.TValue) void {
-    check(L, obj != lobject.Onilobject);
+pub inline fn updateatom(L: *State, ts: *lobject.TString) void {
+    if (ts.atom == lstring.ATOM_UNDEF)
+        ts.atom = if (L.global.cb.useratom) |useratom| useratom(@ptrCast(@alignCast(&ts.data)), @intCast(ts.len)) else -1;
 }
 
 pub fn getcurrenv(L: *lua.State) *lobject.LuaTable {
@@ -35,7 +45,7 @@ pub fn getcurrenv(L: *lua.State) *lobject.LuaTable {
 }
 
 pub noinline fn pseudo2addr(L: *State, idx: i32) lobject.StkId {
-    check(L, lua.ispseudo(idx));
+    api_check(L, lua.ispseudo(idx));
     switch (idx) {
         lua.REGISTRYINDEX => return L.registry(),
         lua.ENVIRONINDEX => {
@@ -62,13 +72,13 @@ pub noinline fn pseudo2addr(L: *State, idx: i32) lobject.StkId {
 pub inline fn index2addr(L: *State, idx: i32) lobject.StkId {
     if (idx > 0) {
         const o: usize = @intFromPtr(L.base.add_num(idx - 1));
-        check(L, idx <= L.ci.?.top.sub(L.base));
+        api_check(L, idx <= L.ci.?.top.sub(L.base));
         if (o >= @intFromPtr(L.top))
             return @constCast(lobject.Onilobject)
         else
             return @ptrFromInt(o);
     } else if (idx > lua.REGISTRYINDEX) {
-        check(L, idx != 0 and -idx <= L.top.sub(L.base));
+        api_check(L, idx != 0 and -idx <= L.top.sub(L.base));
         return L.top.add_num(idx);
     } else {
         return pseudo2addr(L, idx);
@@ -82,22 +92,28 @@ pub fn Atoobject(L: *lua.State, idx: i32) ?*const lobject.TValue {
 
 pub fn Apushobject(L: *lua.State, o: *const lobject.TValue) void {
     L.top.setobj(L, o);
-    incr_top(L);
+    api_incr_top(L);
 }
 
-pub inline fn checkstack(L: *lua.State, size: i32) bool {
-    return c.lua_checkstack(@ptrCast(L), size) != 0;
+pub fn checkstack(L: *lua.State, size: usize) !bool {
+    if (size > lua.config.I_MAXCSTACK or (L.top.sub(L.base) + size) > lua.config.I_MAXCSTACK)
+        return false
+    else {
+        try @call(.always_inline, rawcheckstack, .{ L, size });
+        return true;
+    }
 }
-pub inline fn rawcheckstack(L: *lua.State, size: i32) void {
-    c.lua_rawcheckstack(@ptrCast(L), size);
+pub fn rawcheckstack(L: *lua.State, size: usize) !void {
+    try ldo.Dcheckstack(L, size);
+    ldo.expandstacklimit(L, L.top.add_num(size));
 }
 
 pub fn xmove(from: *lua.State, to: *lua.State, n: u32) void {
     if (from == to)
         return;
-    checknelems(from, n);
-    check(from, from.global == to.global);
-    check(from, to.ci.?.top.sub(to.top) >= n);
+    api_checknelems(from, n);
+    api_check(from, from.global == to.global);
+    api_check(from, to.ci.?.top.sub(to.top) >= n);
     lgc.Cthreadbarrier(to);
 
     const ttop = to.top;
@@ -110,10 +126,10 @@ pub fn xmove(from: *lua.State, to: *lua.State, n: u32) void {
 }
 
 pub fn xpush(from: *lua.State, to: *lua.State, idx: i32) void {
-    check(from, from.global == to.global);
+    api_check(from, from.global == to.global);
     lgc.Cthreadbarrier(to);
     to.top.setobj(to, index2addr(from, idx));
-    incr_top(to);
+    api_incr_top(to);
 }
 
 pub inline fn newthread(L: *lua.State) *lua.State {
@@ -129,7 +145,7 @@ pub fn mainthread(L: *lua.State) *lua.State {
 //
 
 pub fn absindex(L: *lua.State, idx: i32) i32 {
-    check(L, (idx > 0 and idx <= L.top.sub(L.base)) or (idx < 0 and -idx <= L.top.sub(L.base)) or lua.ispseudo(idx));
+    api_check(L, (idx > 0 and idx <= L.top.sub(L.base)) or (idx < 0 and -idx <= L.top.sub(L.base)) or lua.ispseudo(idx));
     return if (idx > 0 or lua.ispseudo(idx))
         idx
     else
@@ -142,13 +158,13 @@ pub fn gettop(L: *lua.State) usize {
 
 pub fn settop(L: *lua.State, idx: i32) void {
     if (idx >= 0) {
-        check(L, idx <= L.stack_last.sub(L.base));
+        api_check(L, idx <= L.stack_last.sub(L.base));
         const t = L.base.add_num(idx);
         while (@intFromPtr(L.top) < @intFromPtr(t)) : (L.top = L.top.add_num(1))
             L.top.setnilvalue();
         L.top = t;
     } else {
-        check(L, -(idx + 1) <= L.top.sub(L.base));
+        api_check(L, -(idx + 1) <= L.top.sub(L.base));
         L.top = L.top.add_num(idx + 1); // `subtract' index (index is negative)
     }
 }
@@ -158,7 +174,7 @@ pub inline fn pop(L: *lua.State, n: i32) void {
 
 pub fn remove(L: *lua.State, idx: i32) void {
     var p = index2addr(L, idx);
-    checkvalidindex(L, p);
+    api_checkvalidindex(L, p);
     p = p.add_num(1);
     while (@intFromPtr(p) < @intFromPtr(L.top)) : (p = p.add_num(1)) {
         p.sub_num(1).setobj(L, p);
@@ -169,7 +185,7 @@ pub fn remove(L: *lua.State, idx: i32) void {
 pub fn insert(L: *lua.State, idx: i32) void {
     lgc.Cthreadbarrier(L);
     const p = index2addr(L, idx);
-    checkvalidindex(L, p);
+    api_checkvalidindex(L, p);
     var q = L.top;
     while (@intFromPtr(q) > @intFromPtr(p)) {
         const n = q.sub_num(1);
@@ -179,15 +195,37 @@ pub fn insert(L: *lua.State, idx: i32) void {
     p.setobj(L, L.top);
 }
 
-pub inline fn replace(L: *lua.State, idx: i32) void {
-    c.lua_replace(@ptrCast(L), idx);
+pub fn replace(L: *lua.State, idx: i32) void {
+    api_checknelems(L, 1);
+    lgc.Cthreadbarrier(L);
+    const o = index2addr(L, idx);
+    api_checkvalidindex(L, o);
+    switch (idx) {
+        lua.ENVIRONINDEX => {
+            api_check(L, L.ci != L.base_ci);
+            const func = L.curr_func();
+            api_check(L, L.top.sub_num(1).ttistable());
+            func.env = L.top.sub_num(1).hvalue();
+            lgc.Cbarrier(L, @ptrCast(@alignCast(func)), L.top.sub_num(1));
+        },
+        lua.GLOBALSINDEX => {
+            api_check(L, L.top.sub_num(1).ttistable());
+            L.gt = L.top.sub_num(1).hvalue();
+        },
+        else => {
+            o.setobj(L, L.top.sub_num(1));
+            if (idx < lua.GLOBALSINDEX) // function upvalue?
+                lgc.Cbarrier(L, @ptrCast(@alignCast(L.curr_func())), L.top.sub_num(1));
+        },
+    }
+    L.top = L.top.sub_num(1);
 }
 
 pub fn pushvalue(L: *lua.State, idx: i32) void {
     lgc.Cthreadbarrier(L);
     const o = index2addr(L, idx);
     L.top.setobj(L, o);
-    incr_top(L);
+    api_incr_top(L);
 }
 
 //
@@ -271,6 +309,9 @@ pub fn rawequal(L: *lua.State, index1: i32, index2: i32) bool {
 
 pub inline fn equal(L: *lua.State, index1: i32, index2: i32) bool {
     return c.lua_equal(@ptrCast(L), index1, index2) != 0;
+    // const o1 = index2addr(L, index1);
+    // const o2 = index2addr(L, index2);
+    // return if (o1 == lobject.Onilobject or o2 == lobject.Onilobject) false else lvm.equalobj(L, o1, o2);
 }
 
 pub inline fn lessthan(L: *lua.State, index1: i32, index2: i32) bool {
@@ -318,18 +359,44 @@ pub fn toboolean(L: *lua.State, idx: i32) bool {
     return !o.l_isfalse();
 }
 
-pub inline fn tolstring(L: *lua.State, idx: i32) ?[:0]const u8 {
-    var len: usize = undefined;
-    if (c.lua_tolstring(@ptrCast(L), idx, &len)) |str|
-        return str[0..len :0];
-    return null;
+pub fn tolstring(L: *lua.State, idx: i32) ?[:0]const u8 {
+    var o = index2addr(L, idx);
+    if (!o.ttisstring()) {
+        lgc.Cthreadbarrier(L);
+        if (!lvmutils.Vtostring(L, o))
+            return null; // conversion failed?
+        lgc.CcheckGC(L) catch return null;
+        o = index2addr(L, idx);
+    }
+    return o.tsvalue().toSlice();
 }
 pub inline fn tostring(L: *lua.State, idx: i32) ?[:0]const u8 {
     return tolstring(L, idx);
 }
 
-pub inline fn namecallatom(L: *lua.State, atom: ?[*c]c_int) [*c]const u8 {
-    return c.lua_namecallatom(@ptrCast(L), atom);
+pub fn tolstringatom(L: *lua.State, idx: i32, atom: ?*i16) ?[:0]const u8 {
+    const o = index2addr(L, idx);
+    if (!o.ttisstring())
+        return null;
+    const s = o.tsvalue();
+    if (atom) |a| {
+        updateatom(L, s);
+        a.* = s.atom;
+    }
+    return s.toSlice();
+}
+
+pub inline fn tostringatom(L: *lua.State, idx: i32, atom: ?*i16) ?[:0]const u8 {
+    return tolstringatom(L, idx, atom);
+}
+
+pub fn namecallatom(L: *lua.State, atom: ?*i16) ?[:0]const u8 {
+    const s = L.namecall orelse return null;
+    if (atom) |a| {
+        updateatom(L, s);
+        a.* = s.atom;
+    }
+    return s.toSlice();
 }
 
 pub fn namecallstr(L: *lua.State) ?[]const u8 {
@@ -347,8 +414,15 @@ pub fn tovector(L: *lua.State, idx: i32) ?[]const f32 {
         o.vvalue();
 }
 
-pub inline fn objlen(L: *lua.State, idx: i32) usize {
-    return @intCast(c.lua_objlen(@ptrCast(L), idx));
+pub fn objlen(L: *lua.State, idx: i32) usize {
+    const o = index2addr(L, idx);
+    switch (o.ttype()) {
+        @intFromEnum(lua.Type.String) => return @intCast(o.tsvalue().len),
+        @intFromEnum(lua.Type.Userdata) => return @intCast(o.uvalue().len),
+        @intFromEnum(lua.Type.Buffer) => return @intCast(o.bufvalue().len),
+        @intFromEnum(lua.Type.Table) => return ltable.Hgetn(o.hvalue()),
+        else => return 0,
+    }
 }
 pub inline fn strlen(L: *lua.State, idx: i32) usize {
     return objlen(L, idx);
@@ -445,42 +519,47 @@ pub fn topointer(L: *lua.State, idx: i32) ?*const anyopaque {
 //
 pub fn pushnil(L: *lua.State) void {
     L.top.setnilvalue();
-    incr_top(L);
+    api_incr_top(L);
 }
 
 pub fn pushnumber(L: *lua.State, n: f64) void {
     L.top.setnvalue(n);
-    incr_top(L);
+    api_incr_top(L);
 }
 
 pub fn pushinteger(L: *lua.State, n: i32) void {
     L.top.setnvalue(@floatFromInt(n));
-    incr_top(L);
+    api_incr_top(L);
 }
 
 pub fn pushunsigned(L: *lua.State, n: u32) void {
     L.top.setnvalue(@floatFromInt(n));
-    incr_top(L);
+    api_incr_top(L);
 }
 
 pub fn pushvector(L: *lua.State, x: f32, y: f32, z: f32, w: ?f32) void {
     L.top.setvvalue(x, y, z, w);
-    incr_top(L);
+    api_incr_top(L);
 }
 
-pub inline fn pushlstring(L: *lua.State, s: []const u8) void {
-    c.lua_pushlstring(@ptrCast(L), s.ptr, s.len);
+pub fn pushlstring(L: *lua.State, s: []const u8) !void {
+    try lgc.CcheckGC(L);
+    lgc.Cthreadbarrier(L);
+    L.top.setsvalue(L, try lstring.Snewlstr(L, s));
+    api_incr_top(L);
 }
 
-pub inline fn pushstring(L: *lua.State, str: ?[:0]const u8) void {
-    c.lua_pushstring(@ptrCast(L), if (str) |s| s.ptr else null);
+pub inline fn pushstring(L: *lua.State, str: ?[]const u8) !void {
+    if (str) |s| {
+        try pushlstring(L, s);
+    } else pushnil(L);
 }
 
-pub fn pushvfstring(L: *lua.State, comptime fmt: []const u8, args: anytype) void {
-    lobject.Opushvfstring(L, fmt, args);
+pub fn pushvfstring(L: *lua.State, comptime fmt: []const u8, args: anytype) !void {
+    try lobject.Opushvfstring(L, fmt, args);
 }
-pub inline fn pushfstring(L: *lua.State, comptime fmt: []const u8, args: anytype) void {
-    pushvfstring(L, fmt, args);
+pub inline fn pushfstring(L: *lua.State, comptime fmt: []const u8, args: anytype) !void {
+    try pushvfstring(L, fmt, args);
 }
 
 pub inline fn pushcclosurek(
@@ -501,13 +580,13 @@ pub inline fn pushcclosure(L: *lua.State, f: lua.CFunction, debugname: [:0]const
 
 pub fn pushboolean(L: *lua.State, b: bool) void {
     L.top.setbvalue(b);
-    incr_top(L);
+    api_incr_top(L);
 }
 
 pub fn pushlightuserdatatagged(L: *lua.State, p: ?*anyopaque, tag: u32) void {
-    check(L, tag < lua.config.LUTAG_LIMIT);
+    api_check(L, tag < lua.config.LUTAG_LIMIT);
     L.top.setpvalue(p, tag);
-    incr_top(L);
+    api_incr_top(L);
 }
 pub inline fn pushlightuserdata(L: *lua.State, p: ?*anyopaque) void {
     pushlightuserdatatagged(L, p, 0);
@@ -516,7 +595,7 @@ pub inline fn pushlightuserdata(L: *lua.State, p: ?*anyopaque) void {
 pub fn pushthread(L: *lua.State) bool {
     lgc.Cthreadbarrier(L);
     L.top.setthvalue(L, L);
-    incr_top(L);
+    api_incr_top(L);
     return L.global.mainthread == L;
 }
 
@@ -535,8 +614,18 @@ pub inline fn getglobal(L: *lua.State, k: [:0]const u8) lua.Type {
     return getfield(L, lua.GLOBALSINDEX, k);
 }
 
-pub inline fn rawgetfield(L: *lua.State, idx: i32, k: [:0]const u8) lua.Type {
-    return @enumFromInt(c.lua_rawgetfield(@ptrCast(L), idx, k.ptr));
+pub fn rawgetfield(L: *lua.State, idx: i32, k: [:0]const u8) lua.Type {
+    lgc.Cthreadbarrier(L);
+    const t = index2addr(L, idx);
+    api_check(L, t.ttistable());
+    var ttype: lua.Type = .Nil;
+    if (lstring.Sassumelstr(L, k)) |ts| {
+        const o = ltable.Hgetstr(t.hvalue(), ts);
+        L.top.setobj(L, ltable.Hgetstr(t.hvalue(), ts));
+        ttype = o.typeOf();
+    } else L.top.setobj(L, lobject.Onilobject);
+    api_incr_top(L);
+    return ttype;
 }
 
 /// get value from table value at `idx`
@@ -565,23 +654,23 @@ pub inline fn newtable(L: *lua.State) void {
 /// set readonly flag for table at `idx`
 pub fn setreadonly(L: *lua.State, idx: i32, enabled: bool) void {
     const o = index2addr(L, idx);
-    check(L, o.ttistable());
+    api_check(L, o.ttistable());
     const t = o.hvalue();
-    check(L, t != L.registry().hvalue());
+    api_check(L, t != L.registry().hvalue());
     t.readonly = if (enabled) 1 else 0;
 }
 
 /// get readonly flag for table at `idx`
 pub fn getreadonly(L: *lua.State, idx: i32) bool {
     const o: *const lobject.TValue = index2addr(L, idx);
-    check(L, o.ttistable());
+    api_check(L, o.ttistable());
     return o.hvalue().readonly != 0;
 }
 
 /// set safeenv flag for table at `idx`
 pub fn setsafeenv(L: *lua.State, idx: i32, enabled: bool) void {
     const o = index2addr(L, idx);
-    check(L, o.ttistable());
+    api_check(L, o.ttistable());
     o.hvalue().safeenv = if (enabled) 1 else 0;
 }
 
@@ -599,7 +688,7 @@ pub fn getmetatable(L: *lua.State, idx: i32) bool {
     }
     if (mt) |ptr| {
         L.top.sethvalue(L, ptr);
-        incr_top(L);
+        api_incr_top(L);
     }
     return mt != null;
 }
@@ -607,13 +696,13 @@ pub fn getmetatable(L: *lua.State, idx: i32) bool {
 pub fn getfenv(L: *lua.State, idx: i32) void {
     lgc.Cthreadbarrier(L);
     const o: *const lobject.TValue = index2addr(L, idx);
-    checkvalidindex(L, o);
+    api_checkvalidindex(L, o);
     switch (o.tt) {
         @intFromEnum(lua.Type.Function) => L.top.sethvalue(L, o.clvalue().env),
         @intFromEnum(lua.Type.Thread) => L.top.sethvalue(L, o.thvalue().gt.?),
         else => L.top.setnilvalue(),
     }
-    incr_top(L);
+    api_incr_top(L);
 }
 
 //
@@ -684,7 +773,7 @@ pub inline fn call(L: *lua.State, nargs: i32, nresults: i32) void {
     c.lua_call(@ptrCast(L), nargs, nresults);
 }
 
-pub inline fn pcall(L: *lua.State, nargs: i32, nresults: i32, msgh: i32) lua.Status {
+pub fn pcall(L: *lua.State, nargs: i32, nresults: i32, msgh: i32) lua.Status {
     return @enumFromInt(c.lua_pcall(@ptrCast(L), nargs, nresults, msgh));
 }
 
@@ -810,14 +899,14 @@ pub inline fn unref(L: *lua.State, r: i32) void {
 }
 
 pub fn setuserdatatag(L: *lua.State, idx: i32, tag: u8) void {
-    check(L, tag < lua.config.UTAG_LIMIT);
+    api_check(L, tag < lua.config.UTAG_LIMIT);
     const o = index2addr(L, idx);
-    check(L, o.ttisuserdata());
+    api_check(L, o.ttisuserdata());
     o.uvalue().tag = tag;
 }
 
 pub fn setuserdatadtor(L: *lua.State, comptime T: type, tag: u32, comptime dtorfn: ?*const fn (L: *lua.State, ptr: *T) void) void {
-    check(L, tag < lua.config.UTAG_LIMIT);
+    api_check(L, tag < lua.config.UTAG_LIMIT);
     L.global.udatagc[tag] = if (dtorfn) |dtor| struct {
         fn inner(state: *lua.State, ptr: ?*anyopaque) callconv(.c) void {
             @call(.always_inline, dtor, .{
@@ -829,21 +918,21 @@ pub fn setuserdatadtor(L: *lua.State, comptime T: type, tag: u32, comptime dtorf
 }
 
 pub fn getuserdatadtor(L: *lua.State, tag: u32) ?lua.Destructor {
-    check(L, tag < lua.config.UTAG_LIMIT);
+    api_check(L, tag < lua.config.UTAG_LIMIT);
     return L.global.udatagc[tag];
 }
 
 pub fn setuserdatametatable(L: *lua.State, tag: u32) void {
-    check(L, tag < lua.config.UTAG_LIMIT);
-    check(L, L.global.udatamt[tag] == null); // reassignment not supported
-    check(L, L.top.sub_num(1).ttistable());
+    api_check(L, tag < lua.config.UTAG_LIMIT);
+    api_check(L, L.global.udatamt[tag] == null); // reassignment not supported
+    api_check(L, L.top.sub_num(1).ttistable());
     const n = L.top.sub_num(1);
     L.global.udatamt[tag] = n.hvalue();
     L.top = n;
 }
 
 pub fn getuserdatametatable(L: *lua.State, tag: u8) void {
-    check(L, tag < lua.config.UTAG_LIMIT);
+    api_check(L, tag < lua.config.UTAG_LIMIT);
     lgc.Cthreadbarrier(L);
 
     if (L.global.udatamt[tag]) |h|
@@ -851,7 +940,7 @@ pub fn getuserdatametatable(L: *lua.State, tag: u8) void {
     else
         L.top.setnilvalue();
 
-    incr_top(L);
+    api_incr_top(L);
 }
 
 pub inline fn setlightuserdataname(L: *lua.State, tag: i32, name: [:0]const u8) void {
@@ -859,7 +948,7 @@ pub inline fn setlightuserdataname(L: *lua.State, tag: i32, name: [:0]const u8) 
 }
 
 pub fn getlightuserdataname(L: *lua.State, tag: u32) ?[:0]const u8 {
-    check(L, tag < lua.config.LUTAG_LIMIT);
+    api_check(L, tag < lua.config.LUTAG_LIMIT);
     const name = L.global.lightuserdataname[tag];
     return if (name) |s|
         std.mem.span(s.getstr())
@@ -884,12 +973,12 @@ pub fn callbacks(L: *lua.State) *lua.Callbacks {
 }
 
 pub fn setmemcat(L: *lua.State, category: u8) void {
-    check(L, category < lua.config.MEMORY_CATEGORIES);
+    api_check(L, category < lua.config.MEMORY_CATEGORIES);
     L.activememcat = category;
 }
 
 pub fn totalbytes(L: *lua.State, category: i32) usize {
-    check(L, category < lua.config.MEMORY_CATEGORIES);
+    api_check(L, category < lua.config.MEMORY_CATEGORIES);
     return if (category < 0)
         L.global.totalbytes
     else

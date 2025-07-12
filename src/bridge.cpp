@@ -54,18 +54,9 @@ ZIG_EXPORT Luau::FValue<int>* zig_luau_getFValueList_int()
     return Luau::FValue<int>::list;
 }
 
-// Internal API
-ZIG_EXPORT void zig_luau_luaD_checkstack(lua_State *L, int n)
+ZIG_EXPORT l_noret zig_luau_luaD_throw(lua_State *L, int errcode)
 {
-    luaD_checkstack(L, n);
-}
-ZIG_EXPORT void zig_luau_expandstacklimit(lua_State *L, int n)
-{
-    expandstacklimit(L, L->top + n);
-}
-ZIG_EXPORT int zig_luau_luaG_isnative(lua_State *L, int level)
-{
-    return luaG_isnative(L, level);
+    luaD_throw(L, errcode);
 }
 
 #if defined(__wasm__)
