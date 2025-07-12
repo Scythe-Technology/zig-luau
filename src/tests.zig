@@ -149,17 +149,17 @@ test "number conversion success and failure" {
     const lua = try luau.init(&testing.allocator);
     defer lua.deinit();
 
-    _ = lua.pushstring("1234.5678");
+    _ = try lua.pushstring("1234.5678");
     try expectEqual(1234.5678, lua.tonumber(-1) orelse return error.InvalidType);
 
-    _ = lua.pushstring("1234");
+    _ = try lua.pushstring("1234");
     try expectEqual(1234, lua.tointeger(-1) orelse return error.InvalidType);
 
     lua.pushnil();
     try expectError(error.Fail, lua.tonumber(-1) orelse error.Fail);
     try expectError(error.Fail, lua.tointeger(-1) orelse error.Fail);
 
-    _ = lua.pushstring("fail");
+    _ = try lua.pushstring("fail");
     try expectError(error.Fail, lua.tonumber(-1) orelse error.Fail);
     try expectError(error.Fail, lua.tointeger(-1) orelse error.Fail);
 }
@@ -234,7 +234,7 @@ test "type of and getting values" {
     try expect(lua.isthread(-1));
     try expectEqual(lua, lua.tothread(-1) orelse @panic("bad"));
 
-    lua.pushstring("all your codebase are belong to us");
+    try lua.pushstring("all your codebase are belong to us");
     try expectEqualStrings("all your codebase are belong to us", lua.tolstring(-1) orelse @panic("bad"));
     try expectEqual(.String, lua.typeOf(-1));
     try expect(lua.isstring(-1));
@@ -245,18 +245,18 @@ test "type of and getting values" {
     try expect(lua.isfunction(-1));
     try expectEqual(luau.VM.zapi.toCFn(add), lua.tocfunction(-1).?);
 
-    lua.pushstring("hello world");
+    try lua.pushstring("hello world");
     try expectEqualStrings("hello world", lua.tostring(-1) orelse @panic("bad"));
     try expectEqual(.String, lua.typeOf(-1));
     try expect(lua.isstring(-1));
 
-    lua.pushfstring("{s} {s} {d}", .{ "hello", "world", @as(i32, 10) });
+    try lua.pushfstring("{s} {s} {d}", .{ "hello", "world", @as(i32, 10) });
     try expectEqual(.String, lua.typeOf(-1));
     try expect(lua.isstring(-1));
     try expectEqualStrings("hello world 10", lua.tostring(-1) orelse @panic("bad"));
 
     // Comptime known
-    lua.pushfstring("{s} {s} {d}", .{ "hello", "world", @as(i32, 10) });
+    try lua.pushfstring("{s} {s} {d}", .{ "hello", "world", @as(i32, 10) });
     try expectEqual(.String, lua.typeOf(-1));
     try expect(lua.isstring(-1));
     try expectEqualStrings("hello world 10", lua.tostring(-1) orelse @panic("bad"));
@@ -267,7 +267,7 @@ test "type of and getting values" {
     const arg2 = try std.testing.allocator.dupe(u8, "World");
     defer std.testing.allocator.free(arg2);
 
-    lua.pushfstring("{s} {s} {d}", .{ arg1, arg2, @as(i32, 10) });
+    try lua.pushfstring("{s} {s} {d}", .{ arg1, arg2, @as(i32, 10) });
     try expectEqual(.String, lua.typeOf(-1));
     try expect(lua.isstring(-1));
     try expectEqualStrings("Hello World 10", lua.tostring(-1) orelse @panic("bad"));
@@ -331,7 +331,7 @@ test "filling and checking the stack" {
     try expectEqual(false, lua.checkstack(1_000_000));
 
     // this is small enough it won't fail (would raise an error if it did)
-    lua.Lcheckstack(40, null);
+    try lua.Lcheckstack(40, null);
     while (count < 40) : (count += 1) {
         lua.pushnil();
     }
@@ -440,7 +440,7 @@ test "function registration" {
         .{ .name = "add", .func = luau.VM.zapi.toCFn(add) },
     };
     lua.newtable();
-    lua.Lregister(null, &funcs);
+    try lua.Lregister(null, &funcs);
 
     _ = lua.getfield(-1, "add");
     lua.pushinteger(1);
@@ -450,7 +450,7 @@ test "function registration" {
     lua.settop(0);
 
     // register functions as globals in a library table
-    lua.Lregister("testlib", &funcs);
+    try lua.Lregister("testlib", &funcs);
 
     // testlib.add(1, 2)
     _ = lua.getglobal("testlib");
@@ -476,7 +476,7 @@ test "warn fn" {
     lua.Zpushfunction(warnFn, "newWarn");
     lua.pushvalue(-1);
     lua.setfield(luau.VM.lua.GLOBALSINDEX, "warn");
-    lua.pushstring("this will be caught by the warnFn");
+    try lua.pushstring("this will be caught by the warnFn");
     lua.call(1, 0);
 }
 
@@ -488,12 +488,12 @@ test "string literal" {
     const zbytes = [_:0]u8{ 'H', 'e', 'l', 'l', 'o', ' ', 0, 'W', 'o', 'r', 'l', 'd' };
     try testing.expectEqual(zbytes.len, 12);
 
-    lua.pushstring(&zbytes);
+    try lua.pushstring(&zbytes);
     const str1 = lua.tostring(-1) orelse @panic("bad");
     try testing.expectEqual(str1.len, 6);
     try testing.expectEqualStrings("Hello ", str1);
 
-    lua.pushlstring(&zbytes);
+    try lua.pushlstring(&zbytes);
     const str2 = lua.tostring(-1) orelse @panic("bad");
     try testing.expectEqual(str2.len, 12);
     try testing.expectEqualStrings(&zbytes, str2);
@@ -503,9 +503,9 @@ test "concat" {
     var lua = try luau.init(&testing.allocator);
     defer lua.deinit();
 
-    _ = lua.pushstring("hello ");
+    _ = try lua.pushstring("hello ");
     lua.pushnumber(10);
-    _ = lua.pushstring(" wow!");
+    _ = try lua.pushstring(" wow!");
     lua.concat(3);
 
     try expectEqualStrings("hello 10 wow!", lua.tostring(-1) orelse @panic("bad"));
@@ -621,8 +621,8 @@ test "raise error" {
     defer lua.deinit();
 
     const makeError = struct {
-        fn inner(l: *State) i32 {
-            _ = l.pushstring("makeError made an error");
+        fn inner(l: *State) !i32 {
+            _ = try l.pushstring("makeError made an error");
             l.raiseerror();
             return 0;
         }
@@ -666,9 +666,9 @@ test "yielding no continuation" {
 
     const thread = lua.newthread();
     const func = struct {
-        fn inner(l: *State) i32 {
+        fn inner(l: *State) !i32 {
             l.pushinteger(1);
-            return l.yield(1);
+            return try l.yield(1);
         }
     }.inner;
     thread.Zpushfunction(func, "func");
@@ -692,8 +692,8 @@ test "aux check functions" {
     defer lua.deinit();
 
     const function = struct {
-        fn inner(l: *State) i32 {
-            l.Lcheckany(1);
+        fn inner(l: *State) !i32 {
+            try l.Lcheckany(1);
             _ = l.Lcheckinteger(2);
             _ = l.Lchecknumber(3);
             _ = l.Lcheckstring(4);
@@ -736,7 +736,7 @@ test "aux check functions" {
     lua.pushnil();
     lua.pushinteger(3);
     lua.pushnumber(4);
-    _ = lua.pushstring("hello world");
+    _ = try lua.pushstring("hello world");
     _ = lua.pcall(4, 0, 0).check() catch {
         try expectStringContains("boolean expected", lua.tostring(-1) orelse @panic("bad"));
         lua.pop(-1);
@@ -747,7 +747,7 @@ test "aux check functions" {
     lua.pushnil();
     lua.pushinteger(3);
     lua.pushnumber(4);
-    _ = lua.pushstring("hello world");
+    _ = try lua.pushstring("hello world");
     lua.pushboolean(true);
     _ = lua.pcall(5, 0, 0);
 }
@@ -771,9 +771,9 @@ test "aux opt functions" {
 
     lua.Zpushfunction(function, "func");
     lua.pushinteger(10);
-    _ = lua.pushstring("zig");
+    _ = try lua.pushstring("zig");
     lua.pushnumber(1.23);
-    _ = lua.pushstring("lang");
+    _ = try lua.pushstring("lang");
     _ = lua.pcall(4, 0, 0);
 }
 
@@ -843,7 +843,7 @@ test "ref luau" {
 
     // In luau lua.ref does not pop the item from the stack
     // and the data is stored in the REGISTRYINDEX by default
-    _ = lua.pushstring("Hello there");
+    _ = try lua.pushstring("Hello there");
     const ref = lua.ref(2) orelse @panic("bad");
 
     _ = lua.rawgeti(luau.VM.lua.REGISTRYINDEX, ref);
@@ -860,8 +860,8 @@ test "args and errors" {
     defer lua.deinit();
 
     const argCheck = struct {
-        fn inner(l: *State) i32 {
-            l.Largcheck(false, 1, "error!");
+        fn inner(l: *State) !i32 {
+            try l.Largcheck(false, 1, "error!");
             return 0;
         }
     }.inner;
@@ -870,8 +870,8 @@ test "args and errors" {
     try expectError(error.Runtime, lua.pcall(0, 0, 0).check());
 
     const raisesError = struct {
-        fn inner(l: *State) i32 {
-            l.LerrorL("some error {s}!", .{"zig"});
+        fn inner(l: *State) !i32 {
+            try l.LerrorL("some error {s}!", .{"zig"});
             unreachable;
         }
     }.inner;
@@ -882,7 +882,7 @@ test "args and errors" {
 
     const raisesFmtError = struct {
         fn inner(l: *State) !i32 {
-            l.LerrorL("some fmt error {s}!", .{"zig"});
+            try l.LerrorL("some fmt error {s}!", .{"zig"});
             unreachable;
         }
     }.inner;
@@ -916,7 +916,7 @@ test "objectLen" {
     var lua = try luau.init(&testing.allocator);
     defer lua.deinit();
 
-    _ = lua.pushstring("lua");
+    _ = try lua.pushstring("lua");
     try testing.expectEqual(3, lua.objlen(-1));
 }
 
@@ -1005,8 +1005,8 @@ test "debug stacktrace" {
     defer lua.deinit();
 
     const stackTrace = struct {
-        fn inner(l: *State) i32 {
-            l.pushstring(l.debugtrace());
+        fn inner(l: *State) !i32 {
+            try l.pushstring(l.debugtrace());
             return 1;
         }
     }.inner;
@@ -1034,8 +1034,8 @@ test "debug stacktrace luau" {
     defer testing.allocator.free(bc);
 
     const stackTrace = struct {
-        fn inner(l: *State) i32 {
-            l.pushstring(l.debugtrace());
+        fn inner(l: *State) !i32 {
+            try l.pushstring(l.debugtrace());
             return 1;
         }
     }.inner;
@@ -1179,39 +1179,39 @@ test "Set Api" {
     }.inner;
     lua.newtable();
     lua.Zsetfieldfn(-1, "a", tempFn);
-    lua.Zsetfield(-1, "b", true);
-    lua.Zsetfield(-1, "c", 1.1);
-    lua.Zsetfield(-1, "d", 2);
-    lua.Zsetfield(-1, "e", "Api");
-    lua.Zsetfield(-1, "f", &[_]u8{ 'A', 0, 'B' });
+    try lua.Zsetfield(-1, "b", true);
+    try lua.Zsetfield(-1, "c", 1.1);
+    try lua.Zsetfield(-1, "d", 2);
+    try lua.Zsetfield(-1, "e", "Api");
+    try lua.Zsetfield(-1, "f", &[_]u8{ 'A', 0, 'B' });
     if (luau.VECTOR_SIZE == 3) {
-        lua.Zsetfield(-1, "pos", @Vector(3, f32){ 1.0, 2.0, 3.0 });
+        try lua.Zsetfield(-1, "pos", @Vector(3, f32){ 1.0, 2.0, 3.0 });
     } else {
-        lua.Zsetfield(-1, "pos", @Vector(4, f32){ 1.0, 2.0, 3.0, 4.0 });
+        try lua.Zsetfield(-1, "pos", @Vector(4, f32){ 1.0, 2.0, 3.0, 4.0 });
     }
 
     lua.Zsetfieldfn(luau.VM.lua.GLOBALSINDEX, "_a", tempFn);
-    lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_b", true);
-    lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_c", @as(f64, 1.1));
-    lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_d", @as(i32, 2));
-    lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_e", "Api");
-    lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_f", &[_]u8{ 'A', 0, 'B' });
+    try lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_b", true);
+    try lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_c", @as(f64, 1.1));
+    try lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_d", @as(i32, 2));
+    try lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_e", "Api");
+    try lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_f", &[_]u8{ 'A', 0, 'B' });
     if (luau.VECTOR_SIZE == 3) {
-        lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_pos", @Vector(3, f32){ 1.0, 2.0, 3.0 });
+        try lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_pos", @Vector(3, f32){ 1.0, 2.0, 3.0 });
     } else {
-        lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_pos", @Vector(4, f32){ 1.0, 2.0, 3.0, 4.0 });
+        try lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_pos", @Vector(4, f32){ 1.0, 2.0, 3.0, 4.0 });
     }
 
     lua.Zsetglobalfn("gl_a", tempFn);
-    lua.Zsetglobal("gl_b", true);
-    lua.Zsetglobal("gl_c", 1.1);
-    lua.Zsetglobal("gl_d", 2);
-    lua.Zsetglobal("gl_e", "Api");
-    lua.Zsetglobal("gl_f", &[_]u8{ 'A', 0, 'B' });
+    try lua.Zsetglobal("gl_b", true);
+    try lua.Zsetglobal("gl_c", 1.1);
+    try lua.Zsetglobal("gl_d", 2);
+    try lua.Zsetglobal("gl_e", "Api");
+    try lua.Zsetglobal("gl_f", &[_]u8{ 'A', 0, 'B' });
     if (luau.VECTOR_SIZE == 3) {
-        lua.Zsetglobal("gl_pos", @Vector(3, f32){ 1.0, 2.0, 3.0 });
+        try lua.Zsetglobal("gl_pos", @Vector(3, f32){ 1.0, 2.0, 3.0 });
     } else {
-        lua.Zsetglobal("gl_pos", @Vector(4, f32){ 1.0, 2.0, 3.0, 4.0 });
+        try lua.Zsetglobal("gl_pos", @Vector(4, f32){ 1.0, 2.0, 3.0, 4.0 });
     }
 
     try lua.load("module", bc, 0);
@@ -1468,19 +1468,19 @@ test "Metamethods" {
     _ = lua.Lnewmetatable("MyMetatable");
 
     lua.Zsetfieldfn(-1, luau.Metamethods.index, struct {
-        fn inner(l: *State) i32 {
+        fn inner(l: *State) !i32 {
             l.Lchecktype(1, .Table);
             const key = l.tostring(2) orelse unreachable;
             expectEqualStrings("test", key) catch unreachable;
-            l.pushstring("Hello, world");
+            try l.pushstring("Hello, world");
             return 1;
         }
     }.inner);
 
     lua.Zsetfieldfn(-1, luau.Metamethods.tostring, struct {
-        fn inner(l: *State) i32 {
+        fn inner(l: *State) !i32 {
             l.Lchecktype(1, .Table);
-            l.pushstring("MyMetatable");
+            try l.pushstring("MyMetatable");
             return 1;
         }
     }.inner);
@@ -1525,8 +1525,8 @@ test "getfieldObject" {
     lua.Lopenlibs();
 
     lua.newtable();
-    lua.Zsetfield(-1, "test", true);
-    lua.Zsetglobal("some", "Value");
+    try lua.Zsetfield(-1, "test", true);
+    try lua.Zsetglobal("some", "Value");
 
     // switch (try lua.getfieldObj(-1, "test")) {
     //     .boolean => |b| try expectEqual(true, b),
@@ -1683,7 +1683,7 @@ test "yielding error" {
 
         try expectEqual(.Yield, lua.resumethread(lua, 0));
 
-        lua.pushstring("error");
+        try lua.pushstring("error");
         try expectEqual(.Ok, lua.resumeerror(lua));
     }
 

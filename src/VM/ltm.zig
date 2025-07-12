@@ -1,4 +1,10 @@
+const std = @import("std");
+
 const lua = @import("lua.zig");
+
+const lobject = @import("lobject.zig");
+const lstate = @import("lstate.zig");
+const ltable = @import("ltable.zig");
 
 pub const TMS = enum {
     TM_INDEX,
@@ -89,3 +95,21 @@ pub const LONGEST_TYPENAME_SIZE = res: {
         large = @max(large, name.len);
     break :res large;
 };
+
+pub fn gfasttm(g: *lstate.global_State, et: ?*lobject.LuaTable, event: TMS) ?*const lobject.TValue {
+    const mt = et orelse return null;
+    if (mt.tmcache & (@as(usize, 1) << @intFromEnum(event)) > 0)
+        return null;
+
+    return Tgettm(mt, event, g.tmname[@intFromEnum(event)]);
+}
+
+pub fn Tgettm(events: *lobject.LuaTable, e: TMS, ename: *lobject.TString) ?*const lobject.TValue {
+    const tm = ltable.Hgetstr(events, ename);
+    if (tm.ttisnil()) {
+        // no tag method?
+        events.tmcache |= @truncate(@as(usize, 1) << @intFromEnum(e)); // cache this fact
+        return null;
+    }
+    return tm;
+}

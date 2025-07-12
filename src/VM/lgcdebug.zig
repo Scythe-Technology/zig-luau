@@ -29,7 +29,7 @@ fn validatetable(g: *const lstate.global_State, h: *lobject.LuaTable) void {
         validateobjref(g, @ptrCast(@alignCast(h)), @ptrCast(@alignCast(mt)));
 
     for (0..@intCast(h.sizearray)) |i|
-        validateref(g, @ptrCast(@alignCast(h)), &h.array[i]);
+        validateref(g, @ptrCast(@alignCast(h)), &h.array.?[i]);
 
     for (0..sizenode) |i| {
         const n = &h.node[i];
@@ -67,16 +67,16 @@ fn validateclosure(g: *const lstate.global_State, cl: *lobject.Closure) void {
 fn validatestack(g: *const lstate.global_State, l: *lua.State) void {
     validateobjref(g, @ptrCast(@alignCast(l)), @ptrCast(@alignCast(l.gt.?)));
 
-    for (0..@intFromPtr(l.ci) - @intFromPtr(l.base_ci)) |i| {
+    for (0..l.ci.?.sub(l.base_ci.?)) |i| {
         const ci = l.base_ci.?.add_num(i);
-        std.debug.assert(@intFromPtr(l.stack.?) <= @intFromPtr(ci.base));
+        std.debug.assert(@intFromPtr(l.stack) <= @intFromPtr(ci.base));
         std.debug.assert(@intFromPtr(ci.func) <= @intFromPtr(ci.base) and @intFromPtr(ci.base) <= @intFromPtr(ci.top));
         std.debug.assert(@intFromPtr(ci.top) <= @intFromPtr(l.stack_last));
     }
 
     // note: stack refs can violate gc invariant so we only check for liveness
-    for (0..@intFromPtr(l.top) - @intFromPtr(l.stack)) |i|
-        l.stack.?.add_num(i).checkliveness(g);
+    for (0..l.top.sub(@ptrCast(l.stack))) |i|
+        l.stack[0].add_num(i).checkliveness(g);
 
     if (l.namecall) |nc|
         validateobjref(g, @ptrCast(@alignCast(l)), @ptrCast(@alignCast(nc)));

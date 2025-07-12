@@ -8,7 +8,7 @@ const lobject = @import("lobject.zig");
 
 pub fn currentpc(ci: *lstate.CallInfo) usize {
     if (ci.savedpc) |pc| {
-        return @intFromPtr(pc) - @intFromPtr(ci.ci_func().d.l.p.code) - 1;
+        return (@divExact(@intFromPtr(pc) - @intFromPtr(ci.ci_func().d.l.p.code), @sizeOf(u32))) - 1;
     } else return 0;
 }
 
@@ -54,25 +54,25 @@ pub fn getinfo(L: *lua.State, level: i32, what: [:0]const u8, ar: *lua.Debug) bo
     return true;
 }
 
-fn pusherror(L: *lua.State, msg: [:0]const u8) void {
+fn pusherror(L: *lua.State, msg: [:0]const u8) !void {
     const ci = L.ci.?;
     if (ci.isLua()) {
         const source = getluaproto(ci).?.source;
         // var chunkbuf: [lua.config.IDSIZE]u8 = undefined;
         const line = currentline(ci);
         if (source) |src| {
-            L.pushfstring("{s}:{d}: {s}", .{ std.mem.span(src.getstr()), line, msg });
+            try L.pushfstring("{s}:{d}: {s}", .{ std.mem.span(src.getstr()), line, msg });
         } else {
-            L.pushfstring(":{d}: {s}", .{ line, msg });
+            try L.pushfstring(":{d}: {s}", .{ line, msg });
         }
     } else {
-        L.pushstring(msg);
+        try L.pushstring(msg);
     }
 }
 
-pub fn GrunerrorL(L: *lua.State, comptime fmt: []const u8, args: anytype) noreturn {
-    L.pushvfstring(fmt, args);
-    L.rawcheckstack(1);
+pub fn GrunerrorL(L: *lua.State, comptime fmt: []const u8, args: anytype) !noreturn {
+    try L.pushvfstring(fmt, args);
+    try L.rawcheckstack(1);
     L.raiseerror();
 }
 
@@ -91,7 +91,7 @@ pub fn Gisnative(L: *lua.State, level: usize) bool {
     return (ci.flags & lstate.CALLINFO_NATIVE) != 0;
 }
 
-pub inline fn singlestep(L: *lua.State, enabled: bool) void {
+pub fn singlestep(L: *lua.State, enabled: bool) void {
     L.singlestep_on = enabled;
 }
 

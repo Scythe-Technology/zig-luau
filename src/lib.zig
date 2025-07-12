@@ -58,11 +58,18 @@ pub const VM = if (build_config.buildVM) struct {
     pub const laux = @import("VM/laux.zig");
     pub const lperf = @import("VM/lperf.zig");
     pub const linit = @import("VM/linit.zig");
+    pub const lmem = @import("VM/lmem.zig");
     pub const lstate = @import("VM/lstate.zig");
+    pub const lstring = @import("VM/lstring.zig");
+    pub const ltable = @import("VM/ltable.zig");
+    pub const ludata = @import("VM/ludata.zig");
+    pub const lbuffer = @import("VM/lbuffer.zig");
+    pub const lfunc = @import("VM/lfunc.zig");
     pub const ldebug = @import("VM/ldebug.zig");
     pub const lobject = @import("VM/lobject.zig");
     pub const lvmload = @import("VM/lvmload.zig");
     pub const lcommon = @import("VM/lcommon.zig");
+    pub const lvm = @import("VM/lvm.zig");
     pub const lvmutils = @import("VM/lvmutils.zig");
     pub const lgcdebug = @import("VM/lgcdebug.zig");
 
@@ -149,11 +156,6 @@ extern "c" fn zig_registerAssertionHandler() void;
 
 extern "c" fn zig_luau_getFValueList_bool() *FValue(bool);
 extern "c" fn zig_luau_getFValueList_int() *FValue(c_int);
-
-// Internal API
-extern "c" fn zig_luau_luaD_checkstack(*anyopaque, c_int) void;
-extern "c" fn zig_luau_expandstacklimit(*anyopaque, c_int) void;
-extern "c" fn zig_luau_luaG_isnative(*anyopaque, c_int) c_int;
 
 // NCG Workarounds - Minimal Debug Support for NCG
 /// Luau.CodeGen mock __register_frame for a workaround Luau NCG
@@ -290,20 +292,6 @@ pub fn getallocator(luau: *VM.lua.State) std.mem.Allocator {
 pub fn init(allocator_ptr: *const std.mem.Allocator) !*VM.lua.State {
     zig_registerAssertionHandler();
     return try VM.lstate.newstate(alloc, @constCast(allocator_ptr));
-}
-
-// Internal API functions
-pub const sys = struct {
-    pub inline fn luaD_checkstack(luau: *VM.lua.State, n: i32) void {
-        zig_luau_luaD_checkstack(@ptrCast(luau), n);
-    }
-    pub inline fn luaD_expandstacklimit(luau: *VM.lua.State, n: i32) void {
-        zig_luau_expandstacklimit(@ptrCast(luau), n);
-    }
-};
-
-test {
-    std.testing.refAllDecls(sys);
 }
 
 comptime {

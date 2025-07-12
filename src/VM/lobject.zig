@@ -4,7 +4,6 @@ const std = @import("std");
 const lgc = @import("lgc.zig");
 const lua = @import("lua.zig");
 const lstate = @import("lstate.zig");
-const config = @import("luaconf.zig");
 const lcommon = @import("lcommon.zig");
 const lnumutils = @import("lnumutils.zig");
 
@@ -36,7 +35,7 @@ pub const Value = extern union {
 ///
 pub const TValue = extern struct {
     value: Value,
-    extra: [config.EXTRA_SIZE]c_int = undefined,
+    extra: [lua.config.EXTRA_SIZE]c_int = undefined,
     tt: c_int,
 
     // helper api
@@ -138,7 +137,7 @@ pub const TValue = extern struct {
     }
     pub inline fn vvalue(obj: *const TValue) []const f32 {
         std.debug.assert(obj.ttisvector());
-        return @as([*]const f32, @ptrCast(&obj.value.v))[0..config.VECTOR_SIZE];
+        return @as([*]const f32, @ptrCast(&obj.value.v))[0..lua.config.VECTOR_SIZE];
     }
     pub inline fn tsvalue(obj: *const TValue) *TString {
         std.debug.assert(obj.ttisstring());
@@ -201,7 +200,7 @@ pub const TValue = extern struct {
         i_v[0] = x;
         i_v[1] = y;
         i_v[2] = z;
-        if (comptime config.VECTOR_SIZE == 4)
+        if (comptime lua.config.VECTOR_SIZE == 4)
             i_v[3] = w orelse 0;
         obj.settype(.Vector);
     }
@@ -269,7 +268,7 @@ pub const TValue = extern struct {
     }
 };
 
-pub const LU_TAG_ITERATOR = config.UTAG_LIMIT;
+pub const LU_TAG_ITERATOR = lua.config.UTAG_LIMIT;
 
 pub inline fn checkliveness() void {}
 
@@ -291,10 +290,18 @@ pub const TString = extern struct {
     len: c_uint,
 
     /// string data is allocated right after the header
-    data: [*]u8,
+    data: [1]u8,
+
+    pub inline fn gdata(s: *TString) [*]u8 {
+        return @ptrCast(@alignCast(&s.data));
+    }
 
     pub inline fn getstr(s: *const TString) [*c]const u8 {
-        return @ptrCast(&s.data);
+        return @ptrCast(@alignCast(&s.data));
+    }
+
+    pub inline fn toSlice(s: *const TString) [:0]const u8 {
+        return s.getstr()[0..s.len :0];
     }
 };
 
@@ -313,7 +320,7 @@ pub const Udata = extern struct {
 pub const Buffer = extern struct {
     header: CommonHeader,
 
-    len: c_int,
+    len: c_uint,
 
     data: [1]u8 align(8),
 };
@@ -334,7 +341,7 @@ pub const Proto = extern struct {
     /// constants used by the function
     k: [*]TValue,
     /// function bytecode
-    code: *lcommon.Instruction,
+    code: [*]lcommon.Instruction,
     /// functions defined inside the function
     p: [*]?*Proto,
     codeentry: *const lcommon.Instruction,
@@ -424,28 +431,47 @@ pub const Closure = extern struct {
     gclist: ?*lstate.GCObject,
     env: *LuaTable,
 
-    d: extern union {
-        c: extern struct {
+    d: ValueUnion,
+
+    pub const ValueUnion = extern union {
+        c: C,
+        l: L,
+
+        pub const C = extern struct {
             f: lua.CFunction,
             cont: lua.Continuation,
             debugname: [*c]const u8,
             upvals: [1]TValue,
-        },
-        l: extern struct {
+        };
+
+        pub const L = extern struct {
             p: *Proto,
             uprefs: [1]TValue,
-        },
-    },
+        };
+    };
 };
 
 pub const TKey = extern struct {
     value: Value,
-    extra: [config.EXTRA_SIZE]c_int,
-    tt: u8,
-    next: [3]u8, // for chaining
+    extra: [lua.config.EXTRA_SIZE]c_int,
+    pi: Packed = undefined,
+
+    pub const Packed = packed struct(u32) {
+        tt: u4, // type
+        next: i28, // next in the chain
+
+        pub fn withtt(tt: u4) [4]u8 {
+            return @bitCast(Packed{ .tt = tt, .next = 0 });
+        }
+    };
 
     pub inline fn ttype(this: *const TKey) u4 {
-        return @intCast(this.tt & 0x0F);
+        const pi: Packed = @bitCast(this.pi);
+        return pi.tt;
+    }
+
+    pub inline fn setttype(this: *TKey, t: lua.Type) void {
+        this.pi.tt = @intFromEnum(t);
     }
 
     pub inline fn ttisnil(obj: *const TKey) bool {
@@ -499,7 +525,7 @@ pub const TKey = extern struct {
     }
     pub inline fn vvalue(obj: *const TKey) []const f32 {
         std.debug.assert(obj.ttisvector());
-        return @as([*]const f32, @ptrCast(&obj.value.v))[0..config.VECTOR_SIZE];
+        return @as([*]const f32, @ptrCast(&obj.value.v))[0..lua.config.VECTOR_SIZE];
     }
     pub inline fn tsvalue(obj: *const TKey) *TString {
         std.debug.assert(obj.ttisstring());
@@ -541,10 +567,15 @@ pub const TKey = extern struct {
         return o.ttype() >= @intFromEnum(lua.Type.String);
     }
 
-    pub inline fn vnext(this: *TKey) i28 {
-        const lower = @as(u4, @intCast(this.tt & 0xF0));
-        const higher = @as(u24, @bitCast(this.next));
-        return @bitCast((@as(u28, @intCast(lower)) << 24) | @as(u28, @intCast(higher)));
+    pub inline fn next(this: *TKey) i28 {
+        const pi: Packed = @bitCast(this.pi);
+        return pi.next;
+    }
+
+    pub inline fn setnext(this: *TKey, num: i28) void {
+        var pi: Packed = @bitCast(this.pi);
+        pi.next = num;
+        this.pi = @bitCast(pi);
     }
 };
 
@@ -559,9 +590,44 @@ pub const LuaNode = extern struct {
         return &this.val;
     }
     pub inline fn gnext(this: *LuaNode) i28 {
-        return this.key.vnext();
+        return this.key.pi.next;
+    }
+
+    pub inline fn add_num(this: *LuaNode, n: anytype) *LuaNode {
+        switch (@typeInfo(@TypeOf(n))) {
+            .comptime_int => return @ptrFromInt(@intFromPtr(this) + (n * @sizeOf(LuaNode))),
+            .int => |i| {
+                if (i.signedness == .unsigned)
+                    return @ptrFromInt(@intFromPtr(this) + @as(usize, @intCast(n * @sizeOf(LuaNode))))
+                else {
+                    if (n < 0)
+                        return @ptrFromInt(@intFromPtr(this) - @as(usize, @intCast(-n * @sizeOf(LuaNode))))
+                    else
+                        return @ptrFromInt(@intFromPtr(this) + @as(usize, @intCast(n * @sizeOf(LuaNode))));
+                }
+            },
+            else => @compileError("n must be an integer"),
+        }
+    }
+
+    pub inline fn sub(this: *LuaNode, ptr: *LuaNode) usize {
+        return @divExact(@intFromPtr(this) - @intFromPtr(ptr), @sizeOf(LuaNode));
     }
 };
+
+pub inline fn setnodekey(L: *lstate.lua_State, node: *LuaNode, obj: *const TValue) void {
+    node.key.value = obj.value;
+    @memcpy(node.key.extra[0..lua.config.EXTRA_SIZE], obj.extra[0..lua.config.EXTRA_SIZE]);
+    node.key.pi.tt = @intCast(obj.tt);
+    obj.checkliveness(L.global);
+}
+
+pub inline fn getnodekey(L: *lstate.lua_State, obj: *TValue, node: *LuaNode) void {
+    obj.value = node.key.value;
+    @memcpy(obj.extra[0..lua.config.EXTRA_SIZE], node.key.extra[0..lua.config.EXTRA_SIZE]);
+    obj.tt = @intCast(node.key.pi.tt);
+    obj.checkliveness(L.global);
+}
 
 pub const LuaTable = extern struct {
     header: CommonHeader,
@@ -587,22 +653,52 @@ pub const LuaTable = extern struct {
     },
 
     metatable: ?*LuaTable,
-    array: [*]TValue, // array part
+    array: ?[*]TValue, // array part
     node: [*]LuaNode,
     gclist: ?*lstate.GCObject,
+
+    pub inline fn gnode(t: *const LuaTable, i: usize) *LuaNode {
+        return &t.node[i];
+    }
 };
 
-pub inline fn lmod(s: u32, size: i32) i32 {
+pub inline fn lmod(comptime T: type, s: u32, size: T) T {
     std.debug.assert(size & (size - 1) == 0);
     return s & (size - 1);
 }
 
-pub inline fn sizenode(t: *const LuaTable) i32 {
-    return @intCast(1 << t.lsizenode);
+pub inline fn twoto(x: u6) usize {
+    return @as(usize, 1) << x;
+}
+pub inline fn sizenode(t: *const LuaTable) usize {
+    return @intCast(@as(usize, 1) << @intCast(t.lsizenode));
 }
 
 extern "c" const luaO_nilobject_: TValue;
 pub const Onilobject = &luaO_nilobject_;
+
+pub inline fn ceillog2(x: u32) i32 {
+    return Olog2(x - 1) + 1;
+}
+
+pub fn Olog2(i: u32) i32 {
+    // zig fmt: off
+    const log_2: [256]u8 = [_]u8{0, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6,
+                                 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+                                 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7,
+                                 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+                                 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+                                 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8,
+                                 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8};
+    // zig fmt: on
+    var x: u32 = i;
+    var l: i32 = -1;
+    while (x >= 256) {
+        l += 8;
+        x >>= 8;
+    }
+    return l + log_2[x];
+}
 
 pub fn OrawequalObj(t1: *const TValue, t2: *const TValue) bool {
     if (t1.ttype() != t2.ttype())
@@ -622,10 +718,10 @@ pub fn OrawequalObj(t1: *const TValue, t2: *const TValue) bool {
     }
 }
 
-pub fn Opushvfstring(L: *lua.State, comptime fmt: []const u8, args: anytype) void {
+pub fn Opushvfstring(L: *lua.State, comptime fmt: []const u8, args: anytype) !void {
     var buf: [lua.config.BUFFERSIZE]u8 = undefined;
     const fstr = std.fmt.bufPrint(&buf, fmt, args) catch |err| @panic(@errorName(err));
-    L.pushlstring(fstr);
+    try L.pushlstring(fstr);
 }
 
 pub inline fn Opushfstring(L: *lua.State, comptime fmt: []const u8, args: anytype) void {

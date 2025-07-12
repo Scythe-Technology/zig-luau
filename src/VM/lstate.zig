@@ -10,9 +10,9 @@ const lua = @import("lua.zig");
 const lapi = @import("lapi.zig");
 const laux = @import("laux.zig");
 const linit = @import("linit.zig");
+const lmem = @import("lmem.zig");
 const ldebug = @import("ldebug.zig");
 const lcommon = @import("lcommon.zig");
-const config = @import("luaconf.zig");
 const lobject = @import("lobject.zig");
 const lvmload = @import("lvmload.zig");
 
@@ -30,6 +30,13 @@ const lveclib = @import("lveclib.zig");
 
 const state = @This();
 
+// extra stack space to handle TM calls and some other extras
+pub const EXTRA_STACK = 5;
+
+pub const BASIC_CI_SIZE = 8;
+
+pub const BASIC_STACK_SIZE = 2 * lua.config.MINSTACK;
+
 ///
 /// Main thread combines a thread state and the global state
 ///
@@ -39,7 +46,7 @@ pub const LG = extern struct {
 };
 
 const stringtable = extern struct {
-    hash: [*]*lobject.TString,
+    hash: [*]?*lobject.TString,
     /// number of elements
     nuse: u32,
     size: c_int,
@@ -228,18 +235,18 @@ pub const global_State = extern struct {
     gcstepsize: c_int,
 
     /// free page linked list for each size class for non-collectable objects
-    freepages: [config.SIZECLASSES]*anyopaque,
+    freepages: [lua.config.SIZECLASSES]?*lmem.lua_Page,
     /// free page linked list for each size class for collectable objects
-    freegcopages: [config.SIZECLASSES]*anyopaque,
+    freegcopages: [lua.config.SIZECLASSES]?*lmem.lua_Page,
     /// page linked list with all pages for all non-collectable lobject classes (available with LUAU_ASSERTENABLED)
-    allpages: *anyopaque,
+    allpages: ?*lmem.lua_Page,
     /// page linked list with all pages for all collectable lobject classes
-    allgcopages: *anyopaque,
+    allgcopages: ?*lmem.lua_Page,
     /// position of the sweep in `allgcopages'
-    sweepgcopage: *anyopaque,
+    sweepgcopage: ?*lmem.lua_Page,
 
     /// total amount of memory used by each memory category
-    memcatbytes: [config.MEMORY_CATEGORIES]usize,
+    memcatbytes: [lua.config.MEMORY_CATEGORIES]usize,
 
     mainthread: *lua_State,
     /// head of double-linked list of all open upvalues
@@ -272,12 +279,12 @@ pub const global_State = extern struct {
     ecb: ExecutionCallbacks,
 
     /// for each userdata tag, a gc callback to be called immediately before freeing memory
-    udatagc: [config.UTAG_LIMIT]?*const fn (*lua_State, ?*anyopaque) callconv(.c) void,
+    udatagc: [lua.config.UTAG_LIMIT]?*const fn (*lua_State, ?*anyopaque) callconv(.c) void,
     /// metatables for tagged userdata
-    udatamt: [config.UTAG_LIMIT]?*lobject.LuaTable,
+    udatamt: [lua.config.UTAG_LIMIT]?*lobject.LuaTable,
 
     /// names for tagged lightuserdata
-    lightuserdataname: [config.LUTAG_LIMIT]?*lobject.TString,
+    lightuserdataname: [lua.config.LUTAG_LIMIT]?*lobject.TString,
 
     gcstats: GCStats,
 
@@ -308,7 +315,7 @@ pub const lua_State = extern struct {
     /// last free slot in the stack
     stack_last: lobject.StkId,
     /// stack base
-    stack: ?lobject.StkId,
+    stack: [*]lobject.TValue,
 
     /// points after end of ci array
     end_ci: ?*CallInfo,
@@ -346,7 +353,7 @@ pub const lua_State = extern struct {
         return L.ci.?.func.clvalue();
     }
 
-    // pub const api_incr_top = lapi.incr_top;
+    // pub const api_incr_top = lapi.api_incr_top;
     // pub const api_check = lapi.check;
     // pub const api_checknelems = lapi.checknelems;
 
@@ -696,6 +703,11 @@ pub const GCObject = extern union {
     }
 };
 
+fn freestack(L: *lua_State, L1: *lua.State) void {
+    lmem.Mfreearray(L, CallInfo, @ptrCast(@alignCast(L1.base_ci)), @intCast(L1.size_ci), L1.header.memcat);
+    lmem.Mfreearray(L, lobject.TValue, @ptrCast(@alignCast(L1.stack)), @intCast(L1.stacksize), L1.header.memcat);
+}
+
 pub inline fn newstate(f: lua.Alloc, ud: ?*anyopaque) !*lua.State {
     if (c.lua_newstate(f, ud)) |s|
         return @ptrCast(@alignCast(s))
@@ -719,4 +731,12 @@ pub inline fn resetthread(L: *lua_State) void {
 
 pub fn isthreadreset(L: *lua_State) bool {
     return L.ci == L.base_ci and L.base == L.top and L.curr_status == @intFromEnum(lua.Status.Ok);
+}
+
+pub fn Efreethread(L: *lua_State, L1: *lua.State, page: *lmem.lua_Page) void {
+    const g = L.global;
+    if (g.cb.userthread) |ut|
+        ut(null, L1);
+    freestack(L, L1);
+    lmem.Mfreegco(L, @ptrCast(@alignCast(L1)), @sizeOf(lua.State), L1.header.memcat, page);
 }
