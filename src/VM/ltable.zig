@@ -530,7 +530,7 @@ pub fn Hget(t: *LuaTable, key: *const TValue) *const TValue {
         .String => return Hgetstr(t, key.tsvalue()),
         .Number => {
             const k = lnumutils.inum2int(key.nvalue());
-            if (lnumutils.inumeq(k, key.nvalue())) // index is int?
+            if (@as(f64, @floatFromInt(k)) == key.nvalue()) // index is int?
                 return Hgetnum(t, k); // use specialized version
             // else go through
         },
@@ -548,20 +548,20 @@ pub fn Hget(t: *LuaTable, key: *const TValue) *const TValue {
     return lobject.Onilobject; // not found
 }
 
-pub fn Hnewkey(L: *lua.State, t: *LuaTable, key: *const TValue) *TValue {
+pub fn Hnewkey(L: *lua.State, t: *LuaTable, key: *const TValue) !*TValue {
     if (key.ttisnil())
-        ldebug.GrunerrorL(L, "table index is nil");
+        try ldebug.GrunerrorL(L, "table index is nil", .{});
     if (key.ttisnumber() and lnumutils.inumisnan(key.nvalue()))
-        ldebug.GrunerrorL(L, "table index is NaN");
-    if (key.ttisvector() and lnumutils.ivecisnan(key.nvalue()))
-        ldebug.GrunerrorL(L, "table index contains NaN");
+        try ldebug.GrunerrorL(L, "table index is NaN", .{});
+    if (key.ttisvector() and lnumutils.ivecisnan(key.vvalue()))
+        try ldebug.GrunerrorL(L, "table index contains NaN", .{});
     return newkey(L, t, key);
 }
 
-pub fn Hsetnum(L: *lua.State, t: *LuaTable, key: i32) *TValue {
+pub fn Hsetnum(L: *lua.State, t: *LuaTable, key: i32) !*TValue {
     // (1 <= key && key <= t->sizearray)
-    if (@as(u32, key - 1) < @as(u32, t.sizearray))
-        return &t.array[key - 1];
+    if (key - 1 < t.sizearray)
+        return &t.array.?[@intCast(key - 1)];
     // hash fallback
     const p = Hgetnum(t, key);
     if (p != lobject.Onilobject)
@@ -573,7 +573,7 @@ pub fn Hsetnum(L: *lua.State, t: *LuaTable, key: i32) *TValue {
     }
 }
 
-pub fn Hsetstr(L: *lua.State, t: *LuaTable, key: *lobject.TString) *TValue {
+pub fn Hsetstr(L: *lua.State, t: *LuaTable, key: *lobject.TString) !*TValue {
     const p = Hgetstr(t, key);
     invalidateTMcache(t);
     if (p != lobject.Onilobject)
@@ -581,13 +581,13 @@ pub fn Hsetstr(L: *lua.State, t: *LuaTable, key: *lobject.TString) *TValue {
     else {
         var k: TValue = undefined;
         k.setsvalue(L, key);
-        return newkey(L, t, &k);
+        return try newkey(L, t, &k);
     }
 }
 
 pub fn Hclone(L: *lua.State, tt: *LuaTable) !*LuaTable {
     const t = try lmem.Mnewgco(L, LuaTable, @sizeOf(LuaTable), L.activememcat);
-    lgc.Cinit(L, @ptrCast(@alignCast(t)), lua.Type.Table);
+    lgc.Cinit(L, @ptrCast(@alignCast(t)), @intFromEnum(lua.Type.Table));
     t.metatable = tt.metatable;
     t.tmcache = tt.tmcache;
     t.array = null;
@@ -596,24 +596,24 @@ pub fn Hclone(L: *lua.State, tt: *LuaTable) !*LuaTable {
     t.nodemask8 = 0;
     t.readonly = 0;
     t.safeenv = 0;
-    t.node = @constCast(dummynode);
+    t.node = @ptrCast(@constCast(dummynode));
     t.bound.lastfree = 0;
 
     if (tt.sizearray > 0) {
-        t.array = try lmem.Mnewarray(L, TValue, @intCast(tt.sizearray), tt.memcat);
+        t.array = try lmem.Mnewarray(L, TValue, @intCast(tt.sizearray), tt.header.memcat);
         maybesetaboundary(t, getaboundary(tt));
         t.sizearray = tt.sizearray;
 
-        @memcpy(t.array[0..@intCast(tt.sizearray)], tt.array[0..@intCast(tt.sizearray)]);
+        @memcpy(t.array.?[0..@intCast(tt.sizearray)], tt.array.?[0..@intCast(tt.sizearray)]);
     }
 
-    if (tt.node != dummynode) {
-        const size = 1 << tt.lsizenode;
-        t.node = try lmem.Mnewarray(L, LuaNode, size, tt.memcat);
+    if (@as(*LuaNode, @ptrCast(tt.node)) != dummynode) {
+        const size = @as(usize, 1) << @as(u6, @intCast(tt.lsizenode));
+        t.node = try lmem.Mnewarray(L, LuaNode, size, tt.header.memcat);
         t.lsizenode = tt.lsizenode;
         t.nodemask8 = tt.nodemask8;
         @memcpy(t.node[0..@intCast(size)], tt.node[0..@intCast(size)]);
-        t.bound.lastfree = tt.lastfree;
+        t.bound.lastfree = tt.bound.lastfree;
     }
 
     return t;
@@ -622,22 +622,22 @@ pub fn Hclone(L: *lua.State, tt: *LuaTable) !*LuaTable {
 pub fn Hclear(tt: *LuaTable) void {
     // clear array part
     for (0..@intCast(tt.sizearray)) |i|
-        tt.array[i].setnilvalue();
+        tt.array.?[i].setnilvalue();
 
     maybesetaboundary(tt, 0);
 
     // clear hash part
-    if (tt.node != dummynode) {
+    if (@as(*LuaNode, @ptrCast(tt.node)) != dummynode) {
         const size = lobject.sizenode(tt);
-        tt.bound.lastfree = size;
+        tt.bound.lastfree = @intCast(size);
         for (0..@intCast(size)) |i| {
             const n = tt.gnode(i);
             n.gkey().setttype(.Nil);
             n.gval().setnilvalue();
-            n.key.setvnext(0);
+            n.key.setnext(0);
         }
     }
 
     // back to empty -> no tag methods present
-    tt.tmcache = ~0;
+    tt.tmcache = ~@as(u8, 0);
 }

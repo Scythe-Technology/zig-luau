@@ -22,7 +22,7 @@ pub fn Unewudata(L: *lua.State, s: usize, tag: u8) !*lobject.Udata {
         return error.BlockTooBig;
 
     const u = try lmem.Mnewgco(L, lobject.Udata, sizeudata(s), L.activememcat);
-    lgc.Cinit(L, @ptrCast(@alignCast(u)), @intFromEnum(lua.Type.UserData));
+    lgc.Cinit(L, @ptrCast(@alignCast(u)), @intFromEnum(lua.Type.Userdata));
     u.metatable = null;
     u.len = @intCast(s);
     u.tag = tag;

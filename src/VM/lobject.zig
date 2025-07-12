@@ -470,6 +470,10 @@ pub const TKey = extern struct {
         return pi.tt;
     }
 
+    pub inline fn typeOf(obj: *const TKey) lua.Type {
+        return @enumFromInt(obj.ttype());
+    }
+
     pub inline fn setttype(this: *TKey, t: lua.Type) void {
         this.pi.tt = @intFromEnum(t);
     }
@@ -561,6 +565,11 @@ pub const TKey = extern struct {
     }
     pub inline fn svalue(obj: *const TKey) [*c]const u8 {
         return obj.tsvalue().getstr();
+    }
+
+    pub inline fn lightuserdatatag(obj: *const TKey) c_int {
+        std.debug.assert(obj.ttislightuserdata());
+        return obj.extra[0];
     }
 
     pub inline fn iscollectable(o: *const TKey) bool {
@@ -701,6 +710,24 @@ pub fn Olog2(i: u32) i32 {
 }
 
 pub fn OrawequalObj(t1: *const TValue, t2: *const TValue) bool {
+    if (t1.ttype() != t2.ttype())
+        return false;
+
+    switch (t1.typeOf()) {
+        .None => unreachable,
+        .Nil => return true,
+        .Number => return t1.nvalue() == t2.nvalue(),
+        .Vector => return lnumutils.iveceq(t1.vvalue(), t2.vvalue()),
+        .Boolean => return t1.bvalue() == t2.bvalue(),
+        .LightUserdata => return t1.pvalue() == t2.pvalue() and t1.lightuserdatatag() == t2.lightuserdatatag(),
+        inline else => |t| {
+            comptime std.debug.assert(t.istypecollectable());
+            return t1.gcvalue() == t2.gcvalue();
+        },
+    }
+}
+
+pub fn OrawequalKey(t1: *const TKey, t2: *const TValue) bool {
     if (t1.ttype() != t2.ttype())
         return false;
 
