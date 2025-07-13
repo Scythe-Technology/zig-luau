@@ -608,7 +608,7 @@ pub fn Hclone(L: *lua.State, tt: *LuaTable) !*LuaTable {
     }
 
     if (@as(*LuaNode, @ptrCast(tt.node)) != dummynode) {
-        const size = @as(usize, 1) << @as(u6, @intCast(tt.lsizenode));
+        const size = @as(usize, 1) << @as(if (@sizeOf(usize) == 8) u6 else u5, @intCast(tt.lsizenode));
         t.node = try lmem.Mnewarray(L, LuaNode, size, tt.header.memcat);
         t.lsizenode = tt.lsizenode;
         t.nodemask8 = tt.nodemask8;
