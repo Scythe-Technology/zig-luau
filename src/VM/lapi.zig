@@ -9,6 +9,8 @@ const ltm = @import("ltm.zig");
 const ldo = @import("ldo.zig");
 const lvm = @import("lvm.zig");
 const ltable = @import("ltable.zig");
+const ludata = @import("ludata.zig");
+const lbuffer = @import("lbuffer.zig");
 const lobject = @import("lobject.zig");
 const lvmutils = @import("lvmutils.zig");
 
@@ -829,8 +831,10 @@ pub inline fn gc(L: *lua.State, what: lua.GCOp, data: i32) i32 {
     return c.lua_gc(@ptrCast(L), @intFromEnum(what), data);
 }
 
-pub inline fn @"error"(L: *lua.State) noreturn {
-    return c.lua_error(@ptrCast(L));
+pub fn @"error"(L: *lua.State) noreturn {
+    api_checknelems(L, 1);
+    ldo.throw(L, .ErrRun);
+    unreachable;
 }
 
 pub inline fn next(L: *lua.State, idx: i32) bool {
@@ -845,27 +849,64 @@ pub inline fn concat(L: *lua.State, idx: i32) void {
     c.lua_concat(@ptrCast(L), idx);
 }
 
-pub inline fn newuserdatatagged(L: *lua.State, comptime T: type, tag: i32) *T {
-    return @ptrCast(@alignCast(c.lua_newuserdatatagged(@ptrCast(L), @sizeOf(T), tag)));
+pub fn newuserdatatagged(L: *lua.State, comptime T: type, tag: u8) !*T {
+    api_check(L, tag < lua.config.UTAG_LIMIT or tag == ludata.UTAG_PROXY);
+    try lgc.CcheckGC(L);
+    lgc.Cthreadbarrier(L);
+    const u = try ludata.Unewudata(L, @sizeOf(T), tag);
+    L.top.setuvalue(L, u);
+    api_incr_top(L);
+    return @ptrCast(@alignCast(&u.data));
 }
-pub inline fn newuserdata(L: *lua.State, comptime T: type) *T {
+pub inline fn newuserdata(L: *lua.State, comptime T: type) !*T {
     return newuserdatatagged(L, T, 0);
 }
 
-pub inline fn newuserdatataggedwithmetatable(L: *lua.State, comptime T: type, tag: i32) *T {
-    return @ptrCast(@alignCast(c.lua_newuserdatataggedwithmetatable(@ptrCast(L), @sizeOf(T), tag)));
+pub fn newuserdatataggedwithmetatable(L: *lua.State, comptime T: type, tag: i32) !*T {
+    api_check(L, tag < lua.config.UTAG_LIMIT);
+    lgc.CcheckGC(L);
+    lgc.Cthreadbarrier(L);
+    const u = try ludata.Unewudata(L, @sizeOf(T), tag);
+
+    // currently, we always allocate unmarked objects, so forward barrier can be skipped
+    std.debug.assert(!lgc.isblack(@ptrCast(@alignCast(u))));
+
+    const h = L.global.udatamt[tag];
+    api_check(L, h != null);
+
+    u.metatable = h;
+
+    L.top.setuvalue(L, u);
+    api_incr_top(L);
+    return @ptrCast(@alignCast(&u.data));
 }
 
-pub inline fn newuserdatadtor(L: *lua.State, comptime T: type, dtorFn: *const fn (dtor: *T) void) *T {
-    return @ptrCast(@alignCast(c.lua_newuserdatadtor(@ptrCast(L), @sizeOf(T), struct {
+pub fn newuserdatadtor(L: *lua.State, comptime T: type, comptime dtorFn: *const fn (dtor: *T) void) !*T {
+    const dtor: *const fn (?*anyopaque) callconv(.c) void = struct {
         fn inner(dtor: ?*anyopaque) callconv(.c) void {
             @call(.always_inline, dtorFn, .{@as(*T, @ptrCast(@alignCast(dtor.?)))});
         }
-    }.inner)));
+    }.inner;
+    const sz = @sizeOf(T);
+
+    try lgc.CcheckGC(L);
+    lgc.Cthreadbarrier(L);
+    // make sure sz + sizeof(dtor) doesn't overflow; luaU_newdata will reject SIZE_MAX correctly
+    const as = if (sz < std.math.maxInt(usize) - @sizeOf(@TypeOf(dtor))) sz + @sizeOf(@TypeOf(dtor)) else std.math.maxInt(usize);
+    const u = try ludata.Unewudata(L, as, ludata.UTAG_IDTOR);
+    @memcpy(@as([*]u8, &u.data)[sz..], &@as([@sizeOf(usize)]u8, @bitCast(@intFromPtr(dtor))));
+    L.top.setuvalue(L, u);
+    api_incr_top(L);
+    return @ptrCast(@alignCast(&u.data));
 }
 
-pub inline fn newbuffer(L: *lua.State, sz: usize) []u8 {
-    return @as([*]u8, @ptrCast(c.lua_newbuffer(@ptrCast(L), sz).?))[0..sz];
+pub fn newbuffer(L: *lua.State, sz: usize) ![]u8 {
+    try lgc.CcheckGC(L);
+    lgc.Cthreadbarrier(L);
+    const b = try lbuffer.Bnewbuffer(L, sz);
+    L.top.setbufvalue(L, b);
+    api_incr_top(L);
+    return @as([*]u8, @ptrCast(@alignCast(&b.data)))[0..sz];
 }
 
 pub inline fn getupvalue(L: *lua.State, funcidx: i32, n: i32) ?[:0]const u8 {
@@ -887,15 +928,47 @@ pub fn encodepointer(L: *lua.State, p: usize) usize {
     return @intCast(g.ptrenckey[0] * p + g.ptrenckey[2] ^ (g.ptrenckey[1] * p + g.ptrenckey[3]));
 }
 
-pub fn ref(L: *lua.State, idx: i32) ?i32 {
-    const ref_id = c.lua_ref(@ptrCast(L), idx);
-    if (ref_id == lua.REFNIL)
-        return null;
-    return ref_id;
+pub fn ref(L: *lua.State, idx: i32) !?i32 {
+    api_check(L, idx != lua.REGISTRYINDEX); // idx is a stack index for value
+
+    const g = L.global;
+    const p = index2addr(L, idx);
+    if (!p.ttisnil()) {
+        const reg = L.registry().hvalue();
+        var r: i32 = undefined;
+        if (g.registryfree != 0) { // reuse existing slot
+            r = g.registryfree;
+        } else { // no free elements
+            r = @intCast(ltable.Hgetn(reg));
+            r += 1; // create new reference
+        }
+
+        const slot = try ltable.Hsetnum(L, reg, r);
+        if (g.registryfree != 0)
+            g.registryfree = @intFromFloat(slot.nvalue());
+        slot.setobj(L, p);
+        lgc.Cbarriert(L, reg, p);
+        return r;
+    } else return null; // no value to reference
 }
 
-pub inline fn unref(L: *lua.State, r: i32) void {
-    c.lua_unref(@ptrCast(L), r);
+pub fn unref(L: *lua.State, r: i32) void {
+    if (r <= lua.REFNIL)
+        return;
+
+    const g = L.global;
+    const reg = L.registry().hvalue();
+
+    const slot = ltable.Hgetnum(reg, r);
+    api_check(L, slot != lobject.Onilobject);
+
+    // similar to how 'luaH_setnum' makes non-nil slot value mutable
+    const mutableSlot: *lobject.TValue = @constCast(slot);
+
+    // NB: no barrier needed because value isn't collectable
+    mutableSlot.setnvalue(@floatFromInt(g.registryfree));
+
+    g.registryfree = r;
 }
 
 pub fn setuserdatatag(L: *lua.State, idx: i32, tag: u8) void {
@@ -943,8 +1016,11 @@ pub fn getuserdatametatable(L: *lua.State, tag: u8) void {
     api_incr_top(L);
 }
 
-pub inline fn setlightuserdataname(L: *lua.State, tag: i32, name: [:0]const u8) void {
-    c.lua_setlightuserdataname(@ptrCast(L), tag, name.ptr);
+pub fn setlightuserdataname(L: *lua.State, tag: u8, name: [:0]const u8) !void {
+    api_check(L, tag < lua.config.LUTAG_LIMIT);
+    api_check(L, L.global.lightuserdataname[tag] == null); // renaming not supported
+    L.global.lightuserdataname[tag] = try lstring.Snewlstr(L, name);
+    lstring.Sfix(L.global.lightuserdataname[tag].?); // never collect these names
 }
 
 pub fn getlightuserdataname(L: *lua.State, tag: u32) ?[:0]const u8 {
