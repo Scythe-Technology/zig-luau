@@ -645,6 +645,7 @@ const LUAU_Analysis_SOURCE_FILES = [_][]const u8{
     "Analysis/src/Autocomplete.cpp",
     "Analysis/src/AutocompleteCore.cpp",
     "Analysis/src/BuiltinDefinitions.cpp",
+    "Analysis/src/BuiltinTypeFunctions.cpp",
     "Analysis/src/Clone.cpp",
     "Analysis/src/Constraint.cpp",
     "Analysis/src/ConstraintGenerator.cpp",
@@ -704,6 +705,7 @@ const LUAU_Analysis_SOURCE_FILES = [_][]const u8{
     "Analysis/src/Unifiable.cpp",
     "Analysis/src/Unifier.cpp",
     "Analysis/src/Unifier2.cpp",
+    "Analysis/src/UserDefinedTypeFunction.cpp",
 };
 
 const LUAU_Ast_HEADERS_DIRS = [_][]const u8{
