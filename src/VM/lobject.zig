@@ -681,7 +681,7 @@ pub inline fn lmod(comptime T: type, s: u32, size: T) T {
     return s & (size - 1);
 }
 
-pub inline fn twoto(x: u6) usize {
+pub inline fn twoto(x: if (@sizeOf(usize) == 8) u6 else u5) usize {
     return @as(usize, 1) << x;
 }
 pub inline fn sizenode(t: *const LuaTable) usize {
