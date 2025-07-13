@@ -574,7 +574,7 @@ test "userdata and uservalues" {
     };
 
     // create a Luau-owned pointer to a Data with 2 associated user values
-    var data = lua.newuserdata(Data);
+    var data = try lua.newuserdata(Data);
     data.val = 1;
     @memcpy(&data.code, "abcd");
 
@@ -844,7 +844,7 @@ test "ref luau" {
     // In luau lua.ref does not pop the item from the stack
     // and the data is stored in the REGISTRYINDEX by default
     _ = try lua.pushstring("Hello there");
-    const ref = lua.ref(2) orelse @panic("bad");
+    const ref = try lua.ref(2) orelse @panic("bad");
 
     _ = lua.rawgeti(luau.VM.lua.REGISTRYINDEX, ref);
     try expectEqualStrings("Hello there", lua.tostring(-1) orelse @panic("bad"));
@@ -966,7 +966,7 @@ test "userdata dtor" {
         var lua = try luau.init(&testing.allocator);
         defer lua.deinit();
 
-        var data = lua.newuserdatadtor(DataDtor, DataDtor.dtor);
+        var data = try lua.newuserdatadtor(DataDtor, DataDtor.dtor);
         data.gc_hits_ptr = &gc_hits;
         try expectEqual(@as(*anyopaque, @ptrCast(data)), lua.topointer(1) orelse @panic("bad"));
         try expectEqual(0, gc_hits);
@@ -1060,8 +1060,8 @@ test "buffers" {
     lua.openbase();
     lua.openbuffer();
 
-    const buf = lua.newbuffer(12);
-    lua.Zpushbuffer("Hello, world 2");
+    const buf = try lua.newbuffer(12);
+    try lua.Zpushbuffer("Hello, world 2");
 
     try expectEqual(12, buf.len);
 

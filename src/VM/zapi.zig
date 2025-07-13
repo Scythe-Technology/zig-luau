@@ -347,8 +347,8 @@ pub fn ZsetglobalfnV(L: *lua.State, comptime name: [:0]const u8, comptime f: any
     L.setglobal(name);
 }
 
-pub fn Zpushbuffer(L: *lua.State, bytes: []const u8) void {
-    const buf = L.newbuffer(bytes.len);
+pub fn Zpushbuffer(L: *lua.State, bytes: []const u8) !void {
+    const buf = try L.newbuffer(bytes.len);
     @memcpy(buf, bytes);
 }
 
@@ -1188,7 +1188,7 @@ test Zcheckvalue {
 
     {
         const ud = struct { b: i32, c: i32 };
-        const ptr = L.newuserdata(ud);
+        const ptr = try L.newuserdata(ud);
         ptr.* = .{ .b = 1, .c = 2 };
         const checked_ud = try Zcheckvalue(L, *ud, -1, null);
         try std.testing.expectEqual(1, checked_ud.b);
@@ -1211,7 +1211,7 @@ test Zcheckvalue {
     }
 
     {
-        Zpushbuffer(L, "Test");
+        try Zpushbuffer(L, "Test");
         const checked_buf = try Zcheckvalue(L, []const u8, -1, null);
         try std.testing.expectEqualSlices(u8, "Test", checked_buf);
         const checked_buf2 = try Zcheckvalue(L, []u8, -1, null);
@@ -1397,7 +1397,7 @@ test Zpushbuffer {
     defer L.deinit();
     errdefer std.debug.print("{s}\n", .{L.tostring(-1) orelse "No lua error"});
 
-    Zpushbuffer(L, "Test");
+    try Zpushbuffer(L, "Test");
     try std.testing.expectEqual(.Buffer, L.typeOf(-1));
     try std.testing.expectEqualSlices(u8, "Test", L.tobuffer(-1).?);
 }
@@ -1519,7 +1519,7 @@ test Ztolstring {
         L.pop(1);
     }
     {
-        _ = L.newuserdata(struct {});
+        _ = try L.newuserdata(struct {});
         L.newtable();
         L.Zpushfunction(struct {
             fn inner(l: *lua.State) !i32 {
@@ -1533,7 +1533,7 @@ test Ztolstring {
         L.pop(2);
     }
     if (comptime EXCEPTIONS_ENABLED) {
-        _ = L.newuserdata(struct {});
+        _ = try L.newuserdata(struct {});
         L.newtable();
         L.Zpushfunction(struct {
             fn inner(l: *lua.State) !i32 {
@@ -1549,7 +1549,7 @@ test Ztolstring {
         L.pop(2);
     }
     {
-        _ = L.newuserdata(struct {});
+        _ = try L.newuserdata(struct {});
         L.newtable();
         L.Zpushfunction(struct {
             fn inner(l: *lua.State) i32 {

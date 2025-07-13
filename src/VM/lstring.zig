@@ -17,6 +17,14 @@ inline fn sizestring(len: usize) usize {
     return @offsetOf(lobject.TString, "data") + len + 1;
 }
 
+pub inline fn Snew(L: *lua.State, s: []const u8) !*lobject.TString {
+    return Snewlstr(L, s);
+}
+
+pub inline fn Sfix(s: *lobject.TString) void {
+    s.header.marked |= lgc.bitmask(lgc.FIXEDBIT);
+}
+
 pub fn Shash(str: []const u8) u32 {
     @setRuntimeSafety(false);
     // Note that this hashing algorithm is replicated in BytecodeBuilder.cpp, BytecodeBuilder::getStringHash

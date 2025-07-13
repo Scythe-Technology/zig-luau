@@ -214,12 +214,12 @@ pub const TValue = extern struct {
         obj.settype(.Boolean);
     }
     pub inline fn setsvalue(obj: *TValue, L: *lstate.lua_State, x: *TString) void {
-        obj.value.gc = @ptrCast(x);
+        obj.value.gc = @ptrCast(@alignCast(x));
         obj.settype(.String);
         obj.checkliveness(L.global);
     }
     pub inline fn setuvalue(obj: *TValue, L: *lstate.lua_State, x: *Udata) void {
-        obj.value.gc = @ptrCast(x);
+        obj.value.gc = @ptrCast(@alignCast(x));
         obj.settype(.Userdata);
         obj.checkliveness(L.global);
     }
@@ -228,8 +228,13 @@ pub const TValue = extern struct {
         obj.settype(.Thread);
         obj.checkliveness(L.global);
     }
+    pub inline fn setbufvalue(obj: *TValue, L: *lstate.lua_State, x: *Buffer) void {
+        obj.value.gc = @ptrCast(@alignCast(x));
+        obj.settype(.Buffer);
+        obj.checkliveness(L.global);
+    }
     pub inline fn setclvalue(obj: *TValue, L: *lstate.lua_State, x: *Closure) void {
-        obj.value.gc = @ptrCast(x);
+        obj.value.gc = @ptrCast(@alignCast(x));
         obj.settype(.Function);
         obj.checkliveness(L.global);
     }
@@ -239,12 +244,12 @@ pub const TValue = extern struct {
         obj.checkliveness(L.global);
     }
     pub inline fn setptvalue(obj: *TValue, L: *lstate.lua_State, x: *Proto) void {
-        obj.value.gc = @ptrCast(x);
+        obj.value.gc = @ptrCast(@alignCast(x));
         obj.settype(.Proto);
         obj.checkliveness(L.global);
     }
     pub inline fn setupvalue(obj: *TValue, L: *lstate.lua_State, x: *UpVal) void {
-        obj.value.gc = @ptrCast(x);
+        obj.value.gc = @ptrCast(@alignCast(x));
         obj.settype(.UpVal);
         obj.checkliveness(L.global);
     }
