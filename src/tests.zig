@@ -490,12 +490,12 @@ test "string literal" {
 
     try lua.pushstring(&zbytes);
     const str1 = lua.tostring(-1) orelse @panic("bad");
-    try testing.expectEqual(str1.len, 6);
+    try testing.expectEqual(6, str1.len);
     try testing.expectEqualStrings("Hello ", str1);
 
     try lua.pushlstring(&zbytes);
-    const str2 = lua.tostring(-1) orelse @panic("bad");
-    try testing.expectEqual(str2.len, 12);
+    const str2 = lua.tolstring(-1) orelse @panic("bad");
+    try testing.expectEqual(12, str2.len);
     try testing.expectEqualStrings(&zbytes, str2);
 }
 
