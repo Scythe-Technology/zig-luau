@@ -71,13 +71,13 @@ fn hashnum(t: *const LuaTable, n: f64) *LuaNode {
     const m: u32 = 0x5bd1e995;
 
     h1 ^= h2 >> 18;
-    h1 *= m;
+    h1 *%= m;
     h2 ^= h1 >> 22;
-    h2 *= m;
+    h2 *%= m;
     h1 ^= h2 >> 17;
-    h1 *= m;
+    h1 *%= m;
     h2 ^= h1 >> 19;
-    h2 *= m;
+    h2 *%= m;
 
     // ... truncated to 32-bit output (normally hash is equal to (uint64_t(h1) << 32) | h2, but we only really need the lower 32-bit half)
     return hashpow2(t, h2);
@@ -223,7 +223,7 @@ fn numusehash(t: *const LuaTable, nums: []i32, pnasize: *i32) i32 {
 fn setarrayvector(L: *lua.State, t: *LuaTable, size: i32) !void {
     if (size > MAXSIZE)
         return error.@"table overflow";
-    t.array = try lmem.Mreallocarray(L, TValue, t.array.?, @intCast(t.sizearray), @intCast(size), t.header.memcat);
+    t.array = try lmem.Mreallocarray(L, TValue, t.array, @intCast(t.sizearray), @intCast(size), t.header.memcat);
     var i: usize = @intCast(t.sizearray);
     while (i < size) : (i += 1)
         t.array.?[i].setnilvalue();
@@ -236,10 +236,10 @@ fn setnodevector(L: *lua.State, t: *LuaTable, _size: i32) !void {
     if (size == 0) { // no elements to hash part?
         t.node = @ptrCast(@alignCast(@constCast(dummynode))); // use common `dummynode'
     } else {
-        lsize = @intCast(lobject.ceillog2(@intCast(size)));
+        lsize = @intCast(lobject.ceillog2(@truncate(size)));
         if (lsize > MAXBITS)
             return error.@"table overflow";
-        size = @intCast(lobject.twoto(@intCast(lsize)));
+        size = @intCast(lobject.twoto(@truncate(lsize)));
         t.node = try lmem.Mnewarray(L, LuaNode, size, t.header.memcat);
         for (0..size) |i| {
             const n = t.gnode(i);
@@ -249,7 +249,7 @@ fn setnodevector(L: *lua.State, t: *LuaTable, _size: i32) !void {
         }
     }
     t.lsizenode = @truncate(lsize);
-    t.nodemask8 = @truncate((@as(usize, 1) << @intCast(lsize)) - 1);
+    t.nodemask8 = @truncate((@as(usize, 1) << @truncate(lsize)) - 1);
     t.bound.lastfree = @intCast(size); // all positions are free
 }
 
@@ -291,16 +291,16 @@ fn resize(L: *lua.State, t: *LuaTable, nasize: i32, nhsize: i32) anyerror!void {
             }
         }
         // shrink array
-        t.array = try lmem.Mreallocarray(L, TValue, t.array.?, @intCast(oldasize), @intCast(nasize), t.header.memcat);
+        t.array = try lmem.Mreallocarray(L, TValue, t.array, @intCast(oldasize), @intCast(nasize), t.header.memcat);
     }
 
     // used for the migration check at the end
     const anew = t.array;
 
     // re-insert elements from hash part
-    var i: usize = lobject.twoto(@intCast(oldhsize)) - 1;
+    var i: i32 = @as(i32, @intCast(lobject.twoto(@truncate(oldhsize)))) - 1;
     while (i >= 0) : (i -= 1) {
-        const old: *LuaNode = &nold[i];
+        const old: *LuaNode = &nold[@intCast(i)];
         if (!old.gval().ttisnil()) {
             var ok: TValue = undefined;
             lobject.getnodekey(L, &ok, old);
@@ -312,8 +312,8 @@ fn resize(L: *lua.State, t: *LuaTable, nasize: i32, nhsize: i32) anyerror!void {
     std.debug.assert(nnew == t.node);
     std.debug.assert(anew == t.array);
 
-    if (nold != dummynode)
-        lmem.Mfreearray(L, LuaNode, nold, lobject.twoto(@intCast(oldhsize)), t.memcat); // free old array
+    if (@as(*LuaNode, @ptrCast(nold)) != dummynode)
+        lmem.Mfreearray(L, LuaNode, nold, lobject.twoto(@truncate(oldhsize)), t.header.memcat); // free old array
 }
 
 fn adjustasize(t: *LuaTable, size: i32, ek: ?*const TValue) i32 {
@@ -608,7 +608,7 @@ pub fn Hclone(L: *lua.State, tt: *LuaTable) !*LuaTable {
     }
 
     if (@as(*LuaNode, @ptrCast(tt.node)) != dummynode) {
-        const size = @as(usize, 1) << @as(if (@sizeOf(usize) == 8) u6 else u5, @intCast(tt.lsizenode));
+        const size = @as(usize, 1) << @as(if (@sizeOf(usize) == 8) u6 else u5, @truncate(tt.lsizenode));
         t.node = try lmem.Mnewarray(L, LuaNode, size, tt.header.memcat);
         t.lsizenode = tt.lsizenode;
         t.nodemask8 = tt.nodemask8;

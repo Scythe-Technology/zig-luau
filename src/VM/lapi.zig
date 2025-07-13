@@ -372,8 +372,8 @@ pub fn tolstring(L: *lua.State, idx: i32) ?[:0]const u8 {
     }
     return o.tsvalue().toSlice();
 }
-pub inline fn tostring(L: *lua.State, idx: i32) ?[:0]const u8 {
-    return tolstring(L, idx);
+pub fn tostring(L: *lua.State, idx: i32) ?[:0]const u8 {
+    return std.mem.span(@as([*c]const u8, @ptrCast((tolstring(L, idx) orelse return null).ptr)));
 }
 
 pub fn tolstringatom(L: *lua.State, idx: i32, atom: ?*i16) ?[:0]const u8 {
@@ -551,9 +551,9 @@ pub fn pushlstring(L: *lua.State, s: []const u8) !void {
     api_incr_top(L);
 }
 
-pub inline fn pushstring(L: *lua.State, str: ?[]const u8) !void {
+pub inline fn pushstring(L: *lua.State, str: ?[:0]const u8) !void {
     if (str) |s| {
-        try pushlstring(L, s);
+        try pushlstring(L, std.mem.span(@as([*c]const u8, @ptrCast(s.ptr))));
     } else pushnil(L);
 }
 

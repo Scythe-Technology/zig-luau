@@ -384,7 +384,7 @@ pub fn Zcallmeta(L: *lua.State, obj: i32, event: [:0]const u8) !bool {
 }
 
 /// Converts value to string & pushes to stack.
-pub fn Ztolstringk(L: *lua.State, idx: i32) ![:0]const u8 {
+pub fn Ztolstringk(L: *lua.State, idx: i32) ![]const u8 {
     const MAX_NUM_BUF = std.fmt.format_float.bufferSize(.decimal, f64);
     const VEC_SIZE = lua.config.VECTOR_SIZE;
     switch (L.typeOf(idx)) {
@@ -418,7 +418,7 @@ pub fn Ztolstringk(L: *lua.State, idx: i32) ![:0]const u8 {
 
 /// Converts value to string & pushes to stack. Calls a __tostring metamethod when it exists.
 /// If the metamethod fails, it returns an error & error value on stack.
-pub fn Ztolstring(L: *lua.State, idx: i32) ![:0]const u8 {
+pub fn Ztolstring(L: *lua.State, idx: i32) ![]const u8 {
     if (try Zcallmeta(L, idx, "__tostring")) {
         return L.tolstring(-1) orelse return error.BadReturnType;
     }

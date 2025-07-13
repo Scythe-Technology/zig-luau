@@ -196,8 +196,8 @@ const SizeClassConfig = extern struct {
 const kSizeClassConfig: SizeClassConfig = .{};
 
 // size class for a block of size sz; returns -1 for size=0 because empty allocations take no space
-inline fn sizeclass(sz: anytype) i8 {
-    return if (sz - 1 < kMaxSmallSizeUsed) kSizeClassConfig.classForSize[sz] else -1;
+inline fn sizeclass(sz: usize) i8 {
+    return if (sz -% 1 < kMaxSmallSizeUsed) kSizeClassConfig.classForSize[sz] else -1;
 }
 
 // metadata for a block is stored in the first pointer of the block
@@ -600,9 +600,9 @@ pub fn Mrealloc_(L: *lua.State, block: ?*anyopaque, osize: usize, nsize: usize, 
         if (oclass >= 0)
             freeblock(L, @intCast(oclass), block.?)
         else
-            _ = (g.frealloc.?)(g.ud, @ptrCast(block.?), osize, 0);
+            _ = (g.frealloc.?)(g.ud, block, osize, 0);
     } else {
-        result = (g.frealloc.?)(g.ud, @ptrCast(block.?), osize, nsize) orelse return error.OutOfMemory;
+        result = (g.frealloc.?)(g.ud, block, osize, nsize) orelse return error.OutOfMemory;
     }
 
     std.debug.assert((nsize == 0) == (result == null));
@@ -626,7 +626,7 @@ pub inline fn Mnewarray(L: *lua.State, comptime T: type, n: usize, memcat: u8) !
 pub inline fn Mfreearray(L: *lua.State, comptime T: type, b: [*]T, n: usize, memcat: u8) void {
     Mfree_(L, @ptrCast(@alignCast(b)), n * @sizeOf(T), memcat);
 }
-pub inline fn Mreallocarray(L: *lua.State, comptime T: type, v: [*]T, oldn: usize, n: usize, memcat: u8) ![*]T {
+pub inline fn Mreallocarray(L: *lua.State, comptime T: type, v: ?[*]T, oldn: usize, n: usize, memcat: u8) ![*]T {
     return @ptrCast(@alignCast((try Mrealloc_(L, @ptrCast(@alignCast(v)), oldn * @sizeOf(T), try Marraysize_(n, @sizeOf(T)), memcat)).?));
 }
 
