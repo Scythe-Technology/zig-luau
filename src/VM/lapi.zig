@@ -34,7 +34,7 @@ pub inline fn api_checkvalidindex(L: *State, obj: *const lobject.TValue) void {
 
 pub inline fn api_incr_top(L: *State) void {
     api_check(L, @intFromPtr(L.top) <= @intFromPtr(L.stack_last));
-    L.top = L.top[1..];
+    L.top += 1;
 }
 
 pub inline fn api_update_top(L: *State, p: *lobject.TValue) void {
@@ -585,9 +585,12 @@ pub fn pushcclosurek(
     cl.d.c.f = f;
     cl.d.c.cont = cont;
     cl.d.c.debugname = debugname;
+    L.top -= nup;
     var n: u8 = nup;
-    while (n > 0) : (n -= 1)
-        cl.d.c.upvalues()[n].setobj(L, &L.top[n]);
+    while (n > 0) : (n -= 1) {
+        const nu = n - 1;
+        cl.d.c.upvalues()[nu].setobj(L, @ptrCast(L.top + nu));
+    }
     L.top[0].setclvalue(L, cl);
     std.debug.assert(lgc.iswhite(@ptrCast(@alignCast(cl))));
     api_incr_top(L);
