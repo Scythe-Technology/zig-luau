@@ -6,6 +6,8 @@ const ltm = @import("ltm.zig");
 const lapi = @import("lapi.zig");
 const lobject = @import("lobject.zig");
 
+const Errorset = @import("errorset.zig");
+
 pub const Reg = struct {
     name: [:0]const u8,
     func: ?lua.CFunction,
@@ -36,7 +38,7 @@ pub fn currfuncname(L: *lua.State) ?[:0]const u8 {
     } else return debugname;
 }
 
-pub inline fn LargerrorL(L: *lua.State, narg: i32, extramsg: [:0]const u8) !noreturn {
+pub inline fn LargerrorL(L: *lua.State, narg: i32, extramsg: [:0]const u8) Errorset.Table!noreturn {
     const fname = currfuncname(L);
 
     if (fname) |name|
@@ -44,10 +46,10 @@ pub inline fn LargerrorL(L: *lua.State, narg: i32, extramsg: [:0]const u8) !nore
     else
         try LerrorL(L, "invalid argument #{d} ({s})", .{ narg, extramsg });
 }
-pub inline fn Largerror(L: *lua.State, narg: i32, extramsg: [:0]const u8) !noreturn {
+pub inline fn Largerror(L: *lua.State, narg: i32, extramsg: [:0]const u8) Errorset.Table!noreturn {
     try LargerrorL(L, narg, extramsg);
 }
-pub inline fn Largcheck(L: *lua.State, cond: bool, narg: i32, extramsg: [:0]const u8) !noreturn {
+pub inline fn Largcheck(L: *lua.State, cond: bool, narg: i32, extramsg: [:0]const u8) Errorset.Table!noreturn {
     if (!cond) try LargerrorL(L, narg, extramsg);
 }
 
@@ -59,7 +61,7 @@ inline fn tag_error(L: *lua.State, narg: i32, tag: lua.Type) void {
     LtypeerrorL(L, narg, lapi.typename(tag));
 }
 
-pub fn Lwhere(L: *lua.State, level: i32) !void {
+pub fn Lwhere(L: *lua.State, level: i32) Errorset.Table!void {
     var info: lua.Debug = .{ .ssbuf = undefined };
     if (L.getinfo(level, "sl", &info)) {
         if (info.currentline) |line| {
@@ -71,7 +73,7 @@ pub fn Lwhere(L: *lua.State, level: i32) !void {
     try L.pushstring("");
 }
 
-pub fn LerrorL(L: *lua.State, comptime fmt: []const u8, args: anytype) !noreturn {
+pub fn LerrorL(L: *lua.State, comptime fmt: []const u8, args: anytype) Errorset.Table!noreturn {
     try Lwhere(L, 1);
     try L.pushvfstring(fmt, args);
     L.concat(2);
@@ -96,13 +98,13 @@ pub inline fn Lcheckoption(L: *lua.State, comptime T: type, narg: i32, def: ?T) 
 }
 
 /// Returns true if metatable was created, false if it already exists.
-pub fn Lnewmetatable(L: *lua.State, tname: [:0]const u8) bool {
-    if (L.getfield(lua.REGISTRYINDEX, tname) != .Nil) // get registry.name, name already in use?
+pub fn Lnewmetatable(L: *lua.State, tname: [:0]const u8) !bool {
+    if (try L.getfield(lua.REGISTRYINDEX, tname) != .Nil) // get registry.name, name already in use?
         return false; // leave previous value on top, but return false
     L.pop(1);
-    L.newtable(); // create metatable
+    try L.newtable(); // create metatable
     L.pushvalue(-1);
-    L.setfield(lua.REGISTRYINDEX, tname); // registry.name = metatable
+    try L.setfield(lua.REGISTRYINDEX, tname); // registry.name = metatable
     return true;
 }
 
@@ -121,7 +123,7 @@ pub fn Lcheckbuffer(L: *lua.State, idx: i32) []u8 {
         return tag_error(L, idx, .Buffer);
 }
 
-pub fn Lcheckstack(L: *lua.State, space: usize, msg: ?[]const u8) !void {
+pub fn Lcheckstack(L: *lua.State, space: usize, msg: ?[]const u8) Errorset.Table!void {
     if (!try L.checkstack(space))
         if (msg) |m|
             try LerrorL(L, "stack overflow ({s})", .{m})
@@ -202,7 +204,7 @@ pub fn Loptvector(L: *lua.State, narg: i32, d: []const f32) []const f32 {
     return OptionalValue([]const f32, L, Lcheckvector, narg, d);
 }
 
-pub fn Lgetmetafield(L: *lua.State, obj: i32, event: [:0]const u8) !bool {
+pub fn Lgetmetafield(L: *lua.State, obj: i32, event: [:0]const u8) Errorset.Table!bool {
     if (!L.getmetatable(obj)) // no metatable?
         return false;
     try L.pushstring(event);
@@ -220,24 +222,24 @@ pub fn Lcallmeta(L: *lua.State, obj: i32, event: [:0]const u8) bool {
     return c.luaL_callmeta(@ptrCast(L), obj, event) != 0;
 }
 
-pub fn Lregister(L: *lua.State, libname: ?[:0]const u8, funcs: []const Reg) !void {
+pub fn Lregister(L: *lua.State, libname: ?[:0]const u8, funcs: []const Reg) Errorset.Table!void {
     if (libname) |name| {
         _ = Lfindtable(L, lua.REGISTRYINDEX, "_LOADED", 1);
-        _ = L.getfield(-1, name);
+        _ = try L.getfield(-1, name);
         if (!L.istable(-1)) {
             L.pop(1);
             if (Lfindtable(L, lua.GLOBALSINDEX, name, funcs.len)) |_|
                 try LerrorL(L, "name conflict for module '{s}'", .{name});
             L.pushvalue(-1);
-            L.setfield(-3, name);
+            try L.setfield(-3, name);
         }
         L.remove(-2);
         L.insert(-1);
     }
     for (funcs) |f| {
         if (f.func) |func| {
-            L.pushcfunction(func, f.name);
-            L.setfield(-2, f.name);
+            try L.pushcfunction(func, f.name);
+            try L.setfield(-2, f.name);
         }
     }
 }

@@ -11,7 +11,10 @@ const lapi = @import("lapi.zig");
 const laux = @import("laux.zig");
 const linit = @import("linit.zig");
 const lmem = @import("lmem.zig");
+const lfunc = @import("lfunc.zig");
+const ltable = @import("ltable.zig");
 const ldebug = @import("ldebug.zig");
+const lstring = @import("lstring.zig");
 const lcommon = @import("lcommon.zig");
 const lobject = @import("lobject.zig");
 const lvmload = @import("lvmload.zig");
@@ -27,6 +30,8 @@ const lutf8lib = @import("lutf8lib.zig");
 const lbitlib = @import("lbitlib.zig");
 const lbuflib = @import("lbuflib.zig");
 const lveclib = @import("lveclib.zig");
+
+const Errorset = @import("errorset.zig");
 
 const state = @This();
 
@@ -46,7 +51,7 @@ pub const LG = extern struct {
 };
 
 const stringtable = extern struct {
-    hash: [*]?*lobject.TString,
+    hash: ?[*]?*lobject.TString,
     /// number of elements
     nuse: u32,
     size: c_int,
@@ -94,23 +99,16 @@ pub const CallInfo = extern struct {
     /// call frame flags, see LUA_CALLINFO_*
     flags: c_uint,
 
-    pub inline fn add_num(this: *CallInfo, num: usize) *CallInfo {
-        return @ptrFromInt(@intFromPtr(this) + (num * @sizeOf(CallInfo)));
-    }
-
     pub inline fn sub(this: *CallInfo, ptr: *CallInfo) usize {
         return @divExact(@intFromPtr(this) - @intFromPtr(ptr), @sizeOf(CallInfo));
     }
-    pub inline fn sub_num(this: *CallInfo, num: usize) *CallInfo {
-        return @ptrFromInt(@intFromPtr(this) - (num * @sizeOf(CallInfo)));
-    }
 
     pub inline fn ci_func(this: *CallInfo) *lobject.Closure {
-        return this.func.clvalue();
+        return this.func[0].clvalue();
     }
 
     pub inline fn isLua(this: *CallInfo) bool {
-        return this.func.ttisfunction() and this.ci_func().isC != 1;
+        return this.func[0].ttisfunction() and this.ci_func().isC != 1;
     }
 };
 
@@ -188,19 +186,19 @@ const GCMetrics = extern struct {
 };
 
 const ExecutionCallbacks = extern struct {
-    context: *anyopaque,
+    context: ?*anyopaque = null,
     /// gets called when a function is created
-    close: *const fn (L: *lua_State) callconv(.c) void,
+    close: ?*const fn (L: *lua_State) callconv(.c) void = null,
     /// gets called when a function is destroyed
-    destroy: *const fn (L: *lua_State, proto: *anyopaque) callconv(.c) void,
+    destroy: ?*const fn (L: *lua_State, proto: *anyopaque) callconv(.c) void = null,
     /// gets called when a function is about to start/resume (when execdata is present), return 0 to exit VM
-    enter: *const fn (L: *lua_State, proto: *anyopaque) callconv(.c) c_int,
+    enter: ?*const fn (L: *lua_State, proto: *anyopaque) callconv(.c) c_int = null,
     /// gets called when a function has to be switched from native to bytecode in the debugger
-    disable: *const fn (L: *lua_State, proto: *anyopaque) callconv(.c) void,
+    disable: ?*const fn (L: *lua_State, proto: *anyopaque) callconv(.c) void = null,
     /// gets called to request the size of memory associated with native part of the Proto
-    getmemorysize: *const fn (L: *lua_State, proto: *anyopaque) callconv(.c) usize,
+    getmemorysize: ?*const fn (L: *lua_State, proto: *anyopaque) callconv(.c) usize = null,
     /// gets called to get the userdata type index
-    gettypemapping: *const fn (L: *lua_State, str: [*c]const u8, len: usize) callconv(.c) u8,
+    gettypemapping: ?*const fn (L: *lua_State, str: [*c]const u8, len: usize) callconv(.c) u8 = null,
 };
 
 pub const global_State = extern struct {
@@ -210,7 +208,7 @@ pub const global_State = extern struct {
     /// function to reallocate memory
     frealloc: ?lua.Alloc,
     /// auxiliary data to `frealloc'
-    ud: *anyopaque,
+    ud: ?*anyopaque,
 
     currentwhite: u8,
     /// state of garbage collector
@@ -267,7 +265,7 @@ pub const global_State = extern struct {
     registryfree: c_int,
 
     /// jump buffer data for longjmp-style error handling
-    errorjmp: *anyopaque,
+    errorjmp: ?*anyopaque,
 
     /// PCG random number generator state
     rngstate: u64,
@@ -311,16 +309,16 @@ pub const lua_State = extern struct {
     base: lobject.StkId,
     global: *global_State,
     /// call info for current function
-    ci: ?*CallInfo,
+    ci: ?[*]CallInfo,
     /// last free slot in the stack
     stack_last: lobject.StkId,
     /// stack base
     stack: [*]lobject.TValue,
 
     /// points after end of ci array
-    end_ci: ?*CallInfo,
+    end_ci: ?[*]CallInfo,
     /// array of CallInfo's
-    base_ci: ?*CallInfo,
+    base_ci: ?[*]CallInfo,
 
     stacksize: c_int,
     /// size of array `base_ci'
@@ -345,12 +343,12 @@ pub const lua_State = extern struct {
 
     userdata: ?*anyopaque,
 
-    pub inline fn registry(L: *lua_State) lobject.StkId {
+    pub inline fn registry(L: *lua_State) *lobject.TValue {
         return &L.global.registry;
     }
 
     pub inline fn curr_func(L: *lua_State) *lobject.Closure {
-        return L.ci.?.func.clvalue();
+        return L.ci.?[0].func[0].clvalue();
     }
 
     // pub const api_incr_top = lapi.api_incr_top;
@@ -708,12 +706,6 @@ fn freestack(L: *lua_State, L1: *lua.State) void {
     lmem.Mfreearray(L, lobject.TValue, @ptrCast(@alignCast(L1.stack)), @intCast(L1.stacksize), L1.header.memcat);
 }
 
-pub inline fn newstate(f: lua.Alloc, ud: ?*anyopaque) !*lua.State {
-    if (c.lua_newstate(f, ud)) |s|
-        return @ptrCast(@alignCast(s))
-    else
-        return error.OutOfMemory;
-}
 pub inline fn Lnewstate() !*lua.State {
     if (c.luaL_newstate()) |s|
         return @ptrCast(@alignCast(s))
@@ -722,15 +714,99 @@ pub inline fn Lnewstate() !*lua.State {
 }
 
 pub inline fn close(L: *lua_State) void {
-    c.lua_close(@ptrCast(L));
+    const GL = L.global.mainthread; // only the main thread can be closed
+    lfunc.Fclose(GL, @ptrCast(GL.stack)); // close all upvalues for this thread
+    close_state(GL);
 }
 
-pub inline fn resetthread(L: *lua_State) void {
-    c.lua_resetthread(@ptrCast(L));
+fn stack_init(L1: *lua.State, L: *lua_State) Errorset.Memory!void {
+    // initialize CallInfo array
+    L1.base_ci = try lmem.Mnewarray(L, CallInfo, BASIC_CI_SIZE, L1.header.memcat);
+    L1.ci = L1.base_ci.?;
+    L1.size_ci = BASIC_CI_SIZE;
+    L1.end_ci = L1.base_ci.?[@intCast(L1.size_ci - 1)..];
+    // initialize stack array
+    L1.stack = try lmem.Mnewarray(L, lobject.TValue, BASIC_STACK_SIZE + EXTRA_STACK, L1.header.memcat);
+    L1.stacksize = BASIC_STACK_SIZE + EXTRA_STACK;
+    const stack = L1.stack;
+    for (0..BASIC_STACK_SIZE + EXTRA_STACK) |i|
+        stack[i].setnilvalue(); // erase new stack
+    L1.top = stack;
+    L1.stack_last = stack[@intCast(L1.stacksize - EXTRA_STACK)..];
+    // initialize first ci
+    L1.ci.?[0].func = L1.top;
+    L1.top = L1.top[1..];
+    L1.top[0].setnilvalue(); // `function' entry for this `ci'
+    L1.base = L1.top;
+    L1.ci.?[0].base = L1.top;
+    L1.ci.?[0].top = L1.top[@intCast(lua.config.MINSTACK)..];
 }
 
-pub fn isthreadreset(L: *lua_State) bool {
-    return L.ci == L.base_ci and L.base == L.top and L.curr_status == @intFromEnum(lua.Status.Ok);
+fn f_luaopen(L: *lua_State) Errorset.Table!void {
+    const g = L.global;
+    try stack_init(L, L);
+    L.gt = try ltable.Hnew(L, 0, 2); // table of globals
+    L.registry().sethvalue(L, try ltable.Hnew(L, 0, 2)); // registry
+    try lstring.Sresize(L, @intCast(lua.config.MINSTRTABSIZE)); // initial size of string table
+    try ltm.Tinit(L);
+    lstring.Sfix(try lstring.Snew(L, ldebug.MEMERRMSG)); // pin to make sure we can always throw this error
+    lstring.Sfix(try lstring.Snew(L, ldebug.ERRERRMSG)); // pin to make sure we can always throw this error
+    g.GCthreshold = 4 * g.totalbytes;
+}
+
+fn preinit_state(L: *lua_State, g: *global_State) void {
+    L.global = g;
+    L.stack = undefined; // TODO: null
+    L.stacksize = 0;
+    L.gt = null;
+    L.openupval = null;
+    L.size_ci = 0;
+    L.nCcalls = 0;
+    L.baseCcalls = 0;
+    L.curr_status = 0;
+    L.base_ci = null;
+    L.ci = null;
+    L.namecall = null;
+    L.cachedslot = 0;
+    L.singlestep_on = false;
+    L.isactive = false;
+    L.activememcat = 0;
+    L.userdata = null;
+}
+
+fn close_state(L: *lua_State) void {
+    const g = L.global;
+    lfunc.Fclose(L, @ptrCast(L.stack)); // close all upvalues for this thread
+    lgc.Cfreeall(L); // collect all objects
+    std.debug.assert(g.strt.nuse == 0);
+    lmem.Mfreearray(L, ?*lobject.TString, L.global.strt.hash.?, @intCast(L.global.strt.size), 0);
+    freestack(L, L);
+    for (0..@intCast(lua.config.SIZECLASSES)) |i| {
+        std.debug.assert(g.freepages[i] == null);
+        std.debug.assert(g.freegcopages[i] == null);
+    }
+    std.debug.assert(g.allgcopages == null);
+    std.debug.assert(g.totalbytes == @sizeOf(LG));
+    std.debug.assert(g.memcatbytes[0] == @sizeOf(LG));
+    for (1..@intCast(lua.config.MEMORY_CATEGORIES)) |i|
+        std.debug.assert(g.memcatbytes[i] == 0);
+
+    if (L.global.ecb.close) |close_fn|
+        close_fn(L);
+
+    _ = (g.frealloc.?)(g.ud, L, @sizeOf(LG), 0);
+}
+
+pub fn Enewthread(L: *lua_State) Errorset.Table!*lua_State {
+    const L1 = try lmem.Mnewgco(L, lua_State, @sizeOf(lua_State), L.activememcat);
+    lgc.Cinit(L, @ptrCast(@alignCast(L1)), @intFromEnum(lua.Type.Thread));
+    preinit_state(L1, L.global);
+    L1.activememcat = L.activememcat; // inherit the active memory category
+    try stack_init(L1, L); // init stack
+    L1.gt = L.gt; // share table of globals
+    L1.singlestep_on = L.singlestep_on;
+    std.debug.assert(lgc.iswhite(@ptrCast(@alignCast(L1))));
+    return L1;
 }
 
 pub fn Efreethread(L: *lua_State, L1: *lua.State, page: *lmem.lua_Page) void {
@@ -739,4 +815,102 @@ pub fn Efreethread(L: *lua_State, L1: *lua.State, page: *lmem.lua_Page) void {
         ut(null, L1);
     freestack(L, L1);
     lmem.Mfreegco(L, @ptrCast(@alignCast(L1)), @sizeOf(lua.State), L1.header.memcat, page);
+}
+
+pub fn resetthread(L: *lua_State) Errorset.Memory!void {
+    // close upvalues before clearing anything
+    lfunc.Fclose(L, @ptrCast(L.stack));
+    // clear call frames
+    const ci = &L.base_ci.?[0];
+    ci.func = @ptrCast(L.stack);
+    ci.base = ci.func[1..];
+    ci.top = ci.base[lua.config.MINSTACK..];
+    ci.func[0].setnilvalue();
+    L.ci = @ptrCast(ci);
+    if (L.size_ci != BASIC_CI_SIZE)
+        try ldo.DreallocCI(L, BASIC_CI_SIZE);
+    // clear thread state
+    L.curr_status = @intFromEnum(lua.Status.Ok);
+    L.base = L.ci.?[0].base;
+    L.top = L.ci.?[0].base;
+    L.nCcalls = 0;
+    L.baseCcalls = 0;
+    // clear thread stack
+    if (L.stacksize != BASIC_STACK_SIZE + EXTRA_STACK)
+        try ldo.Dreallocstack(L, @intCast(BASIC_STACK_SIZE), false);
+    for (0..@intCast(L.stacksize)) |i|
+        L.stack[i].setnilvalue();
+}
+
+pub fn isthreadreset(L: *lua_State) bool {
+    return L.ci == L.base_ci and L.base == L.top and L.curr_status == @intFromEnum(lua.Status.Ok);
+}
+
+pub fn newstate(f: lua.Alloc, ud: ?*anyopaque) Errorset.Table!*lua_State {
+    const l = f(ud, null, 0, @sizeOf(LG)) orelse return error.OutOfMemory;
+    const L: *lua_State = @ptrCast(@alignCast(l));
+    const g: *global_State = &(@as(*LG, @ptrCast(@alignCast(L)))).g;
+    L.header.tt = @intFromEnum(lua.Type.Thread);
+    L.header.marked = lgc.bit2mask(lgc.WHITE0BIT, lgc.FIXEDBIT);
+    g.currentwhite = L.header.marked;
+    L.header.memcat = 0;
+    preinit_state(L, g);
+    g.frealloc = f;
+    g.ud = ud;
+    g.mainthread = L;
+    g.uvhead.u.open.prev = &g.uvhead;
+    g.uvhead.u.open.next = &g.uvhead;
+    g.GCthreshold = 0; // mark it as unfinished state
+    g.registryfree = 0;
+    g.errorjmp = null;
+    g.rngstate = 0;
+    g.ptrenckey[0] = 1;
+    g.ptrenckey[1] = 0;
+    g.ptrenckey[2] = 0;
+    g.ptrenckey[3] = 0;
+    g.strt.size = 0;
+    g.strt.nuse = 0;
+    g.strt.hash = null;
+    g.pseudotemp.setnilvalue();
+    L.registry().setnilvalue();
+    g.gcstate = lgc.GCSpause;
+    g.gray = null;
+    g.grayagain = null;
+    g.weak = null;
+    g.totalbytes = @sizeOf(LG);
+    g.gcgoal = lgc.I_GCGOAL;
+    g.gcstepmul = lgc.I_GCSTEPMUL;
+    g.gcstepsize = @as(c_int, lgc.I_GCSTEPSIZE) << 10;
+    for (0..@intCast(lua.config.SIZECLASSES)) |i| {
+        g.freepages[i] = null;
+        g.freegcopages[i] = null;
+    }
+    g.allpages = null;
+    g.allgcopages = null;
+    g.sweepgcopage = null;
+    for (0..@intCast(lua.Type.T_COUNT)) |i|
+        g.mt[i] = null;
+    for (0..lua.config.UTAG_LIMIT) |i| {
+        g.udatagc[i] = null;
+        g.udatamt[i] = null;
+    }
+    for (0..@intCast(lua.config.LUTAG_LIMIT)) |i|
+        g.lightuserdataname[i] = null;
+    for (0..@intCast(lua.config.MEMORY_CATEGORIES)) |i|
+        g.memcatbytes[i] = 0;
+
+    g.memcatbytes[0] = @sizeOf(LG);
+
+    g.cb = .{};
+
+    g.ecb = .{};
+
+    g.gcstats = .{};
+
+    // TODO: LUAI_GCMETRICS
+
+    errdefer L.close();
+    try f_luaopen(L);
+
+    return L;
 }

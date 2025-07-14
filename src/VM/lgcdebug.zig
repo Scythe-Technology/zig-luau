@@ -53,30 +53,30 @@ fn validateclosure(g: *const lstate.global_State, cl: *lobject.Closure) void {
 
     if (cl.isC != 0) {
         for (0..cl.nupvalues) |i|
-            validateobjref(g, @ptrCast(cl), @ptrCast(&@as([*]lobject.TValue, @ptrCast(&cl.d.c.upvals))[i]));
+            validateobjref(g, @ptrCast(cl), @ptrCast(&cl.d.c.upvalues()[i]));
     } else {
         std.debug.assert(cl.nupvalues == cl.d.l.p.nups);
 
         validateobjref(g, @ptrCast(cl), @ptrCast(@alignCast(cl.d.l.p)));
 
         for (0..cl.nupvalues) |i|
-            validateobjref(g, @ptrCast(cl), @ptrCast(&@as([*]lobject.TValue, @ptrCast(&cl.d.l.uprefs))[i]));
+            validateobjref(g, @ptrCast(cl), @ptrCast(&cl.d.l.upreferences()[i]));
     }
 }
 
 fn validatestack(g: *const lstate.global_State, l: *lua.State) void {
     validateobjref(g, @ptrCast(@alignCast(l)), @ptrCast(@alignCast(l.gt.?)));
 
-    for (0..l.ci.?.sub(l.base_ci.?)) |i| {
-        const ci = l.base_ci.?.add_num(i);
+    for (0..l.ci.?[0].sub(@ptrCast(l.base_ci.?))) |i| {
+        const ci = &l.base_ci.?[i];
         std.debug.assert(@intFromPtr(l.stack) <= @intFromPtr(ci.base));
         std.debug.assert(@intFromPtr(ci.func) <= @intFromPtr(ci.base) and @intFromPtr(ci.base) <= @intFromPtr(ci.top));
         std.debug.assert(@intFromPtr(ci.top) <= @intFromPtr(l.stack_last));
     }
 
     // note: stack refs can violate gc invariant so we only check for liveness
-    for (0..l.top.sub(@ptrCast(l.stack))) |i|
-        l.stack[0].add_num(i).checkliveness(g);
+    for (0..l.top[0].sub(@ptrCast(l.stack))) |i|
+        l.stack[i].checkliveness(g);
 
     if (l.namecall) |nc|
         validateobjref(g, @ptrCast(@alignCast(l)), @ptrCast(@alignCast(nc)));
@@ -98,18 +98,18 @@ fn validateproto(g: *const lstate.global_State, f: *lobject.Proto) void {
         validateobjref(g, @ptrCast(@alignCast(f)), @ptrCast(@alignCast(name)));
 
     for (0..@intCast(f.sizek)) |i|
-        validateref(g, @ptrCast(@alignCast(f)), @ptrCast(@alignCast(&f.k[i])));
+        validateref(g, @ptrCast(@alignCast(f)), @ptrCast(@alignCast(&f.k.?[i])));
 
     for (0..@intCast(f.sizeupvalues)) |i|
-        if (f.upvalues[i]) |uv|
+        if (f.upvalues.?[i]) |uv|
             validateobjref(g, @ptrCast(@alignCast(f)), @ptrCast(@alignCast(uv)));
 
     for (0..@intCast(f.sizep)) |i|
-        if (f.p[i]) |proto|
+        if (f.p.?[i]) |proto|
             validateobjref(g, @ptrCast(@alignCast(f)), @ptrCast(@alignCast(proto)));
 
     for (0..@intCast(f.sizelocvars)) |i|
-        if (f.locvars[i].varname) |varname|
+        if (f.locvars.?[i].varname) |varname|
             validateobjref(g, @ptrCast(@alignCast(f)), @ptrCast(@alignCast(varname)));
 }
 

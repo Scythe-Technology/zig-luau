@@ -10,6 +10,10 @@ const lgc = @import("lgc.zig");
 const lmem = @import("lmem.zig");
 const lnumutils = @import("lnumutils.zig");
 
+const Errorset = @import("errorset.zig");
+
+const Error = Errorset.Table;
+
 const MAXBITS = 26;
 const MAXSIZE = 1 << MAXBITS;
 
@@ -19,46 +23,42 @@ const LuaTable = lobject.LuaTable;
 
 const LUA_VECTOR_SIZE = lua.config.VECTOR_SIZE;
 
-const Hdummynode: LuaNode = .{
-    .val = .{ .extra = undefined, .tt = @intFromEnum(lua.Type.Nil), .value = undefined },
-    .key = .{ .extra = undefined, .pi = .{ .tt = @intFromEnum(lua.Type.Nil), .next = 0 }, .value = undefined },
-};
-
-const dummynode: *const LuaNode = &Hdummynode;
-
-pub inline fn gnode(t: *const LuaTable, i: usize) *LuaNode {
-    return &t.node[i];
-}
+// const Hdummynode: LuaNode = .{
+//     .val = .{ .extra = undefined, .tt = @intFromEnum(lua.Type.Nil), .value = undefined },
+//     .key = .{ .extra = undefined, .pi = .{ .tt = @intFromEnum(lua.Type.Nil), .next = 0 }, .value = undefined },
+// };
+extern "c" const luaH_dummynode: LuaNode;
+pub const dummynode = &luaH_dummynode;
 
 pub inline fn invalidateTMcache(t: *LuaTable) void {
     t.tmcache = 0;
 }
 
-pub inline fn hashpow2(t: *const LuaTable, n: u32) *LuaNode {
-    return gnode(t, lobject.lmod(usize, n, lobject.sizenode(t)));
+pub inline fn hashpow2(t: *const LuaTable, n: u32) [*]LuaNode {
+    return t.gnode(lobject.lmod(usize, n, lobject.sizenode(t)));
 }
-pub inline fn hashstr(t: *const LuaTable, str: *const lobject.TString) *LuaNode {
+pub inline fn hashstr(t: *const LuaTable, str: *const lobject.TString) [*]LuaNode {
     return hashpow2(t, str.hash);
 }
-pub inline fn hashboolean(t: *const LuaTable, b: bool) *LuaNode {
+pub inline fn hashboolean(t: *const LuaTable, b: bool) [*]LuaNode {
     return hashpow2(t, if (b) 1 else 0);
 }
 
-pub fn hashpointer(t: *const LuaTable, p: ?*const anyopaque) *LuaNode {
+pub fn hashpointer(t: *const LuaTable, p: ?*const anyopaque) [*]LuaNode {
     // we discard the high 32-bit portion of the pointer on 64-bit platforms as it doesn't carry much entropy anyway
     var h: u32 = if (p) |ptr| @truncate(@intFromPtr(ptr)) else 0;
 
     // MurmurHash3 32-bit finalizer
     h ^= h >> 16;
-    h *= 0x85ebca6b;
+    h *%= 0x85ebca6b;
     h ^= h >> 13;
-    h *= 0xc2b2ae35;
+    h *%= 0xc2b2ae35;
     h ^= h >> 16;
 
     return hashpow2(t, h);
 }
 
-fn hashnum(t: *const LuaTable, n: f64) *LuaNode {
+fn hashnum(t: *const LuaTable, n: f64) [*]LuaNode {
     comptime std.debug.assert(@sizeOf(f64) == @sizeOf(u32) * 2); // expected a 8-byte double;
     var i: [2]u32 = undefined;
     @memcpy(i[0..], &@as([2]u32, @bitCast(n)));
@@ -83,7 +83,7 @@ fn hashnum(t: *const LuaTable, n: f64) *LuaNode {
     return hashpow2(t, h2);
 }
 
-fn hashvec(t: *const LuaTable, v: []const f32) *LuaNode {
+fn hashvec(t: *const LuaTable, v: []const f32) [*]LuaNode {
     var i: [LUA_VECTOR_SIZE]u32 = undefined;
     @memcpy(i[0..], (@as([*]const u32, @ptrCast(@alignCast(v.ptr))))[0..LUA_VECTOR_SIZE]);
 
@@ -109,7 +109,7 @@ fn hashvec(t: *const LuaTable, v: []const f32) *LuaNode {
     return hashpow2(t, h);
 }
 
-fn mainposition(t: *const LuaTable, key: *const TValue) *LuaNode {
+fn mainposition(t: *const LuaTable, key: *const TValue) [*]LuaNode {
     comptime std.debug.assert(@sizeOf(LuaNode) == @sizeOf(TValue) * 2);
     comptime std.debug.assert(@alignOf(LuaNode) == @alignOf(TValue));
     comptime std.debug.assert(@alignOf(LuaNode) == 8);
@@ -147,12 +147,12 @@ pub inline fn getaboundary(t: *LuaTable) c_int {
     return if (t.bound.aboundary < 0) -t.bound.aboundary else t.sizearray;
 }
 
-fn computesizes(nums: []const i32, narray: *i32) i32 {
-    var i: u32 = 0;
-    var twotoi: i32 = 1; // 2^i
-    var a: i32 = 0; // number of elements smaller than 2^i
-    var na: i32 = 0; // number of elements to go to array part
-    var n: i32 = 0; // optimal size for array part
+fn computesizes(nums: []const u32, narray: *usize) usize {
+    var i: usize = 0;
+    var twotoi: usize = 1; // 2^i
+    var a: usize = 0; // number of elements smaller than 2^i
+    var na: usize = 0; // number of elements to go to array part
+    var n: usize = 0; // optimal size for array part
     while (@divTrunc(twotoi, 2) < narray.*) : (i += 1) {
         defer twotoi *= 2;
         if (nums[i] > 0) {
@@ -170,7 +170,7 @@ fn computesizes(nums: []const i32, narray: *i32) i32 {
     return na;
 }
 
-fn countint(key: f64, nums: []i32) i32 {
+fn countint(key: f64, nums: []u32) u1 {
     const k = arrayindex(key);
     if (0 < k and k <= MAXSIZE) {
         // is `key' an appropriate array index?
@@ -180,14 +180,14 @@ fn countint(key: f64, nums: []i32) i32 {
     return 0;
 }
 
-fn numusearray(t: *const LuaTable, nums: []i32) i32 {
+fn numusearray(t: *const LuaTable, nums: []u32) usize {
     var lg: u8 = 0;
     var ttlg: i32 = 1; // 2^lg
-    var ause: i32 = 0; // summation of `nums'
+    var ause: usize = 0; // summation of `nums'
     var i: u32 = 1; // count to traverse all array keys
     while (lg <= MAXBITS) : (lg += 1) { // for each slice
         defer ttlg *= 2;
-        var lc: i32 = 0; // counter
+        var lc: u32 = 0; // counter
         var lim: i32 = ttlg;
         if (lim > t.sizearray) {
             lim = t.sizearray; // adjust upper limit
@@ -204,15 +204,15 @@ fn numusearray(t: *const LuaTable, nums: []i32) i32 {
     return ause;
 }
 
-fn numusehash(t: *const LuaTable, nums: []i32, pnasize: *i32) i32 {
-    var totaluse: i32 = 0; // total number of elements
-    var ause: i32 = 0; // summation of `nums'
+fn numusehash(t: *const LuaTable, nums: []u32, pnasize: *usize) u32 {
+    var totaluse: u32 = 0; // total number of elements
+    var ause: usize = 0; // summation of `nums'
     var i: usize = lobject.sizenode(t);
     while (i > 0) : (i -= 1) {
-        const n = &t.node[i];
-        if (!n.gval().ttisnil()) {
-            if (n.gkey().ttisnumber())
-                ause += countint(n.gkey().nvalue(), nums);
+        const n = t.gnode(i);
+        if (!n[0].gval().ttisnil()) {
+            if (n[0].gkey().ttisnumber())
+                ause += countint(n[0].gkey().nvalue(), nums);
             totaluse += 1;
         }
     }
@@ -220,18 +220,18 @@ fn numusehash(t: *const LuaTable, nums: []i32, pnasize: *i32) i32 {
     return totaluse;
 }
 
-fn setarrayvector(L: *lua.State, t: *LuaTable, size: i32) !void {
+fn setarrayvector(L: *lua.State, t: *LuaTable, size: usize) Error!void {
     if (size > MAXSIZE)
         return error.@"table overflow";
-    t.array = try lmem.Mreallocarray(L, TValue, t.array, @intCast(t.sizearray), @intCast(size), t.header.memcat);
+    t.array = try lmem.Mreallocarray(L, TValue, t.array, @intCast(t.sizearray), size, t.header.memcat);
     var i: usize = @intCast(t.sizearray);
     while (i < size) : (i += 1)
         t.array.?[i].setnilvalue();
-    t.sizearray = size;
+    t.sizearray = @intCast(size);
 }
 
-fn setnodevector(L: *lua.State, t: *LuaTable, _size: i32) !void {
-    var size: usize = @intCast(_size);
+fn setnodevector(L: *lua.State, t: *LuaTable, _size: usize) Error!void {
+    var size: usize = _size;
     var lsize: u32 = 0;
     if (size == 0) { // no elements to hash part?
         t.node = @ptrCast(@alignCast(@constCast(dummynode))); // use common `dummynode'
@@ -239,13 +239,13 @@ fn setnodevector(L: *lua.State, t: *LuaTable, _size: i32) !void {
         lsize = @intCast(lobject.ceillog2(@truncate(size)));
         if (lsize > MAXBITS)
             return error.@"table overflow";
-        size = @intCast(lobject.twoto(@truncate(lsize)));
+        size = lobject.twoto(@truncate(lsize));
         t.node = try lmem.Mnewarray(L, LuaNode, size, t.header.memcat);
         for (0..size) |i| {
             const n = t.gnode(i);
-            n.key.setnext(0);
-            n.gkey().pi.tt = @intFromEnum(lua.Type.Nil);
-            n.gval().setnilvalue();
+            n[0].key.setnext(0);
+            n[0].gkey().pi.tt = @intFromEnum(lua.Type.Nil);
+            n[0].gval().setnilvalue();
         }
     }
     t.lsizenode = @truncate(lsize);
@@ -253,7 +253,7 @@ fn setnodevector(L: *lua.State, t: *LuaTable, _size: i32) !void {
     t.bound.lastfree = @intCast(size); // all positions are free
 }
 
-fn arrayornewkey(L: *lua.State, t: *LuaTable, key: *const TValue) !*TValue {
+fn arrayornewkey(L: *lua.State, t: *LuaTable, key: *const TValue) Error!*TValue {
     if (key.ttisnumber()) {
         const n = key.nvalue();
         const k = lnumutils.inum2int(n);
@@ -264,7 +264,7 @@ fn arrayornewkey(L: *lua.State, t: *LuaTable, key: *const TValue) !*TValue {
     return newkey(L, t, key);
 }
 
-fn resize(L: *lua.State, t: *LuaTable, nasize: i32, nhsize: i32) anyerror!void {
+fn resize(L: *lua.State, t: *LuaTable, nasize: usize, nhsize: usize) Error!void {
     if (nasize > MAXSIZE or nhsize > MAXSIZE)
         return error.@"table overflow";
 
@@ -280,9 +280,9 @@ fn resize(L: *lua.State, t: *LuaTable, nasize: i32, nhsize: i32) anyerror!void {
     const nnew = t.node;
 
     if (nasize < oldasize) { // array part must shrink?
-        t.sizearray = nasize;
+        t.sizearray = @intCast(nasize);
         // re-insert elements from vanishing slice
-        var i: usize = @intCast(nasize);
+        var i: usize = nasize;
         while (i < oldasize) : (i += 1) {
             if (!t.array.?[i].ttisnil()) {
                 var ok: TValue = undefined;
@@ -291,21 +291,23 @@ fn resize(L: *lua.State, t: *LuaTable, nasize: i32, nhsize: i32) anyerror!void {
             }
         }
         // shrink array
-        t.array = try lmem.Mreallocarray(L, TValue, t.array, @intCast(oldasize), @intCast(nasize), t.header.memcat);
+        t.array = try lmem.Mreallocarray(L, TValue, t.array, @intCast(oldasize), nasize, t.header.memcat);
     }
 
     // used for the migration check at the end
     const anew = t.array;
 
     // re-insert elements from hash part
-    var i: i32 = @as(i32, @intCast(lobject.twoto(@truncate(oldhsize)))) - 1;
+    var i: usize = lobject.twoto(@truncate(oldhsize)) - 1;
     while (i >= 0) : (i -= 1) {
-        const old: *LuaNode = &nold[@intCast(i)];
+        const old: *LuaNode = &nold[i];
         if (!old.gval().ttisnil()) {
             var ok: TValue = undefined;
             lobject.getnodekey(L, &ok, old);
             (try arrayornewkey(L, t, &ok)).setobj(L, old.gval());
         }
+        if (i == 0)
+            break;
     }
 
     // make sure we haven't recursively rehashed during element migration
@@ -316,24 +318,24 @@ fn resize(L: *lua.State, t: *LuaTable, nasize: i32, nhsize: i32) anyerror!void {
         lmem.Mfreearray(L, LuaNode, nold, lobject.twoto(@truncate(oldhsize)), t.header.memcat); // free old array
 }
 
-fn adjustasize(t: *LuaTable, size: i32, ek: ?*const TValue) i32 {
+fn adjustasize(t: *LuaTable, size: usize, ek: ?*const TValue) usize {
     const tbound: bool = @as(*LuaNode, @ptrCast(t.node)) != dummynode or size < t.sizearray;
     const ekindex: i32 = if (ek != null and ek.?.ttisnumber()) arrayindex(ek.?.nvalue()) else -1;
     // move the array size up until the boundary is guaranteed to be inside the array part
     var adjusted_size = size;
-    while (adjusted_size + 1 == ekindex or (tbound and !Hgetnum(t, adjusted_size + 1).ttisnil()))
+    while (adjusted_size + 1 == ekindex or (tbound and !Hgetnum(t, @intCast(adjusted_size + 1)).ttisnil()))
         adjusted_size += 1;
     return adjusted_size;
 }
 
-pub fn Hresizehash(L: *lua.State, t: *LuaTable, nhsize: i32) !void {
-    try resize(L, t, t.sizearray, nhsize);
+pub fn Hresizehash(L: *lua.State, t: *LuaTable, nhsize: usize) Error!void {
+    try resize(L, t, @intCast(t.sizearray), nhsize);
 }
 
-fn rehash(L: *lua.State, t: *LuaTable, ek: *const TValue) !void {
-    var nums: [MAXBITS + 1]i32 = [_]i32{0} ** (MAXBITS + 1);
+fn rehash(L: *lua.State, t: *LuaTable, ek: *const TValue) Error!void {
+    var nums: [MAXBITS + 1]u32 = [_]u32{0} ** (MAXBITS + 1);
     var nasize = numusearray(t, nums[0..]); // count keys in array part
-    var totaluse: i32 = nasize; // all those keys are integer keys
+    var totaluse: usize = nasize; // all those keys are integer keys
     totaluse += numusehash(t, nums[0..], &nasize); // count keys in hash part
 
     // count extra key
@@ -367,6 +369,26 @@ fn rehash(L: *lua.State, t: *LuaTable, ek: *const TValue) !void {
     try resize(L, t, nasize, nh);
 }
 
+pub fn Hnew(L: *lua.State, narray: u32, nhash: u32) Error!*LuaTable {
+    const t = try lmem.Mnewgco(L, LuaTable, @sizeOf(LuaTable), L.header.memcat);
+    lgc.Cinit(L, @ptrCast(@alignCast(t)), @intFromEnum(lua.Type.Table));
+    t.metatable = null;
+    t.tmcache = ~(@as(u8, 0));
+    t.array = null;
+    t.sizearray = 0;
+    t.bound.lastfree = 0;
+    t.lsizenode = 0;
+    t.readonly = 0;
+    t.safeenv = 0;
+    t.nodemask8 = 0;
+    t.node = @ptrCast(@alignCast(@constCast(dummynode)));
+    if (narray > 0)
+        try setarrayvector(L, t, narray);
+    if (nhash > 0)
+        try setnodevector(L, t, nhash);
+    return t;
+}
+
 pub fn Hfree(L: *lua.State, t: *LuaTable, page: *lmem.lua_Page) void {
     if (@as(*LuaNode, @ptrCast(t.node)) != dummynode)
         lmem.Mfreearray(L, LuaNode, t.node, lobject.sizenode(t), t.header.memcat);
@@ -375,12 +397,12 @@ pub fn Hfree(L: *lua.State, t: *LuaTable, page: *lmem.lua_Page) void {
     lmem.Mfreegco(L, @ptrCast(@alignCast(t)), @sizeOf(LuaTable), t.header.memcat, page);
 }
 
-fn getfreepos(t: *LuaTable) ?*LuaNode {
+fn getfreepos(t: *LuaTable) ?[*]LuaNode {
     while (t.bound.lastfree > 0) {
         t.bound.lastfree -= 1;
 
-        const n = gnode(t, @intCast(t.bound.lastfree));
-        if (n.gval().ttisnil())
+        const n = t.gnode(@intCast(t.bound.lastfree));
+        if (n[0].gval().ttisnil())
             return n;
     }
     return null; // could not find a free place
@@ -393,7 +415,7 @@ fn getfreepos(t: *LuaTable) ?*LuaNode {
 // put new key in its main position; otherwise (colliding node is in its main
 // position), new key goes to an empty position.
 //
-fn newkey(L: *lua.State, t: *LuaTable, key: *const TValue) !*TValue {
+fn newkey(L: *lua.State, t: *LuaTable, key: *const TValue) Error!*TValue {
     // enforce boundary invariant
     if (key.ttisnumber() and key.nvalue() == @as(f64, @floatFromInt(t.sizearray + 1))) {
         try rehash(L, t, key); // grow table
@@ -403,7 +425,7 @@ fn newkey(L: *lua.State, t: *LuaTable, key: *const TValue) !*TValue {
     }
 
     var mp = mainposition(t, key);
-    if (!mp.gval().ttisnil() or mp == dummynode) {
+    if (!mp[0].gval().ttisnil() or @as(*LuaNode, @ptrCast(mp)) == dummynode) {
         const n = getfreepos(t) orelse {
             // cannot find a free place?
             try rehash(L, t, key); // grow table
@@ -411,35 +433,35 @@ fn newkey(L: *lua.State, t: *LuaTable, key: *const TValue) !*TValue {
             // after rehash, numeric keys might be located in the new array part, but won't be found in the node part
             return arrayornewkey(L, t, key);
         }; // get a free place
-        std.debug.assert(n != dummynode);
+        std.debug.assert(@as(*LuaNode, @ptrCast(n)) != dummynode);
         var mk: TValue = undefined;
-        lobject.getnodekey(L, &mk, mp);
+        lobject.getnodekey(L, &mk, @ptrCast(mp));
         var othern = mainposition(t, &mk);
         if (othern != mp) { // is colliding node out of its main position?
             // yes; move colliding node into free position
-            while (othern.add_num(othern.gnext()) != mp)
-                othern = othern.add_num(othern.gnext()); // find previous
-            othern.key.setnext(@intCast(n.sub(othern))); // redo the chain with `n' in place of `mp'
-            n.* = mp.*; // copy colliding node into free pos. (mp->next also goes)
-            if (mp.gnext() != 0) {
-                n.key.setnext(n.gnext() + @as(i28, @truncate(@as(isize, @intCast(mp.sub(n)))))); // correct 'next'
-                mp.key.setnext(0); // now 'mp' is free
+            while (othern[0].add_num(othern[0].gnext()) != @as(*LuaNode, @ptrCast(mp)))
+                othern = @ptrCast(othern[0].add_num(othern[0].gnext())); // find previous
+            othern[0].key.setnext(@intCast(n[0].sub(@ptrCast(othern)))); // redo the chain with `n' in place of `mp'
+            n[0] = mp[0]; // copy colliding node into free pos. (mp->next also goes)
+            if (mp[0].gnext() != 0) {
+                n[0].key.setnext(n[0].gnext() + @as(i28, @truncate(@as(isize, @intCast(mp[0].sub(@ptrCast(n))))))); // correct 'next'
+                mp[0].key.setnext(0); // now 'mp' is free
             }
-            mp.gval().setnilvalue();
+            mp[0].gval().setnilvalue();
         } else { // colliding node is in its own main position
             // new node will go into free position
-            if (mp.gnext() != 0)
-                n.key.setnext(@intCast((mp.add_num(mp.gnext())).sub(n))) // chain new position
+            if (mp[0].gnext() != 0)
+                n[0].key.setnext(@intCast((mp[0].add_num(mp[0].gnext())).sub(@ptrCast(n)))) // chain new position
             else
-                std.debug.assert(n.gnext() == 0);
-            mp.key.setnext(@truncate(@as(isize, @intCast(n.sub(mp)))));
+                std.debug.assert(n[0].gnext() == 0);
+            mp[0].key.setnext(@truncate(@as(isize, @intCast(n[0].sub(@ptrCast(mp))))));
             mp = n;
         }
     }
-    lobject.setnodekey(L, mp, key);
+    lobject.setnodekey(L, @ptrCast(mp), key);
     lgc.Cbarriert(L, t, key);
-    std.debug.assert(mp.gval().ttisnil());
-    return mp.gval();
+    std.debug.assert(mp[0].gval().ttisnil());
+    return mp[0].gval();
 }
 
 //
@@ -454,11 +476,11 @@ pub fn Hgetnum(t: *LuaTable, key: i32) *const TValue {
         const nk: f64 = @floatFromInt(key);
         var n = hashnum(t, nk);
         while (true) { // check whether `key' is somewhere in the chain
-            if (n.gkey().ttisnumber() and n.gkey().nvalue() == nk)
-                return n.gval(); // that's it
-            if (n.gnext() == 0)
+            if (n[0].gkey().ttisnumber() and n[0].gkey().nvalue() == nk)
+                return n[0].gval(); // that's it
+            if (n[0].gnext() == 0)
                 break;
-            n = n.add_num(n.gnext());
+            n = @ptrCast(n[0].add_num(n[0].gnext()));
         }
     }
     return lobject.Onilobject;
@@ -467,13 +489,82 @@ pub fn Hgetnum(t: *LuaTable, key: i32) *const TValue {
 pub fn Hgetstr(t: *LuaTable, key: *lobject.TString) *const TValue {
     var n = hashstr(t, key);
     while (true) { // check whether `key' is somewhere in the chain
-        if (n.gkey().ttisstring() and n.gkey().tsvalue() == key)
-            return n.gval(); // that's it
-        if (n.gnext() == 0)
+        if (n[0].gkey().ttisstring() and n[0].gkey().tsvalue() == key)
+            return n[0].gval(); // that's it
+        if (n[0].gnext() == 0)
             break;
-        n = n.add_num(n.gnext());
+        n = @ptrCast(n[0].add_num(n[0].gnext()));
     }
     return lobject.Onilobject;
+}
+
+pub fn Hget(t: *LuaTable, key: *const TValue) *const TValue {
+    switch (key.typeOf()) {
+        .Nil => return lobject.Onilobject,
+        .String => return Hgetstr(t, key.tsvalue()),
+        .Number => {
+            const k = lnumutils.inum2int(key.nvalue());
+            if (@as(f64, @floatFromInt(k)) == key.nvalue()) // index is int?
+                return Hgetnum(t, k); // use specialized version
+            // else go through
+        },
+        else => {},
+    }
+    var n = mainposition(t, key);
+    while (true) { // check whether `key' is somewhere in the chain
+        if (lobject.OrawequalKey(n[0].gkey(), key))
+            return n[0].gval(); // that's it
+        if (n[0].gnext() == 0)
+            break;
+        n = @ptrCast(n[0].add_num(n[0].gnext()));
+    }
+    return lobject.Onilobject; // not found
+}
+
+pub fn Hset(L: *lua.State, t: *LuaTable, key: *const TValue) Error!*TValue {
+    const p = Hget(t, key);
+    invalidateTMcache(t);
+    if (p != lobject.Onilobject)
+        return @constCast(p)
+    else
+        return try Hnewkey(L, t, key);
+}
+
+pub fn Hnewkey(L: *lua.State, t: *LuaTable, key: *const TValue) Error!*TValue {
+    if (key.ttisnil())
+        return error.@"table index is nil";
+    if (key.ttisnumber() and lnumutils.inumisnan(key.nvalue()))
+        return error.@"table index is nan";
+    if (key.ttisvector() and lnumutils.ivecisnan(key.vvalue()))
+        return error.@"table index contains nan";
+    return newkey(L, t, key);
+}
+
+pub fn Hsetnum(L: *lua.State, t: *LuaTable, key: i32) Error!*TValue {
+    // (1 <= key && key <= t->sizearray)
+    if (key - 1 < t.sizearray)
+        return &t.array.?[@intCast(key - 1)];
+    // hash fallback
+    const p = Hgetnum(t, key);
+    if (p != lobject.Onilobject)
+        return @constCast(p)
+    else {
+        var k: TValue = undefined;
+        k.setnvalue(@floatFromInt(key));
+        return newkey(L, t, &k);
+    }
+}
+
+pub fn Hsetstr(L: *lua.State, t: *LuaTable, key: *lobject.TString) Error!*TValue {
+    const p = Hgetstr(t, key);
+    invalidateTMcache(t);
+    if (p != lobject.Onilobject)
+        return @constCast(p)
+    else {
+        var k: TValue = undefined;
+        k.setsvalue(L, key);
+        return newkey(L, t, &k);
+    }
 }
 
 fn updateaboundary(t: *LuaTable, boundary: u32) u32 {
@@ -524,68 +615,7 @@ pub fn Hgetn(t: *LuaTable) usize {
     }
 }
 
-pub fn Hget(t: *LuaTable, key: *const TValue) *const TValue {
-    switch (key.typeOf()) {
-        .Nil => return lobject.Onilobject,
-        .String => return Hgetstr(t, key.tsvalue()),
-        .Number => {
-            const k = lnumutils.inum2int(key.nvalue());
-            if (@as(f64, @floatFromInt(k)) == key.nvalue()) // index is int?
-                return Hgetnum(t, k); // use specialized version
-            // else go through
-        },
-        else => {},
-    }
-    var n = mainposition(t, key);
-    while (true) { // check whether `key' is somewhere in the chain
-        if (lobject.OrawequalKey(n.gkey(), key)) {
-            return n.gval(); // that's it
-        }
-        if (n.gnext() == 0)
-            break;
-        n = n.add_num(n.gnext());
-    }
-    return lobject.Onilobject; // not found
-}
-
-pub fn Hnewkey(L: *lua.State, t: *LuaTable, key: *const TValue) !*TValue {
-    if (key.ttisnil())
-        try ldebug.GrunerrorL(L, "table index is nil", .{});
-    if (key.ttisnumber() and lnumutils.inumisnan(key.nvalue()))
-        try ldebug.GrunerrorL(L, "table index is NaN", .{});
-    if (key.ttisvector() and lnumutils.ivecisnan(key.vvalue()))
-        try ldebug.GrunerrorL(L, "table index contains NaN", .{});
-    return newkey(L, t, key);
-}
-
-pub fn Hsetnum(L: *lua.State, t: *LuaTable, key: i32) !*TValue {
-    // (1 <= key && key <= t->sizearray)
-    if (key - 1 < t.sizearray)
-        return &t.array.?[@intCast(key - 1)];
-    // hash fallback
-    const p = Hgetnum(t, key);
-    if (p != lobject.Onilobject)
-        return @constCast(p)
-    else {
-        var k: TValue = undefined;
-        k.setnvalue(@floatFromInt(key));
-        return newkey(L, t, &k);
-    }
-}
-
-pub fn Hsetstr(L: *lua.State, t: *LuaTable, key: *lobject.TString) !*TValue {
-    const p = Hgetstr(t, key);
-    invalidateTMcache(t);
-    if (p != lobject.Onilobject)
-        return @constCast(p)
-    else {
-        var k: TValue = undefined;
-        k.setsvalue(L, key);
-        return try newkey(L, t, &k);
-    }
-}
-
-pub fn Hclone(L: *lua.State, tt: *LuaTable) !*LuaTable {
+pub fn Hclone(L: *lua.State, tt: *LuaTable) Error!*LuaTable {
     const t = try lmem.Mnewgco(L, LuaTable, @sizeOf(LuaTable), L.activememcat);
     lgc.Cinit(L, @ptrCast(@alignCast(t)), @intFromEnum(lua.Type.Table));
     t.metatable = tt.metatable;
@@ -632,9 +662,9 @@ pub fn Hclear(tt: *LuaTable) void {
         tt.bound.lastfree = @intCast(size);
         for (0..@intCast(size)) |i| {
             const n = tt.gnode(i);
-            n.gkey().setttype(.Nil);
-            n.gval().setnilvalue();
-            n.key.setnext(0);
+            n[0].gkey().setttype(.Nil);
+            n[0].gval().setnilvalue();
+            n[0].key.setnext(0);
         }
     }
 

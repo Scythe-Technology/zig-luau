@@ -8,6 +8,8 @@ const lua = @import("lua.zig");
 const ldebug = @import("ldebug.zig");
 const lobject = @import("lobject.zig");
 
+const Errorset = @import("errorset.zig");
+
 extern "c" fn zig_luau_luaD_throw(L: *lua.State, errcode: i32) noreturn;
 
 pub const MAX_STACK_SIZE = (1024 / @sizeOf(lobject.TValue)) * 1024 * 1024;
@@ -20,29 +22,29 @@ pub inline fn getgrownstacksize(L: *lua.State, n: usize) usize {
     return if (n <= L.stacksize) 2 * @as(u32, @intCast(L.stacksize)) else @as(u32, @intCast(L.stacksize)) + n;
 }
 
-pub inline fn Dcheckstackfornewci(L: *lua.State, n: usize) !void {
+pub inline fn Dcheckstackfornewci(L: *lua.State, n: usize) Errorset.Memory!void {
     if (@intFromPtr(L.stack_last) - @intFromPtr(L.top) < n * @sizeOf(lobject.TValue))
         try Dreallocstack(L, getgrownstacksize(L, n), true)
     else
         try Dreallocstack(L, L.stacksize - lstate.EXTRA_STACK, true);
 }
 
-pub inline fn Dcheckstack(L: *lua.State, n: usize) !void {
+pub inline fn Dcheckstack(L: *lua.State, n: usize) Errorset.Memory!void {
     if (@intFromPtr(L.stack_last) - @intFromPtr(L.top) < n * @sizeOf(lobject.TValue))
         try Dgrowstack(L, n)
     else
         try Dreallocstack(L, @as(u32, @intCast(L.stacksize)) - lstate.EXTRA_STACK, false);
 }
 
-pub inline fn incr_top(L: *lua.State) !void {
+pub inline fn incr_top(L: *lua.State) Errorset.Memory!void {
     try Dcheckstack(L, 1);
-    L.top = L.top.add_num(1);
+    L.top = L.top[1..];
 }
 
 pub inline fn expandstacklimit(L: *lua.State, p: *lobject.TValue) void {
     std.debug.assert(@intFromPtr(p) <= @intFromPtr(L.stack_last));
-    if (@intFromPtr(L.ci.?.top) < @intFromPtr(p))
-        L.ci.?.top = p;
+    if (@intFromPtr(L.ci.?[0].top) < @intFromPtr(p))
+        L.ci.?[0].top = @ptrCast(p);
 }
 
 fn correctstack(L: *lua.State, oldstack: [*]lobject.TValue) void {
@@ -54,24 +56,24 @@ fn correctstack(L: *lua.State, oldstack: [*]lobject.TValue) void {
         uv.v = @ptrFromInt((@intFromPtr(uv.v) - oldstack_0) + newstack_0);
     var ci = L.base_ci;
     const top_bound = @intFromPtr(L.ci);
-    while (@intFromPtr(ci) <= top_bound) : (ci = ci.?.add_num(1)) {
-        ci.?.top = @ptrFromInt((@intFromPtr(ci.?.top) - oldstack_0) + newstack_0);
-        ci.?.base = @ptrFromInt((@intFromPtr(ci.?.base) - oldstack_0) + newstack_0);
-        ci.?.func = @ptrFromInt((@intFromPtr(ci.?.func) - oldstack_0) + newstack_0);
+    while (@intFromPtr(ci) <= top_bound) : (ci = ci.?[1..]) {
+        ci.?[0].top = @ptrFromInt((@intFromPtr(ci.?[0].top) - oldstack_0) + newstack_0);
+        ci.?[0].base = @ptrFromInt((@intFromPtr(ci.?[0].base) - oldstack_0) + newstack_0);
+        ci.?[0].func = @ptrFromInt((@intFromPtr(ci.?[0].func) - oldstack_0) + newstack_0);
     }
     L.base = @ptrFromInt((@intFromPtr(L.base) - oldstack_0) + newstack_0);
 }
 
-pub fn Dreallocstack(L: *lua.State, newsize: usize, fornewci: bool) !void {
+pub fn Dreallocstack(L: *lua.State, newsize: usize, fornewci: bool) Errorset.Memory!void {
     // throw 'out of memory' error because space for a custom error message cannot be guaranteed here
     if (newsize > MAX_STACK_SIZE) {
         // reallocation was performed to setup a new CallInfo frame, which we have to remove
         if (fornewci) {
-            const cip: *lstate.CallInfo = L.ci.?.sub_num(1);
+            const cip = L.ci.? - 1;
 
             L.ci = cip;
-            L.base = cip.base;
-            L.top = cip.top;
+            L.base = cip[0].base;
+            L.top = cip[0].top;
         }
 
         return error.OutOfMemory;
@@ -84,25 +86,25 @@ pub fn Dreallocstack(L: *lua.State, newsize: usize, fornewci: bool) !void {
     }
 
     const oldstack = L.stack;
-    std.debug.assert(L.stack_last.sub(@ptrCast(L.stack)) == L.stacksize - lstate.EXTRA_STACK);
+    std.debug.assert(L.stack_last[0].sub(@ptrCast(L.stack)) == L.stacksize - lstate.EXTRA_STACK);
     L.stack = try lmem.Mreallocarray(L, lobject.TValue, L.stack, @intCast(L.stacksize), realsize, L.header.memcat);
     const newstack = L.stack;
     for (@intCast(L.stacksize)..realsize) |i|
         newstack[i].setnilvalue();
     L.stacksize = @intCast(realsize);
-    L.stack_last = newstack[0].add_num(newsize);
+    L.stack_last = newstack[newsize..];
     correctstack(L, oldstack);
 }
 
-pub fn DreallocCI(L: *lua.State, newsize: usize) !void {
+pub fn DreallocCI(L: *lua.State, newsize: usize) Errorset.Memory!void {
     const oldci = L.base_ci;
     L.base_ci = @ptrCast(@alignCast(try lmem.Mreallocarray(L, lstate.CallInfo, @ptrCast(@alignCast(L.base_ci.?)), @intCast(L.size_ci), newsize, L.header.memcat)));
     L.size_ci = @intCast(newsize);
     L.ci = @ptrFromInt((@intFromPtr(L.ci) - @intFromPtr(oldci)) + @intFromPtr(L.base_ci));
-    L.end_ci = L.base_ci.?.add_num(newsize - 1);
+    L.end_ci = L.base_ci.?[newsize - 1 ..];
 }
 
-pub fn Dgrowstack(L: *lua.State, n: usize) !void {
+pub fn Dgrowstack(L: *lua.State, n: usize) Errorset.Memory!void {
     try Dreallocstack(L, getgrownstacksize(L, n), false);
 }
 
@@ -117,7 +119,7 @@ pub inline fn resumeerror(L: *lua.State, from: ?*lua.State) lua.Status {
 pub fn yield(L: *lua.State, nresults: u32) !i32 {
     if (L.nCcalls > L.baseCcalls)
         try ldebug.GrunerrorL(L, "attempt to yield across metamethod/C-call boundary", .{});
-    L.base = L.top.sub_num(nresults);
+    L.base = L.top - nresults;
     L.curr_status = @intFromEnum(lua.Status.Yield);
     return -1;
 }

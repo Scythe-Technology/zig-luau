@@ -7,6 +7,8 @@ const ltm = @import("ltm.zig");
 const lapi = @import("lapi.zig");
 const laux = @import("laux.zig");
 
+const Errorset = @import("errorset.zig");
+
 pub fn LuaZigFn(comptime ReturnType: type) type {
     switch (@typeInfo(ReturnType)) {
         .int => {
@@ -190,12 +192,12 @@ pub fn toCFnV(comptime f: anytype) lua.CFunction {
     @compileError("Could not determine zig_fn type");
 }
 
-pub inline fn Zpushfunction(L: *lua.State, comptime f: anytype, name: [:0]const u8) void {
-    L.pushcfunction(toCFn(f), name);
+pub inline fn Zpushfunction(L: *lua.State, comptime f: anytype, name: [:0]const u8) !void {
+    try L.pushcfunction(toCFn(f), name);
 }
 
-pub inline fn Zpushclosure(L: *lua.State, comptime f: anytype, name: [:0]const u8, nup: i32) void {
-    L.pushcclosure(toCFn(f), name, nup);
+pub inline fn Zpushclosure(L: *lua.State, comptime f: anytype, name: [:0]const u8, nup: i32) !void {
+    try L.pushcclosure(toCFn(f), name, nup);
 }
 
 pub fn Zpushclosurek(L: *lua.State, comptime f: anytype, name: [:0]const u8, nup: i32, comptime cont: ?fn (L: *lua.State, status: i32) i32) void {
@@ -261,20 +263,20 @@ pub fn Zpushvalue(L: *lua.State, value: anytype) !void {
                 var write = value;
                 if (value.len > std.math.maxInt(i32))
                     write = value[0..std.math.maxInt(i32)];
-                L.createtable(@intCast(value.len), 0);
+                try L.createtable(@intCast(value.len), 0);
                 for (write, 1..) |v, i| {
                     try Zpushvalue(L, v);
-                    L.rawseti(-2, @intCast(i));
+                    try L.rawseti(-2, @intCast(i));
                 }
             }
         },
         .array => |a| {
             if (comptime a.len > std.math.maxInt(i32))
                 @compileError("Array too large");
-            L.createtable(a.len, 0);
+            try L.createtable(a.len, 0);
             for (value, 1..) |v, i| {
                 try Zpushvalue(L, v);
-                L.rawseti(-2, @intCast(i));
+                try L.rawseti(-2, @intCast(i));
             }
         },
         .vector => |info| {
@@ -298,10 +300,10 @@ pub fn Zpushvalue(L: *lua.State, value: anytype) !void {
             }
         },
         .@"struct" => |s| {
-            L.createtable(0, s.fields.len);
+            try L.createtable(0, s.fields.len);
             inline for (s.fields) |field| {
                 switch (@typeInfo(field.type)) {
-                    .@"fn" => Zsetfieldfn(L, -1, field.name, @field(value, field.name)),
+                    .@"fn" => try Zsetfieldfn(L, -1, field.name, @field(value, field.name)),
                     else => try Zsetfield(L, -1, field.name, @field(value, field.name)),
                 }
             }
@@ -321,30 +323,30 @@ pub fn Zpushvalue(L: *lua.State, value: anytype) !void {
 pub fn Zsetfield(L: *lua.State, comptime index: i32, k: [:0]const u8, value: anytype) !void {
     const idx = comptime if (index != lua.GLOBALSINDEX and index != lua.REGISTRYINDEX and index < 0) index - 1 else index;
     try Zpushvalue(L, value);
-    L.setfield(idx, k);
+    try L.rawsetfield(idx, k);
 }
-pub fn Zsetfieldfn(L: *lua.State, comptime index: i32, comptime k: [:0]const u8, comptime f: anytype) void {
+pub fn Zsetfieldfn(L: *lua.State, comptime index: i32, comptime k: [:0]const u8, comptime f: anytype) !void {
     const idx = comptime if (index != lua.GLOBALSINDEX and index != lua.REGISTRYINDEX and index < 0) index - 1 else index;
-    Zpushfunction(L, f, k);
-    L.setfield(idx, k);
+    try Zpushfunction(L, f, k);
+    try L.rawsetfield(idx, k);
 }
-pub fn ZsetfieldfnV(L: *lua.State, comptime index: i32, comptime k: [:0]const u8, comptime f: anytype) void {
+pub fn ZsetfieldfnV(L: *lua.State, comptime index: i32, comptime k: [:0]const u8, comptime f: anytype) !void {
     const idx = comptime if (index != lua.GLOBALSINDEX and index != lua.REGISTRYINDEX and index < 0) index - 1 else index;
-    ZpushfunctionV(L, f, k);
-    L.setfield(idx, k);
+    try ZpushfunctionV(L, f, k);
+    try L.rawsetfield(idx, k);
 }
 
 pub fn Zsetglobal(L: *lua.State, name: [:0]const u8, value: anytype) !void {
     try Zpushvalue(L, value);
-    L.setglobal(name);
+    try L.setglobal(name);
 }
-pub fn Zsetglobalfn(L: *lua.State, comptime name: [:0]const u8, comptime f: anytype) void {
-    Zpushfunction(L, f, name);
-    L.setglobal(name);
+pub fn Zsetglobalfn(L: *lua.State, comptime name: [:0]const u8, comptime f: anytype) !void {
+    try Zpushfunction(L, f, name);
+    try L.setglobal(name);
 }
-pub fn ZsetglobalfnV(L: *lua.State, comptime name: [:0]const u8, comptime f: anytype) void {
-    ZpushfunctionV(L, f, name);
-    L.setglobal(name);
+pub fn ZsetglobalfnV(L: *lua.State, comptime name: [:0]const u8, comptime f: anytype) !void {
+    try ZpushfunctionV(L, f, name);
+    try L.setglobal(name);
 }
 
 pub fn Zpushbuffer(L: *lua.State, bytes: []const u8) !void {
@@ -610,21 +612,21 @@ pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32, comptime msg: ?[]
 }
 
 pub fn Zcheckfield(L: *lua.State, comptime T: type, idx: i32, comptime field: [:0]const u8) !T {
-    _ = L.getfield(idx, field);
+    _ = try L.getfield(idx, field);
     errdefer L.remove(-2);
     return try Zcheckvalue(L, T, -1, "invalid field '" ++ field ++ "'");
 }
 
 /// Returns true if metatable was created, false if it already exists.
-pub fn Znewmetatable(L: *lua.State, tname: [:0]const u8, value: anytype) bool {
-    if (L.getfield(lua.REGISTRYINDEX, tname) != .Nil)
+pub fn Znewmetatable(L: *lua.State, tname: [:0]const u8, value: anytype) !bool {
+    if (try L.getfield(lua.REGISTRYINDEX, tname) != .Nil)
         return false;
     L.pop(1);
     if (@typeInfo(@TypeOf(value)) != .@"struct")
         @compileError("value must be a struct");
     try L.Zpushvalue(value);
     L.pushvalue(-1);
-    L.setfield(lua.REGISTRYINDEX, tname);
+    try L.setfield(lua.REGISTRYINDEX, tname);
     return true;
 }
 
@@ -645,7 +647,7 @@ test "toCFn + Zchecktype" {
             }
         }.inner;
 
-        L.pushcclosure(toCFn(foo), "foo", 0);
+        try L.pushcclosure(toCFn(foo), "foo", 0);
         L.pushnumber(6);
         L.call(1, 1);
         defer L.pop(1);
@@ -659,7 +661,7 @@ test "toCFn + Zchecktype" {
             }
         }.inner;
 
-        L.pushcclosure(toCFn(foo), "foo", 0);
+        try L.pushcclosure(toCFn(foo), "foo", 0);
         try std.testing.expectEqual(error.Runtime, L.pcall(0, 0, 0).check());
         try std.testing.expectEqualStrings("missing argument #1 to 'foo' (number expected)", L.tostring(-1).?);
         defer L.pop(1);
@@ -671,7 +673,7 @@ test "toCFn + Zchecktype" {
             }
         }.inner;
 
-        L.pushcclosure(toCFn(foo), "foo", 0);
+        try L.pushcclosure(toCFn(foo), "foo", 0);
         try std.testing.expectEqual(error.Runtime, L.pcall(0, 0, 0).check());
         try std.testing.expectEqualStrings("TestError", L.tostring(-1).?);
         defer L.pop(1);
@@ -683,7 +685,7 @@ test "toCFn + Zchecktype" {
             }
         }.inner;
 
-        L.pushcclosure(toCFn(foo), "foo", 0);
+        try L.pushcclosure(toCFn(foo), "foo", 0);
         L.pushnumber(9);
         L.call(1, 0);
     }
@@ -702,7 +704,7 @@ test toCFnV {
             }
         }.inner;
 
-        L.pushcclosure(toCFnV(foo), "foo", 0);
+        try L.pushcclosure(toCFnV(foo), "foo", 0);
         L.pushnumber(6);
         L.call(1, 1);
         defer L.pop(1);
@@ -715,7 +717,7 @@ test toCFnV {
             }
         }.inner;
 
-        L.pushcclosure(toCFnV(foo), "foo", 0);
+        try L.pushcclosure(toCFnV(foo), "foo", 0);
         L.call(0, 1);
         defer L.pop(1);
         try std.testing.expectEqual(8, L.tonumber(-1).?);
@@ -727,7 +729,7 @@ test toCFnV {
             }
         }.inner;
 
-        L.pushcclosure(toCFnV(foo), "foo", 0);
+        try L.pushcclosure(toCFnV(foo), "foo", 0);
         L.call(0, 1);
         defer L.pop(1);
         try std.testing.expectEqual(123.456, L.tonumber(-1).?);
@@ -739,7 +741,7 @@ test toCFnV {
             }
         }.inner;
 
-        L.pushcclosure(toCFnV(foo), "foo", 0);
+        try L.pushcclosure(toCFnV(foo), "foo", 0);
         L.call(0, 1);
         defer L.pop(1);
         try std.testing.expectEqual(234.567, L.tonumber(-1).?);
@@ -762,7 +764,7 @@ test toCFnV {
             }
         }.inner;
 
-        L.pushcclosure(toCFnV(foo), "foo", 0);
+        try L.pushcclosure(toCFnV(foo), "foo", 0);
         L.call(0, 1);
         defer L.pop(1);
         try std.testing.expectEqual(.Number, L.getfield(-1, "a"));
@@ -785,7 +787,7 @@ test toCFnV {
             }
         }.inner;
 
-        L.pushcclosure(toCFnV(foo), "foo", 0);
+        try L.pushcclosure(toCFnV(foo), "foo", 0);
         L.call(0, 1);
         defer L.pop(1);
         try std.testing.expectEqual(123, L.tonumber(-1).?);
@@ -797,7 +799,7 @@ test toCFnV {
             }
         }.inner;
 
-        L.pushcclosure(toCFnV(foo), "foo", 0);
+        try L.pushcclosure(toCFnV(foo), "foo", 0);
         L.call(0, 1);
         defer L.pop(1);
         try std.testing.expectEqual(123, L.tonumber(-1).?);
@@ -809,7 +811,7 @@ test toCFnV {
             }
         }.inner;
 
-        L.pushcclosure(toCFnV(foo), "foo", 0);
+        try L.pushcclosure(toCFnV(foo), "foo", 0);
         L.call(0, 1);
         defer L.pop(1);
         try std.testing.expectEqual(2, L.tointeger(-1).?);
@@ -821,7 +823,7 @@ test toCFnV {
             }
         }.inner;
 
-        L.pushcclosure(toCFnV(foo), "foo", 0);
+        try L.pushcclosure(toCFnV(foo), "foo", 0);
         try std.testing.expectEqual(error.Runtime, L.pcall(0, 0, 0).check());
         try std.testing.expectEqualStrings("Failed", L.tostring(-1).?);
         defer L.pop(1);
@@ -833,7 +835,7 @@ test toCFnV {
             }
         }.inner;
 
-        L.pushcclosure(toCFnV(foo), "foo", 0);
+        try L.pushcclosure(toCFnV(foo), "foo", 0);
         try std.testing.expectEqual(error.Runtime, L.pcall(0, 0, 0).check());
         try std.testing.expectEqualStrings("TestError", L.tostring(-1).?);
         defer L.pop(1);
@@ -845,7 +847,7 @@ test toCFnV {
             }
         }.inner;
 
-        L.pushcclosure(toCFnV(foo), "foo", 0);
+        try L.pushcclosure(toCFnV(foo), "foo", 0);
         L.pushnumber(9);
         L.call(1, 0);
     }
@@ -865,7 +867,7 @@ test Zpushfunction {
             }
         }.inner;
 
-        Zpushfunction(L, foo, "foo");
+        try Zpushfunction(L, foo, "foo");
         L.pushnumber(6);
         L.call(1, 1);
         try std.testing.expectEqual(2, L.tonumber(-1).?);
@@ -1294,7 +1296,7 @@ test Zsetfield {
     errdefer std.debug.print("{s}\n", .{L.tostring(-1) orelse "No lua error"});
 
     {
-        L.newtable();
+        try L.newtable();
         try Zsetfield(L, -1, "a", 455);
         try Zsetfield(L, -1, "b", "str");
         try Zsetfield(L, -1, "c", true);
@@ -1361,8 +1363,8 @@ test Zsetfieldfn {
             }
         }.inner;
 
-        L.newtable();
-        Zsetfieldfn(L, -1, "foo", foo);
+        try L.newtable();
+        try Zsetfieldfn(L, -1, "foo", foo);
         try std.testing.expectEqual(.Function, L.getfield(-1, "foo"));
         L.pushnumber(6);
         L.call(1, 1);
@@ -1384,7 +1386,7 @@ test Zsetglobalfn {
             }
         }.inner;
 
-        Zsetglobalfn(L, "foo", foo);
+        try Zsetglobalfn(L, "foo", foo);
         try std.testing.expectEqual(.Function, L.getglobal("foo"));
         L.pushnumber(6);
         L.call(1, 1);
@@ -1414,7 +1416,7 @@ test Zresumeerror {
             }
         }.inner;
 
-        Zpushfunction(L, foo, "foo");
+        try Zpushfunction(L, foo, "foo");
         try std.testing.expectEqual(.Yield, L.resumethread(null, 0));
         try std.testing.expectEqual(.ErrRun, Zresumeerror(L, null, "Test"));
         try std.testing.expectEqualStrings("Test", L.tostring(-1).?);
@@ -1433,7 +1435,7 @@ test Zresumeferror {
             }
         }.inner;
 
-        Zpushfunction(L, foo, "foo");
+        try Zpushfunction(L, foo, "foo");
         try std.testing.expectEqual(.Yield, L.resumethread(null, 0));
         try std.testing.expectEqual(.ErrRun, Zresumeferror(L, null, "Test {s}", .{"Fmt"}));
         try std.testing.expectEqualStrings("Test Fmt", L.tostring(-1).?);
@@ -1520,29 +1522,29 @@ test Ztolstring {
     }
     {
         _ = try L.newuserdata(struct {});
-        L.newtable();
-        L.Zpushfunction(struct {
+        try L.newtable();
+        try L.Zpushfunction(struct {
             fn inner(l: *lua.State) !i32 {
                 try l.pushlstring("meta_test");
                 return 1;
             }
         }.inner, "__tostring");
-        L.setfield(-2, "__tostring");
-        _ = L.setmetatable(-2);
+        try L.setfield(-2, "__tostring");
+        _ = try L.setmetatable(-2);
         try std.testing.expectEqualStrings("meta_test", try Ztolstring(L, -1));
         L.pop(2);
     }
     if (comptime EXCEPTIONS_ENABLED) {
         _ = try L.newuserdata(struct {});
-        L.newtable();
-        L.Zpushfunction(struct {
+        try L.newtable();
+        try L.Zpushfunction(struct {
             fn inner(l: *lua.State) !i32 {
                 try l.pushstring("error");
                 l.raiseerror();
             }
         }.inner, "__tostring");
-        L.setfield(-2, "__tostring");
-        _ = L.setmetatable(-2);
+        try L.setfield(-2, "__tostring");
+        _ = try L.setmetatable(-2);
         try std.testing.expectEqual(error.Runtime, Ztolstring(L, -1));
         try std.testing.expectEqual(.String, L.typeOf(-1));
         try std.testing.expectEqualStrings("error", L.tostring(-1).?);
@@ -1550,15 +1552,15 @@ test Ztolstring {
     }
     {
         _ = try L.newuserdata(struct {});
-        L.newtable();
-        L.Zpushfunction(struct {
-            fn inner(l: *lua.State) i32 {
-                l.newtable();
+        try L.newtable();
+        try L.Zpushfunction(struct {
+            fn inner(l: *lua.State) !i32 {
+                try l.newtable();
                 return 1;
             }
         }.inner, "__tostring");
-        L.setfield(-2, "__tostring");
-        _ = L.setmetatable(-2);
+        try L.setfield(-2, "__tostring");
+        _ = try L.setmetatable(-2);
         try std.testing.expectEqual(error.BadReturnType, Ztolstring(L, -1));
         try std.testing.expectEqual(.Table, L.typeOf(-1));
         L.pop(2);
@@ -1571,7 +1573,7 @@ test Znewmetatable {
     errdefer std.debug.print("{s}\n", .{L.tostring(-1) orelse "No lua error"});
 
     {
-        try std.testing.expect(Znewmetatable(L, "MAIN", .{ .a = 2, .b = 3 }));
+        try std.testing.expect(try Znewmetatable(L, "MAIN", .{ .a = 2, .b = 3 }));
         try std.testing.expectEqual(.Table, L.typeOf(-1));
         try std.testing.expectEqual(.Number, L.getfield(-1, "a"));
         try std.testing.expectEqual(2, L.tointeger(-1).?);

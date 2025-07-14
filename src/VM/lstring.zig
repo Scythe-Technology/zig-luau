@@ -7,6 +7,8 @@ const lobject = @import("lobject.zig");
 const lgc = @import("lgc.zig");
 const lmem = @import("lmem.zig");
 
+const Errorset = @import("errorset.zig");
+
 /// string size limit
 pub const MAXSSIZE = (1 << 30);
 
@@ -17,7 +19,7 @@ inline fn sizestring(len: usize) usize {
     return @offsetOf(lobject.TString, "data") + len + 1;
 }
 
-pub inline fn Snew(L: *lua.State, s: []const u8) !*lobject.TString {
+pub inline fn Snew(L: *lua.State, s: []const u8) Errorset.Memory!*lobject.TString {
     return Snewlstr(L, s);
 }
 
@@ -65,14 +67,14 @@ pub fn Shash(str: []const u8) u32 {
     return h;
 }
 
-pub fn Sresize(L: *lua.State, newsize: usize) !void {
+pub fn Sresize(L: *lua.State, newsize: usize) Errorset.Memory!void {
     const newhash = try lmem.Mnewarray(L, ?*lobject.TString, newsize, 0);
     const tb = &L.global.strt;
     for (0..newsize) |i|
         newhash[i] = null;
     // rehash
     for (0..@intCast(tb.size)) |i| {
-        var p: ?*lobject.TString = tb.hash[i];
+        var p: ?*lobject.TString = tb.hash.?[i];
         while (p) |node| { // for each node in the list
             const next = node.next; // save next
             const h = node.hash;
@@ -88,7 +90,7 @@ pub fn Sresize(L: *lua.State, newsize: usize) !void {
     tb.hash = newhash;
 }
 
-fn newlstr(L: *lua.State, str: []const u8, hash: u32) !*lobject.TString {
+fn newlstr(L: *lua.State, str: []const u8, hash: u32) Errorset.Memory!*lobject.TString {
     const l = str.len;
     if (l > MAXSSIZE)
         return error.BlockTooBig;
@@ -104,8 +106,8 @@ fn newlstr(L: *lua.State, str: []const u8, hash: u32) !*lobject.TString {
 
     const tb = &L.global.strt;
     const h: u32 = lobject.lmod(u32, hash, @intCast(tb.size));
-    ts.next = tb.hash[h]; // chain new entry
-    tb.hash[h] = ts;
+    ts.next = tb.hash.?[h]; // chain new entry
+    tb.hash.?[h] = ts;
 
     tb.nuse += 1;
     if (tb.nuse > tb.size and tb.size <= @divTrunc(std.math.maxInt(i32), 2))
@@ -114,7 +116,7 @@ fn newlstr(L: *lua.State, str: []const u8, hash: u32) !*lobject.TString {
     return ts;
 }
 
-pub fn Sbufstart(L: *lua.State, size: usize) !*lobject.TString {
+pub fn Sbufstart(L: *lua.State, size: usize) Errorset.Memory!*lobject.TString {
     if (size > MAXSSIZE)
         return error.BlockTooBig;
 
@@ -129,13 +131,13 @@ pub fn Sbufstart(L: *lua.State, size: usize) !*lobject.TString {
     return ts;
 }
 
-pub fn Sbuffinish(L: *lua.State, ts: *lobject.TString) !*lobject.TString {
+pub fn Sbuffinish(L: *lua.State, ts: *lobject.TString) Errorset.Memory!*lobject.TString {
     const h = Shash(ts.gdata()[0..ts.len]);
     const tb = &L.global.strt;
     const bucket: u32 = lobject.lmod(u32, h, @intCast(tb.size));
 
     // search if we already have this string in the hash table
-    var el: ?*lobject.TString = tb.hash[bucket];
+    var el: ?*lobject.TString = tb.hash.?[bucket];
     while (el) |node| : (el = node.next) {
         if (node.len == ts.len and std.mem.eql(u8, node.gdata()[0..ts.len], ts.gdata()[0..ts.len])) {
             // string may be dead
@@ -149,8 +151,8 @@ pub fn Sbuffinish(L: *lua.State, ts: *lobject.TString) !*lobject.TString {
 
     ts.hash = h;
     ts.gdata()[ts.len] = 0; // ending 0
-    ts.next = tb.hash[bucket]; // chain new entry
-    tb.hash[bucket] = ts;
+    ts.next = tb.hash.?[bucket]; // chain new entry
+    tb.hash.?[bucket] = ts;
 
     tb.nuse += 1;
     if (tb.nuse > tb.size and tb.size <= @divTrunc(std.math.maxInt(i32), 2))
@@ -160,7 +162,7 @@ pub fn Sbuffinish(L: *lua.State, ts: *lobject.TString) !*lobject.TString {
 }
 
 fn findstrnode(L: *lua.State, str: []const u8, h: u32) ?*lobject.TString {
-    var el = L.global.strt.hash[lobject.lmod(u32, h, @intCast(L.global.strt.size))];
+    var el = L.global.strt.hash.?[lobject.lmod(u32, h, @intCast(L.global.strt.size))];
     while (el) |node| : (el = node.next) {
         if (node.len == str.len and std.mem.eql(u8, node.gdata()[0..node.len], str[0..str.len])) {
             // string may be dead
@@ -172,7 +174,7 @@ fn findstrnode(L: *lua.State, str: []const u8, h: u32) ?*lobject.TString {
     return null; // not found
 }
 
-pub fn Snewlstr(L: *lua.State, str: []const u8) !*lobject.TString {
+pub fn Snewlstr(L: *lua.State, str: []const u8) Errorset.Memory!*lobject.TString {
     const h = Shash(str);
     if (findstrnode(L, str, h)) |el|
         return el;
@@ -187,7 +189,7 @@ pub fn Sassumelstr(L: *lua.State, str: []const u8) ?*lobject.TString {
 fn unlinkstr(L: *lua.State, ts: *lobject.TString) bool {
     const g = L.global;
 
-    var p = &g.strt.hash[lobject.lmod(u32, ts.hash, @intCast(g.strt.size))];
+    var p = &g.strt.hash.?[lobject.lmod(u32, ts.hash, @intCast(g.strt.size))];
 
     while (p.*) |node| {
         if (node == ts) {

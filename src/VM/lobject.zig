@@ -7,6 +7,8 @@ const lstate = @import("lstate.zig");
 const lcommon = @import("lcommon.zig");
 const lnumutils = @import("lnumutils.zig");
 
+const Errorset = @import("errorset.zig");
+
 pub const CommonHeader = extern struct {
     tt: u8,
     marked: u8,
@@ -42,6 +44,10 @@ pub const TValue = extern struct {
     pub inline fn add(this: *TValue, n: void) *TValue {
         return @ptrFromInt(@intFromPtr(this) + n);
     }
+
+    pub inline fn sub(this: *TValue, ptr: *TValue) usize {
+        return @divExact(@intFromPtr(this) - @intFromPtr(ptr), @sizeOf(TValue));
+    }
     pub inline fn add_num(this: *TValue, n: anytype) *TValue {
         switch (@typeInfo(@TypeOf(n))) {
             .comptime_int => return @ptrFromInt(@intFromPtr(this) + (n * @sizeOf(TValue))),
@@ -53,25 +59,6 @@ pub const TValue = extern struct {
                         return @ptrFromInt(@intFromPtr(this) - @as(usize, @intCast(-n * @sizeOf(TValue))))
                     else
                         return @ptrFromInt(@intFromPtr(this) + @as(usize, @intCast(n * @sizeOf(TValue))));
-                }
-            },
-            else => @compileError("n must be an integer"),
-        }
-    }
-    pub inline fn sub(this: *TValue, ptr: *TValue) usize {
-        return @divExact(@intFromPtr(this) - @intFromPtr(ptr), @sizeOf(TValue));
-    }
-    pub inline fn sub_num(this: *TValue, n: anytype) *TValue {
-        switch (@typeInfo(@TypeOf(n))) {
-            .comptime_int => return @ptrFromInt(@intFromPtr(this) - (n * @sizeOf(TValue))),
-            .int => |i| {
-                if (i.signedness == .unsigned)
-                    return @ptrFromInt(@intFromPtr(this) - @as(usize, @intCast(n * @sizeOf(TValue))))
-                else {
-                    if (n < 0)
-                        return @ptrFromInt(@intFromPtr(this) + @as(usize, @intCast(-n * @sizeOf(TValue))))
-                    else
-                        return @ptrFromInt(@intFromPtr(this) - @as(usize, @intCast(n * @sizeOf(TValue))));
                 }
             },
             else => @compileError("n must be an integer"),
@@ -277,7 +264,7 @@ pub const LU_TAG_ITERATOR = lua.config.UTAG_LIMIT;
 
 pub inline fn checkliveness() void {}
 
-pub const StkId = *TValue;
+pub const StkId = [*]TValue;
 
 pub const TString = extern struct {
     header: CommonHeader,
@@ -344,20 +331,20 @@ pub const Proto = extern struct {
     flags: u8,
 
     /// constants used by the function
-    k: [*]TValue,
+    k: ?[*]TValue,
     /// function bytecode
-    code: [*]lcommon.Instruction,
+    code: ?[*]lcommon.Instruction,
     /// functions defined inside the function
-    p: [*]?*Proto,
-    codeentry: *const lcommon.Instruction,
+    p: ?[*]?*Proto,
+    codeentry: ?*const lcommon.Instruction,
 
     execdata: ?*anyopaque,
     exectarget: usize,
 
     lineinfo: ?[*]u8, // for each instruction, line number as a delta from baseline
     abslineinfo: ?[*]u8, // baseline line info, one entry for each 1<<linegaplog2 instructions; allocated after lineinfo
-    locvars: [*]LocVar, // information about local variables
-    upvalues: [*]?*TString, // upvalue names
+    locvars: ?[*]LocVar, // information about local variables
+    upvalues: ?[*]?*TString, // upvalue names
     source: ?*TString,
 
     debugname: ?*TString,
@@ -443,15 +430,23 @@ pub const Closure = extern struct {
         l: L,
 
         pub const C = extern struct {
-            f: lua.CFunction,
-            cont: lua.Continuation,
+            f: ?lua.CFunction,
+            cont: ?lua.Continuation,
             debugname: [*c]const u8,
             upvals: [1]TValue,
+
+            pub inline fn upvalues(cc: *C) [*]TValue {
+                return @as([*]TValue, @ptrCast(&cc.upvals));
+            }
         };
 
         pub const L = extern struct {
             p: *Proto,
             uprefs: [1]TValue,
+
+            pub inline fn upreferences(ll: *L) [*]TValue {
+                return @as([*]TValue, @ptrCast(&ll.uprefs));
+            }
         };
     };
 };
@@ -471,8 +466,7 @@ pub const TKey = extern struct {
     };
 
     pub inline fn ttype(this: *const TKey) u4 {
-        const pi: Packed = @bitCast(this.pi);
-        return pi.tt;
+        return this.pi.tt;
     }
 
     pub inline fn typeOf(obj: *const TKey) lua.Type {
@@ -582,14 +576,11 @@ pub const TKey = extern struct {
     }
 
     pub inline fn next(this: *TKey) i28 {
-        const pi: Packed = @bitCast(this.pi);
-        return pi.next;
+        return this.pi.next;
     }
 
     pub inline fn setnext(this: *TKey, num: i28) void {
-        var pi: Packed = @bitCast(this.pi);
-        pi.next = num;
-        this.pi = @bitCast(pi);
+        this.pi.next = num;
     }
 };
 
@@ -624,8 +615,10 @@ pub const LuaNode = extern struct {
         }
     }
 
-    pub inline fn sub(this: *LuaNode, ptr: *LuaNode) usize {
-        return @divExact(@intFromPtr(this) - @intFromPtr(ptr), @sizeOf(LuaNode));
+    pub fn sub(this: *LuaNode, ptr: *LuaNode) isize {
+        if (@intFromPtr(ptr) > @intFromPtr(this))
+            return -@as(isize, @intCast(@divExact(@intFromPtr(ptr) - @intFromPtr(this), @sizeOf(LuaNode))));
+        return @intCast(@divExact(@intFromPtr(this) - @intFromPtr(ptr), @sizeOf(LuaNode)));
     }
 };
 
@@ -671,8 +664,8 @@ pub const LuaTable = extern struct {
     node: [*]LuaNode,
     gclist: ?*lstate.GCObject,
 
-    pub inline fn gnode(t: *const LuaTable, i: usize) *LuaNode {
-        return &t.node[i];
+    pub inline fn gnode(t: *const LuaTable, i: usize) [*]LuaNode {
+        return t.node[i..];
     }
 };
 
@@ -685,7 +678,7 @@ pub inline fn twoto(x: if (@sizeOf(usize) == 8) u6 else u5) usize {
     return @as(usize, 1) << x;
 }
 pub inline fn sizenode(t: *const LuaTable) usize {
-    return @intCast(@as(usize, 1) << @intCast(t.lsizenode));
+    return @intCast(@as(usize, 1) << @truncate(t.lsizenode));
 }
 
 extern "c" const luaO_nilobject_: TValue;
@@ -750,14 +743,14 @@ pub fn OrawequalKey(t1: *const TKey, t2: *const TValue) bool {
     }
 }
 
-pub fn Opushvfstring(L: *lua.State, comptime fmt: []const u8, args: anytype) !void {
+pub fn Opushvfstring(L: *lua.State, comptime fmt: []const u8, args: anytype) Errorset.Table!void {
     var buf: [lua.config.BUFFERSIZE]u8 = undefined;
     const fstr = std.fmt.bufPrint(&buf, fmt, args) catch |err| @panic(@errorName(err));
     try L.pushlstring(fstr);
 }
 
-pub inline fn Opushfstring(L: *lua.State, comptime fmt: []const u8, args: anytype) void {
-    Opushvfstring(L, fmt, args);
+pub inline fn Opushfstring(L: *lua.State, comptime fmt: []const u8, args: anytype) Errorset.Table!void {
+    try Opushvfstring(L, fmt, args);
 }
 
 // pub fn Ochunkid(out: []u8, comptime source: []const u8) []u8 {

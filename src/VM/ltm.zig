@@ -5,6 +5,9 @@ const lua = @import("lua.zig");
 const lobject = @import("lobject.zig");
 const lstate = @import("lstate.zig");
 const ltable = @import("ltable.zig");
+const lstring = @import("lstring.zig");
+
+const Errorset = @import("errorset.zig");
 
 pub const TMS = enum {
     TM_INDEX,
@@ -87,6 +90,17 @@ comptime {
         @compileError("eventname size mismatch");
     if (@intFromEnum(TMS.TM_EQ) >= 8)
         @compileError("fasttm optimization stores a bitfield with metamethods in a byte");
+}
+
+pub fn Tinit(L: *lua.State) Errorset.Memory!void {
+    for (0..@intCast(lua.Type.T_COUNT)) |i| {
+        L.global.ttname[i] = try lstring.Snew(L, typenames[i]);
+        lstring.Sfix(L.global.ttname[i]); // never collect these names
+    }
+    for (0..N) |i| {
+        L.global.tmname[i] = try lstring.Snew(L, eventname[i]);
+        lstring.Sfix(L.global.tmname[i]); // never collect these names
+    }
 }
 
 pub const LONGEST_TYPENAME_SIZE = res: {
