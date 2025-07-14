@@ -713,7 +713,7 @@ pub inline fn Lnewstate() !*lua.State {
         return error.OutOfMemory;
 }
 
-pub inline fn close(L: *lua_State) void {
+pub fn close(L: *lua_State) void {
     const GL = L.global.mainthread; // only the main thread can be closed
     lfunc.Fclose(GL, @ptrCast(GL.stack)); // close all upvalues for this thread
     close_state(GL);

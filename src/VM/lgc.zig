@@ -179,9 +179,9 @@ pub inline fn Cthreadbarrier(L: *lua.State) void {
     }
 }
 
-pub inline fn Cinit(L: *lua.State, o: *lstate.GCObject, tt_: u8) void {
+pub inline fn Cinit(L: *lua.State, o: *lstate.GCObject, tt: u8) void {
     o.gch.header.marked = Cwhite(L.global);
-    o.gch.header.tt = tt_;
+    o.gch.header.tt = tt;
     o.gch.header.memcat = L.activememcat;
 }
 

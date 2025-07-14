@@ -665,7 +665,7 @@ pub const LuaTable = extern struct {
     gclist: ?*lstate.GCObject,
 
     pub inline fn gnode(t: *const LuaTable, i: usize) [*]LuaNode {
-        return t.node[i..];
+        return t.node + i;
     }
 };
 
