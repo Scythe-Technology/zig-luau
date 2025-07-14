@@ -234,27 +234,27 @@ pub const Debug = struct {
 /// can only be changed when the VM is not running any code
 pub const Callbacks = extern struct {
     /// arbitrary userdata pointer that is never overwritten by Luau
-    userdata: ?*anyopaque,
+    userdata: ?*anyopaque = null,
 
     /// gets called at safepoints (loop back edges, call/ret, gc) if set
-    interrupt: ?*const fn (L: *State, gc: c_int) callconv(.C) void,
+    interrupt: ?*const fn (L: *State, gc: c_int) callconv(.C) void = null,
     /// gets called when an unprotected error is raised (if longjmp is used)
-    panic: ?*const fn (L: *State, errcode: c_int) callconv(.C) void,
+    panic: ?*const fn (L: *State, errcode: c_int) callconv(.C) void = null,
 
     /// gets called when L is created (LP == parent) or destroyed (LP == NULL)
-    userthread: ?*const fn (LP: ?*State, L: *State) callconv(.C) void,
+    userthread: ?*const fn (LP: ?*State, L: *State) callconv(.C) void = null,
     /// gets called when a string is created; returned atom can be retrieved via tostringatom
-    useratom: ?*const fn (s: [*c]const u8, l: usize) callconv(.C) i16,
+    useratom: ?*const fn (s: [*c]const u8, l: usize) callconv(.C) i16 = null,
 
     /// gets called when BREAK instruction is encountered
-    debugbreak: ?*const fn (L: *State, ar: *c.lua_Debug) callconv(.C) void,
+    debugbreak: ?*const fn (L: *State, ar: *c.lua_Debug) callconv(.C) void = null,
     /// gets called after each instruction in single step mode
-    debugstep: ?*const fn (L: *State, ar: *c.lua_Debug) callconv(.C) void,
+    debugstep: ?*const fn (L: *State, ar: *c.lua_Debug) callconv(.C) void = null,
     /// gets called when thread execution is interrupted by break in another thread
-    debuginterrupt: ?*const fn (L: *State, ar: *c.lua_Debug) callconv(.C) void,
+    debuginterrupt: ?*const fn (L: *State, ar: *c.lua_Debug) callconv(.C) void = null,
     /// gets called when protected call results in an error
-    debugprotectederror: ?*const fn (L: *State) callconv(.C) void,
+    debugprotectederror: ?*const fn (L: *State) callconv(.C) void = null,
 
     /// gets called when memory is allocated
-    onallocate: ?*const fn (L: *State, osize: usize, nsize: usize) callconv(.C) void,
+    onallocate: ?*const fn (L: *State, osize: usize, nsize: usize) callconv(.C) void = null,
 };

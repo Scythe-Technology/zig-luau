@@ -11,6 +11,10 @@ const lstate = @import("lstate.zig");
 const ldo = @import("ldo.zig");
 const ldebug = @import("ldebug.zig");
 
+const Errorset = @import("errorset.zig");
+
+const Error = Errorset.Memory;
+
 //
 // Luau heap uses a size-segregated page structure, with individual pages and large allocations
 // allocated using system heap (via frealloc callback).
@@ -168,7 +172,7 @@ const SizeClassConfig = extern struct {
             sizeOfClass[classCount] = i * 32;
             classCount += 1;
         }
-        for ((512 / 64)..(1024 / 64)) |i| {
+        for ((512 / 64)..(1024 / 64) + 1) |i| {
             sizeOfClass[classCount] = i * 64;
             classCount += 1;
         }
@@ -239,13 +243,13 @@ fn Mtoobig(L: *lua.State) noreturn {
     ldebug.GrunerrorL(L, "memory allocation error: block too big");
 }
 
-fn newpage(L: *lua.State, pageset: ?*?*lua_Page, pageSize: usize, blockSize: c_int, blockCount: c_int) !*lua_Page {
+fn newpage(L: *lua.State, pageset: ?*?*lua_Page, pageSize: usize, blockSize: c_int, blockCount: c_int) Error!*lua_Page {
     const g = L.global;
 
     std.debug.assert(pageSize - @offsetOf(lua_Page, "data") >= blockSize * blockCount);
 
     const page = @as(*lua_Page, @ptrCast(@alignCast(
-        (g.frealloc.?)(g.ud, null, 0, pageSize) orelse return error.OutOfMemory,
+        (g.frealloc.?)(g.ud, null, 0, pageSize) orelse return Error.OutOfMemory,
     )));
 
     // ASAN_POISON_MEMORY_REGION(...); // TODO: ASAN support
@@ -284,7 +288,7 @@ fn newpage(L: *lua.State, pageset: ?*?*lua_Page, pageSize: usize, blockSize: c_i
 // this is part of a cold path in newblock and newgcoblock
 // it is marked as noinline to prevent it from being inlined into those functions
 // if it is inlined, then the compiler may determine those functions are "too big" to be profitably inlined, which results in reduced performance
-noinline fn newclasspage(L: *lua.State, freepageset: [*]?*lua_Page, pageset: ?*?*lua_Page, sizeClass: u8, storeMetadata: bool) !*lua_Page {
+noinline fn newclasspage(L: *lua.State, freepageset: [*]?*lua_Page, pageset: ?*?*lua_Page, sizeClass: u8, storeMetadata: bool) Error!*lua_Page {
     const sizeOfClass = kSizeClassConfig.sizeOfClass[sizeClass];
     const pageSize: usize = if (sizeOfClass > @as(c_int, kLargePageThreshold)) kLargePageSize else kSmallPageSize;
     const blockSize = sizeOfClass + @as(c_int, if (storeMetadata) kBlockHeader else 0);
@@ -330,7 +334,7 @@ fn freeclasspage(L: *lua.State, freepageset: [*]?*lua_Page, pageset: ?*?*lua_Pag
     freepage(L, pageset, page);
 }
 
-fn newblock(L: *lua.State, sizeClass: u8) !*anyopaque {
+fn newblock(L: *lua.State, sizeClass: u8) Error!*anyopaque {
     const g = L.global;
     const page = g.freepages[sizeClass] orelse blk: {
         // slow path: no page in the freelist, allocate a new one
@@ -372,7 +376,7 @@ fn newblock(L: *lua.State, sizeClass: u8) !*anyopaque {
     return @ptrFromInt(@intFromPtr(block) + kBlockHeader);
 }
 
-fn newgcoblock(L: *lua.State, sizeClass: u8) !*anyopaque {
+fn newgcoblock(L: *lua.State, sizeClass: u8) Error!*anyopaque {
     const g = L.global;
     const page = g.freegcopages[sizeClass] orelse blk: {
         // slow path: no page in the freelist, allocate a new one
@@ -476,7 +480,7 @@ fn freegcoblock(L: *lua.State, sizeClass: u8, block: *anyopaque, page: *lua_Page
         freeclasspage(L, &g.freegcopages, &g.allgcopages, page, sizeClass);
 }
 
-pub fn Mnew_(L: *lua.State, nsize: usize, memcat: u8) !*anyopaque {
+pub fn Mnew_(L: *lua.State, nsize: usize, memcat: u8) Error!*anyopaque {
     const g = L.global;
 
     const nclass = sizeclass(nsize);
@@ -484,7 +488,7 @@ pub fn Mnew_(L: *lua.State, nsize: usize, memcat: u8) !*anyopaque {
     const block = if (nclass >= 0)
         newblock(L, @intCast(nclass))
     else
-        (g.frealloc.?)(g.ud, null, 0, nsize) orelse return error.OutOfMemory;
+        (g.frealloc.?)(g.ud, null, 0, nsize) orelse return Error.OutOfMemory;
 
     g.totalbytes += nsize;
     g.memcatbytes[memcat] += nsize;
@@ -497,7 +501,7 @@ pub fn Mnew_(L: *lua.State, nsize: usize, memcat: u8) !*anyopaque {
     return block;
 }
 
-pub fn Mnewgco_(L: *lua.State, nsize: usize, memcat: u8) !*lstate.GCObject {
+pub fn Mnewgco_(L: *lua.State, nsize: usize, memcat: u8) Error!*lstate.GCObject {
     // we need to accommodate space for link for free blocks (freegcolink)
     std.debug.assert(nsize >= kGCOLinkOffset + @sizeOf(*anyopaque));
 
@@ -542,7 +546,7 @@ pub fn Mfree_(L: *lua.State, block: ?*anyopaque, osize: usize, memcat: u8) void 
     if (oclass >= 0)
         freeblock(L, @intCast(oclass), block.?)
     else
-        _ = (g.frealloc.?)(g.ud, @ptrCast(block.?), osize, 0);
+        _ = (g.frealloc.?)(g.ud, @ptrCast(block), osize, 0);
 
     g.totalbytes -= osize;
     g.memcatbytes[memcat] -= osize;
@@ -574,7 +578,7 @@ pub inline fn Mfreegco(L: *lua.State, p: *lstate.GCObject, size: usize, memcat: 
     Mfreegco_(L, @ptrCast(@alignCast(p)), size, memcat, page);
 }
 
-pub fn Mrealloc_(L: *lua.State, block: ?*anyopaque, osize: usize, nsize: usize, memcat: u8) !?*anyopaque {
+pub fn Mrealloc_(L: *lua.State, block: ?*anyopaque, osize: usize, nsize: usize, memcat: u8) Error!?*anyopaque {
     const g = L.global;
     std.debug.assert((osize == 0) == (block == null));
 
@@ -587,7 +591,7 @@ pub fn Mrealloc_(L: *lua.State, block: ?*anyopaque, osize: usize, nsize: usize, 
         result = if (nclass >= 0)
             try newblock(L, @intCast(nclass))
         else
-            (g.frealloc.?)(g.ud, null, 0, nsize) orelse if (nsize > 0) return error.OutOfMemory else undefined;
+            (g.frealloc.?)(g.ud, null, 0, nsize) orelse if (nsize > 0) return Error.OutOfMemory else undefined;
 
         if (osize > 0 and nsize > 0) {
             const tsize = @min(osize, nsize);
@@ -602,7 +606,7 @@ pub fn Mrealloc_(L: *lua.State, block: ?*anyopaque, osize: usize, nsize: usize, 
         else
             _ = (g.frealloc.?)(g.ud, block, osize, 0);
     } else {
-        result = (g.frealloc.?)(g.ud, block, osize, nsize) orelse return error.OutOfMemory;
+        result = (g.frealloc.?)(g.ud, block, osize, nsize) orelse return Error.OutOfMemory;
     }
 
     std.debug.assert((nsize == 0) == (result == null));
@@ -617,16 +621,16 @@ pub fn Mrealloc_(L: *lua.State, block: ?*anyopaque, osize: usize, nsize: usize, 
     return result;
 }
 
-pub inline fn Marraysize_(n: usize, e: usize) !usize {
-    if (n <= @divTrunc(std.math.maxInt(usize), e)) return n * e else return error.BlockTooBig;
+pub inline fn Marraysize_(n: usize, e: usize) Error!usize {
+    if (n <= @divTrunc(std.math.maxInt(usize), e)) return n * e else return Error.BlockTooBig;
 }
-pub inline fn Mnewarray(L: *lua.State, comptime T: type, n: usize, memcat: u8) ![*]T {
+pub inline fn Mnewarray(L: *lua.State, comptime T: type, n: usize, memcat: u8) Error![*]T {
     return @ptrCast(@alignCast(try Mnew_(L, try Marraysize_(n, @sizeOf(T)), memcat)));
 }
-pub inline fn Mfreearray(L: *lua.State, comptime T: type, b: [*]T, n: usize, memcat: u8) void {
+pub inline fn Mfreearray(L: *lua.State, comptime T: type, b: ?[*]T, n: usize, memcat: u8) void {
     Mfree_(L, @ptrCast(@alignCast(b)), n * @sizeOf(T), memcat);
 }
-pub inline fn Mreallocarray(L: *lua.State, comptime T: type, v: ?[*]T, oldn: usize, n: usize, memcat: u8) ![*]T {
+pub inline fn Mreallocarray(L: *lua.State, comptime T: type, v: ?[*]T, oldn: usize, n: usize, memcat: u8) Error![*]T {
     return @ptrCast(@alignCast((try Mrealloc_(L, @ptrCast(@alignCast(v)), oldn * @sizeOf(T), try Marraysize_(n, @sizeOf(T)), memcat)).?));
 }
 
@@ -667,12 +671,12 @@ pub fn Mvisitpage(
 
     Mgetpagewalkinfo(page, &start, &end, &busyBlocks, &blockSize);
 
-    var pos: *u8 = start;
-    while (pos != end) : (pos = @ptrFromInt(@intFromPtr(pos) + blockSize)) {
+    var pos: *u8 = @ptrCast(start);
+    while (pos != @as(*u8, @ptrCast(end))) : (pos = @ptrFromInt(@intFromPtr(pos) + @as(u32, @intCast(blockSize)))) {
         const gco: *lstate.GCObject = @ptrCast(@alignCast(pos));
 
         // skip memory blocks that are already freed
-        if (gco.gch.tt == lua.TNIL)
+        if (gco.gch.header.tt == @intFromEnum(lua.Type.Nil))
             continue;
 
         // when true is returned it means that the element was deleted

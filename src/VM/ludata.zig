@@ -7,6 +7,8 @@ const lobject = @import("lobject.zig");
 const lgc = @import("lgc.zig");
 const lmem = @import("lmem.zig");
 
+const Errorset = @import("errorset.zig");
+
 /// special tag value is used for user data with inline dtors
 pub const UTAG_IDTOR = lua.config.UTAG_LIMIT;
 
@@ -17,7 +19,7 @@ pub inline fn sizeudata(len: usize) usize {
     return @offsetOf(lobject.Udata, "data") + (if (len > 16) ((len + 15) & ~@as(usize, 15)) else len);
 }
 
-pub fn Unewudata(L: *lua.State, s: usize, tag: u8) !*lobject.Udata {
+pub fn Unewudata(L: *lua.State, s: usize, tag: u8) Errorset.Memory!*lobject.Udata {
     if (s > std.math.maxInt(i32) - @sizeOf(lobject.Udata))
         return error.BlockTooBig;
 

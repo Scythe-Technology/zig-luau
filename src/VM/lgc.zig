@@ -16,9 +16,18 @@ const ldo = @import("ldo.zig");
 const lstate = @import("lstate.zig");
 const lobject = @import("lobject.zig");
 
-///
-/// Possible states of the Garbage Collector
-///
+const Errorset = @import("errorset.zig");
+
+//
+// Default settings for GC tunables (settable via lua_gc)
+//
+pub const I_GCGOAL = 200; // 200% (allow heap to double compared to live heap size)
+pub const I_GCSTEPMUL = 200; // GC runs 'twice the speed' of memory allocation
+pub const I_GCSTEPSIZE = 1; // GC runs every KB of memory allocation
+
+//
+// Possible states of the Garbage Collector
+//
 pub const GCSpause = 0;
 pub const GCSpropagate = 1;
 pub const GCSpropagateagain = 2;
@@ -132,7 +141,7 @@ pub inline fn CneedsGC(L: *const lua.State) bool {
     return L.global.totalbytes >= L.global.GCthreshold;
 }
 
-pub inline fn CcheckGC(L: *lua.State) !void {
+pub inline fn CcheckGC(L: *lua.State) Errorset.Table!void {
     try ldo.Dreallocstack(L, @intCast(L.stacksize - lstate.EXTRA_STACK), false);
     if (CneedsGC(L)) {
         lgcdebug.Cvalidate(L);
@@ -152,6 +161,16 @@ pub inline fn Cbarriert(L: *lua.State, t: *lobject.LuaTable, v: *const lobject.T
     if (v.iscollectable() and isblack(@ptrCast(@alignCast(t))) and iswhite(v.gcvalue())) {
         Cbarriertable(L, t, v.gcvalue());
     }
+}
+
+pub inline fn Cbarrierfast(L: *lua.State, t: *lstate.GCObject) void {
+    if (isblack(t))
+        Cbarrierback(L, t, &L.gclist);
+}
+
+pub inline fn Cobjbarrier(L: *lua.State, p: *lstate.GCObject, o: *lstate.GCObject) void {
+    if (isblack(p) and iswhite(o))
+        Cbarrierf(L, p, o);
 }
 
 pub inline fn Cthreadbarrier(L: *lua.State) void {
@@ -253,15 +272,15 @@ fn traversetable(g: *lstate.global_State, h: *lobject.LuaTable) bool {
     i = lobject.sizenode(h);
     while (i > 0) : (i -= 1) {
         const n = h.gnode(i);
-        std.debug.assert(n.gkey().ttype() != @intFromEnum(lua.Type.Deadkey) or n.gval().ttisnil());
-        if (n.gval().ttisnil())
-            removeentry(n) // remove empty entries
+        std.debug.assert(n[0].gkey().ttype() != @intFromEnum(lua.Type.Deadkey) or n[0].gval().ttisnil());
+        if (n[0].gval().ttisnil())
+            removeentry(@ptrCast(n)) // remove empty entries
         else {
-            std.debug.assert(!n.gkey().ttisnil());
+            std.debug.assert(!n[0].gkey().ttisnil());
             if (!weakkey)
-                markvalue(g, @ptrCast(@alignCast(n.gkey())));
+                markvalue(g, @ptrCast(@alignCast(n[0].gkey())));
             if (!weakvalue)
-                markvalue(g, @ptrCast(@alignCast(n.gval())));
+                markvalue(g, @ptrCast(@alignCast(n[0].gval())));
         }
     }
     return weakkey or weakvalue;
@@ -275,17 +294,17 @@ fn traverseproto(g: *lstate.global_State, f: *lobject.Proto) void {
     if (f.debugname) |d|
         stringmark(d);
     for (0..@intCast(f.sizek)) |i| // mark literals
-        markvalue(g, &f.k[i]);
+        markvalue(g, &f.k.?[i]);
     for (0..@intCast(f.sizeupvalues)) |i| { // mark upvalue names
-        if (f.upvalues[i]) |n|
+        if (f.upvalues.?[i]) |n|
             stringmark(n);
     }
     for (0..@intCast(f.sizep)) |i| { // mark nested protos
-        if (f.p[i]) |proto|
+        if (f.p.?[i]) |proto|
             markobject(g, @ptrCast(@alignCast(proto)));
     }
     for (0..@intCast(f.sizelocvars)) |i| { // mark local-variable names
-        if (f.locvars[i].varname) |varname|
+        if (f.locvars.?[i].varname) |varname|
             stringmark(varname);
     }
 }
@@ -294,12 +313,12 @@ fn traverseclosure(g: *lstate.global_State, cl: *lobject.Closure) void {
     markobject(g, @ptrCast(@alignCast(cl.env)));
     if (cl.isC > 0) {
         for (0..cl.nupvalues) |i| // mark its upvalues
-            markvalue(g, &cl.d.c.upvals[i]);
+            markvalue(g, &cl.d.c.upvalues()[i]);
     } else {
         std.debug.assert(cl.nupvalues == cl.d.l.p.nups);
         markobject(g, @ptrCast(@alignCast(cl.d.l.p)));
         for (0..cl.nupvalues) |i| // mark its upvalues
-            markvalue(g, @ptrCast(&@as([*]lobject.TValue, @ptrCast(&cl.d.l.uprefs))[i]));
+            markvalue(g, @ptrCast(&cl.d.l.upreferences()[i]));
     }
 }
 
@@ -307,7 +326,7 @@ fn traversestack(g: *lstate.global_State, L: *lua.State) void {
     markobject(g, @ptrCast(@alignCast(L.gt)));
     if (L.namecall) |nc|
         stringmark(nc);
-    for (L.stack[0..L.stack[0].sub(L.top)]) |*o|
+    for (L.stack[0..L.stack[0].sub(@ptrCast(L.top))]) |*o|
         markvalue(g, o);
     var uv: ?*lobject.UpVal = L.openupval;
     while (uv) |u| : (uv = u.u.open.threadnext) {
@@ -318,24 +337,24 @@ fn traversestack(g: *lstate.global_State, L: *lua.State) void {
 }
 
 fn clearstack(L: *lua.State) void {
-    const stack_end = L.stack[0].add_num(L.stacksize);
+    const stack_end = &L.stack[@intCast(L.stacksize)];
     for (L.stack[0..L.stack[0].sub(stack_end)]) |*o| // clear not-marked stack slice
         o.setnilvalue();
 }
 
-fn shrinkstack(L: *lua.State) !void {
+fn shrinkstack(L: *lua.State) Errorset.Memory!void {
     // compute used stack - note that we can't use th->top if we're in the middle of vararg call
     var lim = L.top;
     var ci = L.base_ci;
-    while (@intFromPtr(ci) <= @intFromPtr(L.ci)) : (ci = ci.?.add_num(1)) {
-        std.debug.assert(@intFromPtr(ci.?.top) <= @intFromPtr(L.stack_last));
-        if (@intFromPtr(lim) < @intFromPtr(ci.?.top))
-            lim = ci.?.top;
+    while (@intFromPtr(ci) <= @intFromPtr(L.ci)) : (ci = ci.?[1..]) {
+        std.debug.assert(@intFromPtr(ci.?[0].top) <= @intFromPtr(L.stack_last));
+        if (@intFromPtr(lim) < @intFromPtr(ci.?[0].top))
+            lim = ci.?[0].top;
     }
 
     // shrink stack and callinfo arrays if we aren't using most of the space
-    const ci_used = L.ci.?.sub(L.base_ci.?); // number of `ci' in use
-    const s_used = lim.sub(&L.stack[0]); // part of stack in use
+    const ci_used = L.ci.?[0].sub(@ptrCast(L.base_ci.?)); // number of `ci' in use
+    const s_used = lim[0].sub(@ptrCast(L.stack)); // part of stack in use
     if (L.size_ci > lua.config.I_MAXCALLS) // handling overflow?
         return; // do not touch the stacks
 
@@ -348,7 +367,7 @@ fn shrinkstack(L: *lua.State) !void {
     try ldo.Dreallocstack(L, s_used, false);
 }
 
-fn propagatemark(g: *lstate.global_State) !usize {
+fn propagatemark(g: *lstate.global_State) Errorset.Memory!usize {
     const o = g.gray.?;
     std.debug.assert(isgray(o));
     gray2black(o);
@@ -410,7 +429,7 @@ fn propagatemark(g: *lstate.global_State) !usize {
     return 0;
 }
 
-fn propagateall(g: *lstate.global_State) !usize {
+fn propagateall(g: *lstate.global_State) Errorset.Memory!usize {
     var work: usize = 0;
     while (g.gray != null)
         work += try propagatemark(g);
@@ -430,7 +449,7 @@ pub inline fn iscleared(o: *lobject.TValue) bool {
 }
 
 /// clear collected entries from weaktables
-fn cleartable(L: *lua.State, il: *lstate.GCObject) !usize {
+fn cleartable(L: *lua.State, il: *lstate.GCObject) Errorset.Table!usize {
     var work: usize = 0;
     var ol: ?*lstate.GCObject = il;
     while (ol) |l| {
@@ -445,16 +464,16 @@ fn cleartable(L: *lua.State, il: *lstate.GCObject) !usize {
                 o.setnilvalue(); // remove value
         }
         i = lobject.sizenode(h);
-        var activevalues: i32 = 0;
+        var activevalues: usize = 0;
         while (i > 0) : (i -= 1) {
             const n = h.gnode(i);
 
             // non-empty entry?
-            if (!n.gval().ttisnil()) {
+            if (!n[0].gval().ttisnil()) {
                 // can we clear key or value?
-                if (iscleared(@ptrCast(@alignCast(n.gkey()))) or iscleared(n.gval())) {
-                    n.gval().setnilvalue(); // remove value ...
-                    removeentry(n); // remove entry from table
+                if (iscleared(@ptrCast(@alignCast(n[0].gkey()))) or iscleared(n[0].gval())) {
+                    n[0].gval().setnilvalue(); // remove value ...
+                    removeentry(@ptrCast(n)); // remove entry from table
                 } else {
                     activevalues += 1;
                 }
@@ -492,14 +511,14 @@ fn freeobj(L: *lua.State, o: *lstate.GCObject, page: *lmem.lua_Page) void {
     }
 }
 
-fn shrinkbuffers(L: *lua.State) !void {
+fn shrinkbuffers(L: *lua.State) Errorset.Memory!void {
     const g = L.global;
     // check size of string hash
     if (g.strt.nuse < @divTrunc(g.strt.size, 4) and g.strt.size > lua.config.MINSTRTABSIZE * 2)
         try lstring.Sresize(L, @intCast(@divTrunc(g.strt.size, 2))); // table is too big
 }
 
-fn shrinkbuffersfull(L: *lua.State) !void {
+fn shrinkbuffersfull(L: *lua.State) Errorset.Memory!void {
     const g = L.global;
     // check size of string hash
     var hashsize = g.strt.size;
@@ -507,6 +526,23 @@ fn shrinkbuffersfull(L: *lua.State) !void {
         hashsize = @divTrunc(hashsize, 2);
     if (hashsize != g.strt.size)
         try lstring.Sresize(L, hashsize); // table is too big
+}
+
+fn deletegco(L: *lua.State, page: *lmem.lua_Page, gco: *lstate.GCObject) bool {
+    freeobj(L, gco, page);
+    return true;
+}
+
+pub fn Cfreeall(L: *lua.State) void {
+    const g = L.global;
+    std.debug.assert(L == g.mainthread);
+
+    lmem.Mvisitgco(L, *lua.State, L, deletegco);
+
+    for (0..@intCast(g.strt.size)) |i| // free all string lists
+        std.debug.assert(g.strt.hash.?[i] == null);
+
+    std.debug.assert(L.global.strt.nuse == 0);
 }
 
 fn markmt(g: *lstate.global_State) void {
@@ -524,7 +560,7 @@ fn markroot(L: *lua.State) void {
     markobject(g, @ptrCast(@alignCast(g.mainthread)));
     // make global table be traversed before main stack
     markobject(g, @ptrCast(@alignCast(g.mainthread.gt)));
-    markvalue(g, L.registry());
+    markvalue(g, @ptrCast(L.registry()));
     markmt(g);
     g.gcstate = GCSpropagate;
 }
@@ -578,7 +614,7 @@ fn clearupvals(L: *lua.State) usize {
     return work;
 }
 
-fn atomic(L: *lua.State) !usize {
+fn atomic(L: *lua.State) Errorset.Table!usize {
     const g = L.global;
     std.debug.assert(g.gcstate == GCSatomic);
 
@@ -666,7 +702,7 @@ fn sweepgcopage(L: *lua.State, page: *lmem.lua_Page) usize {
     return @divTrunc(@intFromPtr(end) - @intFromPtr(start), @as(usize, @intCast(blockSize)));
 }
 
-fn gcstep(L: *lua.State, limit: usize) !usize {
+fn gcstep(L: *lua.State, limit: usize) Errorset.Table!usize {
     var cost: usize = 0;
     const g = L.global;
 
@@ -787,7 +823,7 @@ fn getheaptrigger(g: *lstate.global_State, heapgoal: usize) usize {
     return if (heaptrigger < g.totalbytes) g.totalbytes else if (heaptrigger > heapgoal) heapgoal else @intCast(heaptrigger);
 }
 
-pub fn Cstep(L: *lua.State, assist: bool) !usize {
+pub fn Cstep(L: *lua.State, assist: bool) Errorset.Table!usize {
     const g = L.global;
 
     const lim = g.gcstepsize * @divTrunc(g.gcstepmul, 100);

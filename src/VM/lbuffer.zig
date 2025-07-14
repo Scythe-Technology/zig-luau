@@ -7,6 +7,8 @@ const lobject = @import("lobject.zig");
 const lgc = @import("lgc.zig");
 const lmem = @import("lmem.zig");
 
+const Errorset = @import("errorset.zig");
+
 // buffer size limit
 pub const MAX_BUFFER_SIZE = 1 << 30;
 
@@ -15,7 +17,7 @@ pub inline fn sizebuffer(len: usize) usize {
     return @offsetOf(lobject.Buffer, "data") + (if (len < 8) 8 else len);
 }
 
-pub fn Bnewbuffer(L: *lua.State, s: usize) !*lobject.Buffer {
+pub fn Bnewbuffer(L: *lua.State, s: usize) Errorset.Memory!*lobject.Buffer {
     if (s > MAX_BUFFER_SIZE)
         return error.BlockTooBig;
 

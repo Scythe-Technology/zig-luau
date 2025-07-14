@@ -84,6 +84,9 @@ pub const VM = if (build_config.buildVM) struct {
     pub const ltablib = @import("VM/ltablib.zig");
     pub const lutf8lib = @import("VM/lutf8lib.zig");
     pub const lveclib = @import("VM/lveclib.zig");
+
+    // extra
+    pub const Errorset = @import("VM/errorset.zig");
     test {
         inline for (@typeInfo(@This()).@"struct".decls) |decl|
             std.testing.refAllDecls(@field(@This(), decl.name));

@@ -5,6 +5,10 @@ const lua = @import("lua.zig");
 const ltm = @import("ltm.zig");
 const lstate = @import("lstate.zig");
 const lobject = @import("lobject.zig");
+const Errorset = @import("errorset.zig");
+
+pub const MEMERRMSG = "not enough memory";
+pub const ERRERRMSG = "error in error handling";
 
 pub fn currentpc(ci: *lstate.CallInfo) usize {
     if (ci.savedpc) |pc| {
@@ -54,7 +58,7 @@ pub fn getinfo(L: *lua.State, level: i32, what: [:0]const u8, ar: *lua.Debug) bo
     return true;
 }
 
-fn pusherror(L: *lua.State, msg: [:0]const u8) !void {
+fn pusherror(L: *lua.State, msg: [:0]const u8) Errorset.Memory!void {
     const ci = L.ci.?;
     if (ci.isLua()) {
         const source = getluaproto(ci).?.source;
@@ -70,7 +74,7 @@ fn pusherror(L: *lua.State, msg: [:0]const u8) !void {
     }
 }
 
-pub fn GrunerrorL(L: *lua.State, comptime fmt: []const u8, args: anytype) !noreturn {
+pub fn GrunerrorL(L: *lua.State, comptime fmt: []const u8, args: anytype) Errorset.Table!noreturn {
     try L.pushvfstring(fmt, args);
     try L.rawcheckstack(1);
     L.raiseerror();
@@ -85,10 +89,10 @@ pub fn Ggetline(p: *lobject.Proto, pc: usize) i32 {
 }
 
 pub fn Gisnative(L: *lua.State, level: usize) bool {
-    if (level >= L.ci.?.sub(L.base_ci.?))
+    if (level >= L.ci.?[0].sub(@ptrCast(L.base_ci.?)))
         return false;
-    const ci = L.ci.?.sub_num(level);
-    return (ci.flags & lstate.CALLINFO_NATIVE) != 0;
+    const ci = L.ci.? - level;
+    return (ci[0].flags & lstate.CALLINFO_NATIVE) != 0;
 }
 
 pub fn singlestep(L: *lua.State, enabled: bool) void {

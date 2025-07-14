@@ -8,11 +8,14 @@ const lgc = @import("lgc.zig");
 const ltm = @import("ltm.zig");
 const ldo = @import("ldo.zig");
 const lvm = @import("lvm.zig");
+const lfunc = @import("lfunc.zig");
 const ltable = @import("ltable.zig");
 const ludata = @import("ludata.zig");
 const lbuffer = @import("lbuffer.zig");
 const lobject = @import("lobject.zig");
 const lvmutils = @import("lvmutils.zig");
+
+const Errorset = @import("errorset.zig");
 
 const State = lua.State;
 
@@ -22,7 +25,7 @@ pub fn api_check(L: *State, cond: bool) void {
 }
 
 pub inline fn api_checknelems(L: *State, n: u32) void {
-    api_check(L, n <= L.top.sub(L.base));
+    api_check(L, n <= L.top[0].sub(@ptrCast(L.base)));
 }
 
 pub inline fn api_checkvalidindex(L: *State, obj: *const lobject.TValue) void {
@@ -31,7 +34,12 @@ pub inline fn api_checkvalidindex(L: *State, obj: *const lobject.TValue) void {
 
 pub inline fn api_incr_top(L: *State) void {
     api_check(L, @intFromPtr(L.top) <= @intFromPtr(L.stack_last));
-    L.top = L.top.add_num(1);
+    L.top = L.top[1..];
+}
+
+pub inline fn api_update_top(L: *State, p: *lobject.TValue) void {
+    api_check(L, @intFromPtr(p) >= @intFromPtr(L.base) and @intFromPtr(p) < @intFromPtr(L.ci.?[0].top));
+    L.top = @ptrCast(p);
 }
 
 pub inline fn updateatom(L: *State, ts: *lobject.TString) void {
@@ -46,7 +54,7 @@ pub fn getcurrenv(L: *lua.State) *lobject.LuaTable {
         return L.curr_func().env;
 }
 
-pub noinline fn pseudo2addr(L: *State, idx: i32) lobject.StkId {
+pub noinline fn pseudo2addr(L: *State, idx: i32) *lobject.TValue {
     api_check(L, lua.ispseudo(idx));
     switch (idx) {
         lua.REGISTRYINDEX => return L.registry(),
@@ -64,24 +72,24 @@ pub noinline fn pseudo2addr(L: *State, idx: i32) lobject.StkId {
             const func = L.curr_func();
             const i = lua.GLOBALSINDEX - idx;
             return if (i <= @as(i32, @intCast(func.nupvalues)))
-                &@as([*]lobject.TValue, &func.d.c.upvals)[@intCast(i - 1)]
+                &func.d.c.upvalues()[@intCast(i - 1)]
             else
                 @constCast(lobject.Onilobject);
         },
     }
 }
 
-pub inline fn index2addr(L: *State, idx: i32) lobject.StkId {
+pub inline fn index2addr(L: *State, idx: i32) *lobject.TValue {
     if (idx > 0) {
-        const o: usize = @intFromPtr(L.base.add_num(idx - 1));
-        api_check(L, idx <= L.ci.?.top.sub(L.base));
+        const o: usize = @intFromPtr(&L.base[@intCast(idx - 1)]);
+        api_check(L, idx <= L.ci.?[0].top[0].sub(@ptrCast(L.base)));
         if (o >= @intFromPtr(L.top))
             return @constCast(lobject.Onilobject)
         else
             return @ptrFromInt(o);
     } else if (idx > lua.REGISTRYINDEX) {
-        api_check(L, idx != 0 and -idx <= L.top.sub(L.base));
-        return L.top.add_num(idx);
+        api_check(L, idx != 0 and -idx <= L.top[0].sub(@ptrCast(L.base)));
+        return L.top[0].add_num(idx);
     } else {
         return pseudo2addr(L, idx);
     }
@@ -93,21 +101,21 @@ pub fn Atoobject(L: *lua.State, idx: i32) ?*const lobject.TValue {
 }
 
 pub fn Apushobject(L: *lua.State, o: *const lobject.TValue) void {
-    L.top.setobj(L, o);
+    L.top[0].setobj(L, o);
     api_incr_top(L);
 }
 
-pub fn checkstack(L: *lua.State, size: usize) !bool {
-    if (size > lua.config.I_MAXCSTACK or (L.top.sub(L.base) + size) > lua.config.I_MAXCSTACK)
+pub fn checkstack(L: *lua.State, size: usize) Errorset.Memory!bool {
+    if (size > lua.config.I_MAXCSTACK or (L.top[0].sub(@ptrCast(L.base)) + size) > lua.config.I_MAXCSTACK)
         return false
     else {
         try @call(.always_inline, rawcheckstack, .{ L, size });
         return true;
     }
 }
-pub fn rawcheckstack(L: *lua.State, size: usize) !void {
+pub fn rawcheckstack(L: *lua.State, size: usize) Errorset.Memory!void {
     try ldo.Dcheckstack(L, size);
-    ldo.expandstacklimit(L, L.top.add_num(size));
+    ldo.expandstacklimit(L, &L.top[size]);
 }
 
 pub fn xmove(from: *lua.State, to: *lua.State, n: u32) void {
@@ -115,22 +123,22 @@ pub fn xmove(from: *lua.State, to: *lua.State, n: u32) void {
         return;
     api_checknelems(from, n);
     api_check(from, from.global == to.global);
-    api_check(from, to.ci.?.top.sub(to.top) >= n);
+    api_check(from, to.ci.?[0].top[0].sub(@ptrCast(to.top)) >= n);
     lgc.Cthreadbarrier(to);
 
     const ttop = to.top;
-    const ftop = from.top.sub_num(n);
+    const ftop = from.top - n;
     for (0..@intCast(n)) |i|
-        ttop.add_num(i).setobj(to, ftop.add_num(i));
+        ttop[i].setobj(to, &ftop[i]);
 
-    from.top = ftop;
-    to.top = ttop.add_num(n);
+    from.top = @ptrCast(ftop);
+    to.top = ttop[n..];
 }
 
 pub fn xpush(from: *lua.State, to: *lua.State, idx: i32) void {
     api_check(from, from.global == to.global);
     lgc.Cthreadbarrier(to);
-    to.top.setobj(to, index2addr(from, idx));
+    to.top[0].setobj(to, index2addr(from, idx));
     api_incr_top(to);
 }
 
@@ -147,27 +155,27 @@ pub fn mainthread(L: *lua.State) *lua.State {
 //
 
 pub fn absindex(L: *lua.State, idx: i32) i32 {
-    api_check(L, (idx > 0 and idx <= L.top.sub(L.base)) or (idx < 0 and -idx <= L.top.sub(L.base)) or lua.ispseudo(idx));
+    api_check(L, (idx > 0 and idx <= L.top[0].sub(@ptrCast(L.base))) or (idx < 0 and -idx <= L.top[0].sub(@ptrCast(L.base))) or lua.ispseudo(idx));
     return if (idx > 0 or lua.ispseudo(idx))
         idx
     else
-        @as(i32, @intCast(L.top.sub(L.base))) + idx + 1;
+        @as(i32, @intCast(L.top[0].sub(@ptrCast(L.base)))) + idx + 1;
 }
 
 pub fn gettop(L: *lua.State) usize {
-    return L.top.sub(L.base);
+    return L.top[0].sub(@ptrCast(L.base));
 }
 
 pub fn settop(L: *lua.State, idx: i32) void {
     if (idx >= 0) {
-        api_check(L, idx <= L.stack_last.sub(L.base));
-        const t = L.base.add_num(idx);
-        while (@intFromPtr(L.top) < @intFromPtr(t)) : (L.top = L.top.add_num(1))
-            L.top.setnilvalue();
+        api_check(L, idx <= L.stack_last[0].sub(@ptrCast(L.base)));
+        const t = L.base[@intCast(idx)..];
+        while (@intFromPtr(L.top) < @intFromPtr(t)) : (L.top = L.top[1..])
+            L.top[0].setnilvalue();
         L.top = t;
     } else {
-        api_check(L, -(idx + 1) <= L.top.sub(L.base));
-        L.top = L.top.add_num(idx + 1); // `subtract' index (index is negative)
+        api_check(L, -(idx + 1) <= L.top[0].sub(@ptrCast(L.base)));
+        L.top = @ptrCast(L.top[0].add_num(idx + 1)); // `subtract' index (index is negative)
     }
 }
 pub inline fn pop(L: *lua.State, n: i32) void {
@@ -175,13 +183,12 @@ pub inline fn pop(L: *lua.State, n: i32) void {
 }
 
 pub fn remove(L: *lua.State, idx: i32) void {
-    var p = index2addr(L, idx);
-    api_checkvalidindex(L, p);
-    p = p.add_num(1);
-    while (@intFromPtr(p) < @intFromPtr(L.top)) : (p = p.add_num(1)) {
-        p.sub_num(1).setobj(L, p);
-    }
-    L.top = L.top.sub_num(1);
+    var p: [*]lobject.TValue = @ptrCast(index2addr(L, idx));
+    api_checkvalidindex(L, @ptrCast(p));
+    p += 1;
+    while (@intFromPtr(p) < @intFromPtr(L.top)) : (p += 1)
+        (p - 1)[0].setobj(L, @ptrCast(p));
+    L.top -= 1;
 }
 
 pub fn insert(L: *lua.State, idx: i32) void {
@@ -190,11 +197,11 @@ pub fn insert(L: *lua.State, idx: i32) void {
     api_checkvalidindex(L, p);
     var q = L.top;
     while (@intFromPtr(q) > @intFromPtr(p)) {
-        const n = q.sub_num(1);
-        q.setobj(L, n);
+        const n = q - 1;
+        q[0].setobj(L, @ptrCast(n));
         q = n;
     }
-    p.setobj(L, L.top);
+    p.setobj(L, &L.top[0]);
 }
 
 pub fn replace(L: *lua.State, idx: i32) void {
@@ -206,27 +213,27 @@ pub fn replace(L: *lua.State, idx: i32) void {
         lua.ENVIRONINDEX => {
             api_check(L, L.ci != L.base_ci);
             const func = L.curr_func();
-            api_check(L, L.top.sub_num(1).ttistable());
-            func.env = L.top.sub_num(1).hvalue();
-            lgc.Cbarrier(L, @ptrCast(@alignCast(func)), L.top.sub_num(1));
+            api_check(L, (L.top - 1)[0].ttistable());
+            func.env = (L.top - 1)[0].hvalue();
+            lgc.Cbarrier(L, @ptrCast(@alignCast(func)), @ptrCast(L.top - 1));
         },
         lua.GLOBALSINDEX => {
-            api_check(L, L.top.sub_num(1).ttistable());
-            L.gt = L.top.sub_num(1).hvalue();
+            api_check(L, (L.top - 1)[0].ttistable());
+            L.gt = (L.top - 1)[0].hvalue();
         },
         else => {
-            o.setobj(L, L.top.sub_num(1));
+            o.setobj(L, @ptrCast(L.top - 1));
             if (idx < lua.GLOBALSINDEX) // function upvalue?
-                lgc.Cbarrier(L, @ptrCast(@alignCast(L.curr_func())), L.top.sub_num(1));
+                lgc.Cbarrier(L, @ptrCast(@alignCast(L.curr_func())), @ptrCast(L.top - 1));
         },
     }
-    L.top = L.top.sub_num(1);
+    L.top -= 1;
 }
 
 pub fn pushvalue(L: *lua.State, idx: i32) void {
     lgc.Cthreadbarrier(L);
     const o = index2addr(L, idx);
-    L.top.setobj(L, o);
+    L.top[0].setobj(L, o);
     api_incr_top(L);
 }
 
@@ -520,74 +527,86 @@ pub fn topointer(L: *lua.State, idx: i32) ?*const anyopaque {
 // push functions (C -> stack)
 //
 pub fn pushnil(L: *lua.State) void {
-    L.top.setnilvalue();
+    L.top[0].setnilvalue();
     api_incr_top(L);
 }
 
 pub fn pushnumber(L: *lua.State, n: f64) void {
-    L.top.setnvalue(n);
+    L.top[0].setnvalue(n);
     api_incr_top(L);
 }
 
 pub fn pushinteger(L: *lua.State, n: i32) void {
-    L.top.setnvalue(@floatFromInt(n));
+    L.top[0].setnvalue(@floatFromInt(n));
     api_incr_top(L);
 }
 
 pub fn pushunsigned(L: *lua.State, n: u32) void {
-    L.top.setnvalue(@floatFromInt(n));
+    L.top[0].setnvalue(@floatFromInt(n));
     api_incr_top(L);
 }
 
 pub fn pushvector(L: *lua.State, x: f32, y: f32, z: f32, w: ?f32) void {
-    L.top.setvvalue(x, y, z, w);
+    L.top[0].setvvalue(x, y, z, w);
     api_incr_top(L);
 }
 
-pub fn pushlstring(L: *lua.State, s: []const u8) !void {
+pub fn pushlstring(L: *lua.State, s: []const u8) Errorset.Table!void {
     try lgc.CcheckGC(L);
     lgc.Cthreadbarrier(L);
-    L.top.setsvalue(L, try lstring.Snewlstr(L, s));
+    L.top[0].setsvalue(L, try lstring.Snewlstr(L, s));
     api_incr_top(L);
 }
 
-pub inline fn pushstring(L: *lua.State, str: ?[:0]const u8) !void {
+pub inline fn pushstring(L: *lua.State, str: ?[:0]const u8) Errorset.Table!void {
     if (str) |s| {
         try pushlstring(L, std.mem.span(@as([*c]const u8, @ptrCast(s.ptr))));
     } else pushnil(L);
 }
 
-pub fn pushvfstring(L: *lua.State, comptime fmt: []const u8, args: anytype) !void {
+pub fn pushvfstring(L: *lua.State, comptime fmt: []const u8, args: anytype) Errorset.Table!void {
     try lobject.Opushvfstring(L, fmt, args);
 }
-pub inline fn pushfstring(L: *lua.State, comptime fmt: []const u8, args: anytype) !void {
+pub inline fn pushfstring(L: *lua.State, comptime fmt: []const u8, args: anytype) Errorset.Table!void {
     try pushvfstring(L, fmt, args);
 }
 
-pub inline fn pushcclosurek(
+pub fn pushcclosurek(
     L: *lua.State,
     f: lua.CFunction,
     debugname: [:0]const u8,
-    n: i32,
+    nup: u8,
     cont: ?lua.Continuation,
-) void {
-    c.lua_pushcclosurek(@ptrCast(L), @ptrCast(f), debugname, n, @ptrCast(cont));
+) Errorset.Table!void {
+    try lgc.CcheckGC(L);
+    lgc.Cthreadbarrier(L);
+    api_checknelems(L, nup);
+    const cl = try lfunc.FnewCclosure(L, nup, getcurrenv(L));
+    cl.d.c.f = f;
+    cl.d.c.cont = cont;
+    cl.d.c.debugname = debugname;
+    var n: u8 = nup;
+    while (n > 0) : (n -= 1)
+        cl.d.c.upvalues()[n].setobj(L, &L.top[n]);
+    L.top[0].setclvalue(L, cl);
+    std.debug.assert(lgc.iswhite(@ptrCast(@alignCast(cl))));
+    api_incr_top(L);
 }
-pub inline fn pushcfunction(L: *lua.State, f: lua.CFunction, debugname: [:0]const u8) void {
-    pushcclosurek(L, f, debugname, 0, null);
+pub inline fn pushcfunction(L: *lua.State, f: lua.CFunction, debugname: [:0]const u8) Errorset.Table!void {
+    try pushcclosurek(L, f, debugname, 0, null);
 }
-pub inline fn pushcclosure(L: *lua.State, f: lua.CFunction, debugname: [:0]const u8, nup: i32) void {
-    pushcclosurek(L, f, debugname, nup, null);
+pub inline fn pushcclosure(L: *lua.State, f: lua.CFunction, debugname: [:0]const u8, nup: u8) Errorset.Table!void {
+    try pushcclosurek(L, f, debugname, nup, null);
 }
 
 pub fn pushboolean(L: *lua.State, b: bool) void {
-    L.top.setbvalue(b);
+    L.top[0].setbvalue(b);
     api_incr_top(L);
 }
 
 pub fn pushlightuserdatatagged(L: *lua.State, p: ?*anyopaque, tag: u32) void {
     api_check(L, tag < lua.config.LUTAG_LIMIT);
-    L.top.setpvalue(p, tag);
+    L.top[0].setpvalue(p, tag);
     api_incr_top(L);
 }
 pub inline fn pushlightuserdata(L: *lua.State, p: ?*anyopaque) void {
@@ -596,7 +615,7 @@ pub inline fn pushlightuserdata(L: *lua.State, p: ?*anyopaque) void {
 
 pub fn pushthread(L: *lua.State) bool {
     lgc.Cthreadbarrier(L);
-    L.top.setthvalue(L, L);
+    L.top[0].setthvalue(L, L);
     api_incr_top(L);
     return L.global.mainthread == L;
 }
@@ -605,14 +624,14 @@ pub fn pushthread(L: *lua.State) bool {
 // get functions (Lua -> stack)
 //
 
-pub inline fn gettable(L: *lua.State, idx: i32) lua.Type {
+pub inline fn gettable(L: *lua.State, idx: i32) !lua.Type {
     return @enumFromInt(c.lua_gettable(@ptrCast(L), idx));
 }
 
-pub inline fn getfield(L: *lua.State, idx: i32, k: [:0]const u8) lua.Type {
+pub inline fn getfield(L: *lua.State, idx: i32, k: [:0]const u8) !lua.Type {
     return @enumFromInt(c.lua_getfield(@ptrCast(L), idx, k.ptr));
 }
-pub inline fn getglobal(L: *lua.State, k: [:0]const u8) lua.Type {
+pub inline fn getglobal(L: *lua.State, k: [:0]const u8) !lua.Type {
     return getfield(L, lua.GLOBALSINDEX, k);
 }
 
@@ -623,9 +642,9 @@ pub fn rawgetfield(L: *lua.State, idx: i32, k: [:0]const u8) lua.Type {
     var ttype: lua.Type = .Nil;
     if (lstring.Sassumelstr(L, k)) |ts| {
         const o = ltable.Hgetstr(t.hvalue(), ts);
-        L.top.setobj(L, ltable.Hgetstr(t.hvalue(), ts));
+        L.top[0].setobj(L, ltable.Hgetstr(t.hvalue(), ts));
         ttype = o.typeOf();
-    } else L.top.setobj(L, lobject.Onilobject);
+    } else L.top[0].setobj(L, lobject.Onilobject);
     api_incr_top(L);
     return ttype;
 }
@@ -633,24 +652,36 @@ pub fn rawgetfield(L: *lua.State, idx: i32, k: [:0]const u8) lua.Type {
 /// get value from table value at `idx`
 /// * pushes value to stack
 /// * expects value at `idx` to be *table*
-pub inline fn rawget(L: *lua.State, idx: i32) lua.Type {
-    return @enumFromInt(c.lua_rawget(@ptrCast(L), idx));
+pub fn rawget(L: *lua.State, idx: i32) lua.Type {
+    lgc.Cthreadbarrier(L);
+    const t = index2addr(L, idx);
+    api_check(L, t.ttistable());
+    (L.top - 1)[0].setobj(L, ltable.Hget(t.hvalue(), @ptrCast(L.top - 1)));
+    return (L.top - 1)[0].typeOf();
 }
 
 /// get value from table value at `idx` with number key `n`
 /// * pushes value to stack
 /// * expects value at `idx` to be *table*
-pub inline fn rawgeti(L: *lua.State, idx: i32, n: i32) lua.Type {
-    return @enumFromInt(c.lua_rawgeti(@ptrCast(L), idx, n));
+pub fn rawgeti(L: *lua.State, idx: i32, n: i32) lua.Type {
+    lgc.Cthreadbarrier(L);
+    const t = index2addr(L, idx);
+    api_check(L, t.ttistable());
+    L.top[0].setobj(L, ltable.Hgetnum(t.hvalue(), n));
+    api_incr_top(L);
+    return (L.top - 1)[0].typeOf();
 }
 
 /// create a new table and push it to the stack
-pub inline fn createtable(L: *lua.State, narray: i32, nrec: i32) void {
-    c.lua_createtable(@ptrCast(L), narray, nrec);
+pub fn createtable(L: *lua.State, narray: u32, nrec: u32) !void {
+    try lgc.CcheckGC(L);
+    lgc.Cthreadbarrier(L);
+    L.top[0].sethvalue(L, try ltable.Hnew(L, narray, nrec));
+    api_incr_top(L);
 }
 /// create a new table and push it to the stack
-pub inline fn newtable(L: *lua.State) void {
-    c.lua_createtable(@ptrCast(L), 0, 0);
+pub inline fn newtable(L: *lua.State) !void {
+    try createtable(L, 0, 0);
 }
 
 /// set readonly flag for table at `idx`
@@ -689,7 +720,7 @@ pub fn getmetatable(L: *lua.State, idx: i32) bool {
         else => mt = L.global.mt[@intCast(o.tt)],
     }
     if (mt) |ptr| {
-        L.top.sethvalue(L, ptr);
+        L.top[0].sethvalue(L, ptr);
         api_incr_top(L);
     }
     return mt != null;
@@ -700,9 +731,9 @@ pub fn getfenv(L: *lua.State, idx: i32) void {
     const o: *const lobject.TValue = index2addr(L, idx);
     api_checkvalidindex(L, o);
     switch (o.tt) {
-        @intFromEnum(lua.Type.Function) => L.top.sethvalue(L, o.clvalue().env),
-        @intFromEnum(lua.Type.Thread) => L.top.sethvalue(L, o.thvalue().gt.?),
-        else => L.top.setnilvalue(),
+        @intFromEnum(lua.Type.Function) => L.top[0].sethvalue(L, o.clvalue().env),
+        @intFromEnum(lua.Type.Thread) => L.top[0].sethvalue(L, o.thvalue().gt.?),
+        else => L.top[0].setnilvalue(),
     }
     api_incr_top(L);
 }
@@ -715,56 +746,112 @@ pub fn getfenv(L: *lua.State, idx: i32) void {
 /// * pops **top** x2
 /// * throws lua error if *table* is readonly
 /// * throws lua error if key is *nil*/*NaN*/*NaN vector*
-pub inline fn settable(L: *lua.State, idx: i32) void {
+/// <not recommended> use `rawset` instead
+pub inline fn settable(L: *lua.State, idx: i32) !void {
     c.lua_settable(@ptrCast(L), idx);
 }
 
 /// set table value at `idx` with value:**top** and `k`
 /// * pops **top**
 /// * throws lua error if *table* is readonly
-pub inline fn setfield(L: *lua.State, idx: i32, k: [:0]const u8) void {
+/// <not recommended> use `rawsetfield` instead
+pub inline fn setfield(L: *lua.State, idx: i32, k: [:0]const u8) !void {
     c.lua_setfield(@ptrCast(L), idx, k.ptr);
 }
-pub inline fn setglobal(L: *lua.State, k: [:0]const u8) void {
-    setfield(L, lua.GLOBALSINDEX, k);
+pub inline fn setglobal(L: *lua.State, k: [:0]const u8) !void {
+    try setfield(L, lua.GLOBALSINDEX, k);
 }
 
 /// set table value at `idx` with value:**top** and `k`
 /// ignoring metamethods.
 /// * pops **top**
-/// * throws lua error if *table* is readonly
-pub inline fn rawsetfield(L: *lua.State, idx: i32, k: [:0]const u8) void {
-    c.lua_rawsetfield(@ptrCast(L), idx, k.ptr);
+pub fn rawsetfield(L: *lua.State, idx: i32, k: []const u8) Errorset.Table!void {
+    api_checknelems(L, 1);
+    const t = index2addr(L, idx);
+    api_check(L, t.ttistable());
+    if (t.hvalue().readonly > 0)
+        return Errorset.TableReadonly;
+    (try ltable.Hsetstr(L, t.hvalue(), try lstring.Snew(L, k))).setobj(L, @ptrCast(L.top - 1));
+    lgc.Cbarriert(L, t.hvalue(), @ptrCast(L.top - 1));
+    L.top -= 1;
 }
 
 /// set table value at `idx` with value:**top** and key:**top-1**
 /// ignoring metamethods.
 /// * pops **top** x2
-/// * throws lua error if *table* is readonly
-/// * throws lua error if key is *nil*/*NaN*/*NaN vector*
-pub inline fn rawset(L: *lua.State, idx: i32) void {
-    c.lua_rawset(@ptrCast(L), idx);
+/// * returns error "readonly" if *table* is readonly
+/// * returns error index if key is *nil*/*NaN*/*NaN vector*
+pub fn rawset(L: *lua.State, idx: i32) Errorset.Table!void {
+    api_checknelems(L, 2);
+    const t = index2addr(L, idx);
+    api_check(L, t.ttistable());
+    if (t.hvalue().readonly > 0)
+        return Errorset.TableReadonly;
+    (try ltable.Hset(L, t.hvalue(), @ptrCast(L.top - 2))).setobj(L, @ptrCast(L.top - 1));
+    lgc.Cbarriert(L, t.hvalue(), @ptrCast(L.top - 1));
+    L.top -= 2;
 }
 
 /// set table value at `idx` with **top**
 /// ignoring metamethods.
 /// * pops **top**
 /// * throws lua error if *table* is readonly
-pub inline fn rawseti(L: *lua.State, idx: i32, n: i32) void {
-    c.lua_rawseti(@ptrCast(L), idx, n);
+pub fn rawseti(L: *lua.State, idx: i32, n: i32) Errorset.Table!void {
+    api_checknelems(L, 2);
+    const t = index2addr(L, idx);
+    api_check(L, t.ttistable());
+    if (t.hvalue().readonly > 0)
+        return Errorset.TableReadonly;
+    (try ltable.Hsetnum(L, t.hvalue(), n)).setobj(L, @ptrCast(L.top - 1));
+    lgc.Cbarriert(L, t.hvalue(), @ptrCast(L.top - 1));
+    L.top -= 1;
 }
 
 /// set metatable for `idx` with **top**
 /// * pops **top**
 /// * expects **top** to be *table* or *nil*
 /// * always returns `1`
-/// * throws lua error if `idx` is *table* and readonly
-pub inline fn setmetatable(L: *lua.State, idx: i32) i32 {
-    return c.lua_setmetatable(@ptrCast(L), idx);
+pub fn setmetatable(L: *lua.State, idx: i32) Errorset.Table!u1 {
+    api_checknelems(L, 1);
+    const obj = index2addr(L, idx);
+    api_checkvalidindex(L, obj);
+    var mt: ?*lobject.LuaTable = null;
+    if (!(L.top - 1)[0].ttisnil()) {
+        api_check(L, (L.top - 1)[0].ttistable());
+        mt = (L.top - 1)[0].hvalue();
+    }
+    switch (obj.ttype()) {
+        @intFromEnum(lua.Type.Table) => {
+            if (obj.hvalue().readonly > 0)
+                return Errorset.TableReadonly;
+            obj.hvalue().metatable = mt;
+            if (mt) |m|
+                lgc.Cobjbarrier(L, @ptrCast(@alignCast(obj.hvalue())), @ptrCast(@alignCast(m)));
+        },
+        @intFromEnum(lua.Type.Userdata) => {
+            obj.uvalue().metatable = mt;
+            if (mt) |m|
+                lgc.Cobjbarrier(L, @ptrCast(@alignCast(obj.uvalue())), @ptrCast(@alignCast(m)));
+        },
+        else => L.global.mt[@intCast(obj.ttype())] = mt,
+    }
+    L.top -= 1;
+    return 1;
 }
 
-pub inline fn setfenv(L: *lua.State, idx: i32) bool {
-    return c.lua_setfenv(@ptrCast(L), idx) != 0;
+pub fn setfenv(L: *lua.State, idx: i32) bool {
+    api_checknelems(L, 1);
+    const o = index2addr(L, idx);
+    api_checkvalidindex(L, o);
+    api_check(L, (L.top - 1)[0].ttistable());
+    defer L.top -= 1;
+    switch (o.tt) {
+        @intFromEnum(lua.Type.Function) => o.clvalue().env = (L.top - 1)[0].hvalue(),
+        @intFromEnum(lua.Type.Thread) => o.thvalue().gt = (L.top - 1)[0].hvalue(),
+        else => return false,
+    }
+    lgc.Cobjbarrier(L, @ptrCast(@alignCast(&o.gcvalue().gch)), @ptrCast(L.top - 1));
+    return true;
 }
 
 //
@@ -779,7 +866,7 @@ pub fn pcall(L: *lua.State, nargs: i32, nresults: i32, msgh: i32) lua.Status {
     return @enumFromInt(c.lua_pcall(@ptrCast(L), nargs, nresults, msgh));
 }
 
-pub inline fn status(L: *lua.State) lua.Status {
+pub fn status(L: *lua.State) lua.Status {
     return @enumFromInt(L.curr_status);
 }
 
@@ -837,34 +924,72 @@ pub fn @"error"(L: *lua.State) noreturn {
     unreachable;
 }
 
-pub inline fn next(L: *lua.State, idx: i32) bool {
+pub fn next(L: *lua.State, idx: i32) bool {
     return c.lua_next(@ptrCast(L), idx) != 0;
 }
 
-pub inline fn rawiter(L: *lua.State, idx: i32, iter: i32) i32 {
-    return c.lua_rawiter(@ptrCast(L), idx, iter);
+pub fn rawiter(L: *lua.State, idx: i32, _iter: usize) i32 {
+    var iter: usize = _iter;
+    lgc.Cthreadbarrier(L);
+    const t = index2addr(L, idx);
+    api_check(L, t.ttistable());
+    api_check(L, iter >= 0);
+
+    const h = t.hvalue();
+    const sizearray: usize = @intCast(h.sizearray);
+
+    // first we advance iter through the array portion
+    while (iter < sizearray) : (iter += 1) {
+        const e = &h.array.?[iter];
+
+        if (!e.ttisnil()) {
+            const top = L.top;
+            top[0].setnvalue(@floatFromInt(iter + 1));
+            top[1].setobj(L, e);
+            api_update_top(L, &top[2]);
+            return @intCast(iter + 1);
+        }
+    }
+
+    const sizenode = lobject.sizenode(h);
+
+    // then we advance iter through the hash portion
+    while (iter - sizearray < sizenode) : (iter += 1) {
+        const n = &h.node[iter - sizearray];
+
+        if (!n.gval().ttisnil()) {
+            const top = L.top;
+            lobject.getnodekey(L, @ptrCast(top), n);
+            top[1].setobj(L, n.gval());
+            api_update_top(L, &top[2]);
+            return @intCast(iter + 1);
+        }
+    }
+
+    // traversal finished
+    return -1;
 }
 
 pub inline fn concat(L: *lua.State, idx: i32) void {
     c.lua_concat(@ptrCast(L), idx);
 }
 
-pub fn newuserdatatagged(L: *lua.State, comptime T: type, tag: u8) !*T {
+pub fn newuserdatatagged(L: *lua.State, comptime T: type, tag: u8) Errorset.Table!*T {
     api_check(L, tag < lua.config.UTAG_LIMIT or tag == ludata.UTAG_PROXY);
     try lgc.CcheckGC(L);
     lgc.Cthreadbarrier(L);
     const u = try ludata.Unewudata(L, @sizeOf(T), tag);
-    L.top.setuvalue(L, u);
+    L.top[0].setuvalue(L, u);
     api_incr_top(L);
     return @ptrCast(@alignCast(&u.data));
 }
-pub inline fn newuserdata(L: *lua.State, comptime T: type) !*T {
+pub inline fn newuserdata(L: *lua.State, comptime T: type) Errorset.Table!*T {
     return newuserdatatagged(L, T, 0);
 }
 
-pub fn newuserdatataggedwithmetatable(L: *lua.State, comptime T: type, tag: i32) !*T {
+pub fn newuserdatataggedwithmetatable(L: *lua.State, comptime T: type, tag: i32) Errorset.Table!*T {
     api_check(L, tag < lua.config.UTAG_LIMIT);
-    lgc.CcheckGC(L);
+    try lgc.CcheckGC(L);
     lgc.Cthreadbarrier(L);
     const u = try ludata.Unewudata(L, @sizeOf(T), tag);
 
@@ -895,16 +1020,16 @@ pub fn newuserdatadtor(L: *lua.State, comptime T: type, comptime dtorFn: *const 
     const as = if (sz < std.math.maxInt(usize) - @sizeOf(@TypeOf(dtor))) sz + @sizeOf(@TypeOf(dtor)) else std.math.maxInt(usize);
     const u = try ludata.Unewudata(L, as, ludata.UTAG_IDTOR);
     @memcpy(@as([*]u8, &u.data)[sz..], &@as([@sizeOf(usize)]u8, @bitCast(@intFromPtr(dtor))));
-    L.top.setuvalue(L, u);
+    L.top[0].setuvalue(L, u);
     api_incr_top(L);
     return @ptrCast(@alignCast(&u.data));
 }
 
-pub fn newbuffer(L: *lua.State, sz: usize) ![]u8 {
+pub fn newbuffer(L: *lua.State, sz: usize) Errorset.Table![]u8 {
     try lgc.CcheckGC(L);
     lgc.Cthreadbarrier(L);
     const b = try lbuffer.Bnewbuffer(L, sz);
-    L.top.setbufvalue(L, b);
+    L.top[0].setbufvalue(L, b);
     api_incr_top(L);
     return @as([*]u8, @ptrCast(@alignCast(&b.data)))[0..sz];
 }
@@ -928,7 +1053,7 @@ pub fn encodepointer(L: *lua.State, p: usize) usize {
     return @intCast(g.ptrenckey[0] * p + g.ptrenckey[2] ^ (g.ptrenckey[1] * p + g.ptrenckey[3]));
 }
 
-pub fn ref(L: *lua.State, idx: i32) !?i32 {
+pub fn ref(L: *lua.State, idx: i32) Errorset.Table!?i32 {
     api_check(L, idx != lua.REGISTRYINDEX); // idx is a stack index for value
 
     const g = L.global;
@@ -998,9 +1123,9 @@ pub fn getuserdatadtor(L: *lua.State, tag: u32) ?lua.Destructor {
 pub fn setuserdatametatable(L: *lua.State, tag: u32) void {
     api_check(L, tag < lua.config.UTAG_LIMIT);
     api_check(L, L.global.udatamt[tag] == null); // reassignment not supported
-    api_check(L, L.top.sub_num(1).ttistable());
-    const n = L.top.sub_num(1);
-    L.global.udatamt[tag] = n.hvalue();
+    api_check(L, L.top[1].ttistable());
+    const n = L.top - 1;
+    L.global.udatamt[tag] = n[0].hvalue();
     L.top = n;
 }
 
@@ -1009,17 +1134,17 @@ pub fn getuserdatametatable(L: *lua.State, tag: u8) void {
     lgc.Cthreadbarrier(L);
 
     if (L.global.udatamt[tag]) |h|
-        L.top.sethvalue(L, h)
+        L.top[0].sethvalue(L, h)
     else
-        L.top.setnilvalue();
+        L.top[0].setnilvalue();
 
     api_incr_top(L);
 }
 
-pub fn setlightuserdataname(L: *lua.State, tag: u8, name: [:0]const u8) !void {
+pub fn setlightuserdataname(L: *lua.State, tag: u8, name: [:0]const u8) Errorset.Memory!void {
     api_check(L, tag < lua.config.LUTAG_LIMIT);
     api_check(L, L.global.lightuserdataname[tag] == null); // renaming not supported
-    L.global.lightuserdataname[tag] = try lstring.Snewlstr(L, name);
+    L.global.lightuserdataname[tag] = try lstring.Snew(L, name);
     lstring.Sfix(L.global.lightuserdataname[tag].?); // never collect these names
 }
 
@@ -1032,16 +1157,35 @@ pub fn getlightuserdataname(L: *lua.State, tag: u32) ?[:0]const u8 {
         null;
 }
 
-pub inline fn clonefunction(L: *lua.State, idx: i32) void {
-    c.lua_clonefunction(@ptrCast(L), idx);
+pub fn clonefunction(L: *lua.State, idx: i32) !void {
+    try lgc.CcheckGC(L);
+    lgc.Cthreadbarrier(L);
+    const p = index2addr(L, idx);
+    api_check(L, p.isLfunction());
+    const cl = p.clvalue();
+    const newcl = try lfunc.FnewLclosure(L, cl.nupvalues, L.gt.?, cl.d.l.p);
+    for (0..cl.nupvalues) |i|
+        newcl.d.l.upreferences()[i].setobj(L, &cl.d.l.upreferences()[i]);
+    L.top[0].setclvalue(L, newcl);
+    api_incr_top(L);
 }
 
-pub inline fn cleartable(L: *lua.State, idx: i32) void {
-    c.lua_cleartable(@ptrCast(L), idx);
+pub fn cleartable(L: *lua.State, idx: i32) Errorset.Table!void {
+    const t = index2addr(L, idx);
+    api_check(L, t.ttistable());
+    const tt = t.hvalue();
+    if (tt.readonly > 0)
+        return Errorset.TableReadonly;
+    ltable.Hclear(tt);
 }
 
-pub inline fn clonetable(L: *lua.State, idx: i32) void {
-    c.lua_clonetable(@ptrCast(L), idx);
+pub fn clonetable(L: *lua.State, idx: i32) Errorset.Table!void {
+    const t = index2addr(L, idx);
+    api_check(L, t.ttistable());
+
+    const tt = try ltable.Hclone(L, t.hvalue());
+    L.top[0].sethvalue(L, tt);
+    api_incr_top(L);
 }
 
 pub fn callbacks(L: *lua.State) *lua.Callbacks {
@@ -1061,7 +1205,7 @@ pub fn totalbytes(L: *lua.State, category: i32) usize {
         L.global.memcatbytes[@intCast(category)];
 }
 
-pub fn getallocf(L: *lua.State, ud: ?**anyopaque) ?lua.Alloc {
+pub fn getallocf(L: *lua.State, ud: ?*?*anyopaque) ?lua.Alloc {
     const f = L.global.frealloc;
     if (ud) |ptr|
         ptr.* = L.global.ud;
