@@ -40,31 +40,6 @@ pub const TValue = extern struct {
     extra: [lua.config.EXTRA_SIZE]c_int = undefined,
     tt: c_int,
 
-    // helper api
-    pub inline fn add(this: *TValue, n: void) *TValue {
-        return @ptrFromInt(@intFromPtr(this) + n);
-    }
-
-    pub inline fn sub(this: *TValue, ptr: *TValue) usize {
-        return @divExact(@intFromPtr(this) - @intFromPtr(ptr), @sizeOf(TValue));
-    }
-    pub inline fn add_num(this: *TValue, n: anytype) *TValue {
-        switch (@typeInfo(@TypeOf(n))) {
-            .comptime_int => return @ptrFromInt(@intFromPtr(this) + (n * @sizeOf(TValue))),
-            .int => |i| {
-                if (i.signedness == .unsigned)
-                    return @ptrFromInt(@intFromPtr(this) + @as(usize, @intCast(n * @sizeOf(TValue))))
-                else {
-                    if (n < 0)
-                        return @ptrFromInt(@intFromPtr(this) - @as(usize, @intCast(-n * @sizeOf(TValue))))
-                    else
-                        return @ptrFromInt(@intFromPtr(this) + @as(usize, @intCast(n * @sizeOf(TValue))));
-                }
-            },
-            else => @compileError("n must be an integer"),
-        }
-    }
-
     pub inline fn ttype(this: *const TValue) c_int {
         return this.tt;
     }
@@ -600,15 +575,15 @@ pub const LuaNode = extern struct {
 
     pub inline fn add_num(this: *LuaNode, n: anytype) *LuaNode {
         switch (@typeInfo(@TypeOf(n))) {
-            .comptime_int => return @ptrFromInt(@intFromPtr(this) + (n * @sizeOf(LuaNode))),
+            .comptime_int => return @ptrCast(@as([*]LuaNode, @ptrCast(this)) + @as(usize, @intCast(n))),
             .int => |i| {
                 if (i.signedness == .unsigned)
-                    return @ptrFromInt(@intFromPtr(this) + @as(usize, @intCast(n * @sizeOf(LuaNode))))
+                    return @ptrCast(@as([*]LuaNode, @ptrCast(this)) + @as(usize, @intCast(n)))
                 else {
                     if (n < 0)
-                        return @ptrFromInt(@intFromPtr(this) - @as(usize, @intCast(-n * @sizeOf(LuaNode))))
+                        return @ptrCast(@as([*]LuaNode, @ptrCast(this)) - @as(usize, @intCast(-n)))
                     else
-                        return @ptrFromInt(@intFromPtr(this) + @as(usize, @intCast(n * @sizeOf(LuaNode))));
+                        return @ptrCast(@as([*]LuaNode, @ptrCast(this)) + @as(usize, @intCast(n)));
                 }
             },
             else => @compileError("n must be an integer"),
@@ -617,8 +592,8 @@ pub const LuaNode = extern struct {
 
     pub fn sub(this: *LuaNode, ptr: *LuaNode) isize {
         if (@intFromPtr(ptr) > @intFromPtr(this))
-            return -@as(isize, @intCast(@divExact(@intFromPtr(ptr) - @intFromPtr(this), @sizeOf(LuaNode))));
-        return @intCast(@divExact(@intFromPtr(this) - @intFromPtr(ptr), @sizeOf(LuaNode)));
+            return -@as(isize, @intCast(@as([*]LuaNode, @ptrCast(ptr)) - @as([*]LuaNode, @ptrCast(this))));
+        return @intCast(@as([*]LuaNode, @ptrCast(this)) - @as([*]LuaNode, @ptrCast(ptr)));
     }
 };
 

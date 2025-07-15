@@ -609,7 +609,7 @@ pub fn Hgetn(t: *LuaTable) usize {
             base = if (base[half].ttisnil()) base else base[half..];
             rest -= half;
         }
-        const _boundary = @as(usize, if (!base[0].ttisnil()) 1 else 0) + base[0].sub(&t.array.?[0]);
+        const _boundary = @as(usize, if (!base[0].ttisnil()) 1 else 0) + (base - t.array.?);
         maybesetaboundary(t, @intCast(_boundary));
         return _boundary;
     } else {

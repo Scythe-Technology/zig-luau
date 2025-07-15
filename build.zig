@@ -115,7 +115,7 @@ pub fn build(b: *Build) !void {
 
     // Tests
     const lib_tests = b.addTest(.{
-        .name = "lib-tests",
+        .name = if (use_zig_backend) "zig-lib-tests" else "lib-tests",
         .root_source_file = b.path("src/lib.zig"),
         .target = target,
         .optimize = optimize,
@@ -126,7 +126,7 @@ pub fn build(b: *Build) !void {
 
     // Tests
     const tests = b.addTest(.{
-        .name = "tests",
+        .name = if (use_zig_backend) "zig-tests" else "tests",
         .root_source_file = b.path("src/tests.zig"),
         .target = target,
         .optimize = optimize,
@@ -139,6 +139,11 @@ pub fn build(b: *Build) !void {
     const test_step = b.step("test", "Run zig-luau tests");
     test_step.dependOn(&run_lib_tests.step);
     test_step.dependOn(&run_tests.step);
+
+    if (!no_bin) {
+        b.installArtifact(lib_tests);
+        b.installArtifact(tests);
+    }
 
     // Examples
     const examples = [_]struct { []const u8, []const u8 }{

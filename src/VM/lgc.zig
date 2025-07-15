@@ -326,7 +326,7 @@ fn traversestack(g: *lstate.global_State, L: *lua.State) void {
     markobject(g, @ptrCast(@alignCast(L.gt)));
     if (L.namecall) |nc|
         stringmark(nc);
-    for (L.stack[0..L.stack[0].sub(@ptrCast(L.top))]) |*o|
+    for (L.stack[0 .. L.stack - L.top]) |*o|
         markvalue(g, o);
     var uv: ?*lobject.UpVal = L.openupval;
     while (uv) |u| : (uv = u.u.open.threadnext) {
@@ -338,7 +338,7 @@ fn traversestack(g: *lstate.global_State, L: *lua.State) void {
 
 fn clearstack(L: *lua.State) void {
     const stack_end = &L.stack[@intCast(L.stacksize)];
-    for (L.stack[0..L.stack[0].sub(stack_end)]) |*o| // clear not-marked stack slice
+    for (L.stack[0 .. L.stack - stack_end]) |*o| // clear not-marked stack slice
         o.setnilvalue();
 }
 
@@ -353,8 +353,8 @@ fn shrinkstack(L: *lua.State) Errorset.Memory!void {
     }
 
     // shrink stack and callinfo arrays if we aren't using most of the space
-    const ci_used = L.ci.?[0].sub(@ptrCast(L.base_ci.?)); // number of `ci' in use
-    const s_used = lim[0].sub(@ptrCast(L.stack)); // part of stack in use
+    const ci_used = L.ci.? - L.base_ci.?; // number of `ci' in use
+    const s_used = lim - L.stack; // part of stack in use
     if (L.size_ci > lua.config.I_MAXCALLS) // handling overflow?
         return; // do not touch the stacks
 

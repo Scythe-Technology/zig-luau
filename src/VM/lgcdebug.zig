@@ -75,7 +75,7 @@ fn validatestack(g: *const lstate.global_State, l: *lua.State) void {
     }
 
     // note: stack refs can violate gc invariant so we only check for liveness
-    for (0..l.top[0].sub(@ptrCast(l.stack))) |i|
+    for (0..l.top - l.stack) |i|
         l.stack[i].checkliveness(g);
 
     if (l.namecall) |nc|
