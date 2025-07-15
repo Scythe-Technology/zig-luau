@@ -171,11 +171,11 @@ test "compare" {
     lua.pushnumber(1);
     lua.pushnumber(2);
 
-    try testing.expect(!lua.equal(1, 2));
-    try testing.expect(lua.lessthan(1, 2));
+    try testing.expect(!try lua.equal(1, 2));
+    try testing.expect(try lua.lessthan(1, 2));
 
     lua.pushinteger(2);
-    try testing.expect(lua.equal(2, 3));
+    try testing.expect(try lua.equal(2, 3));
 }
 
 const add = struct {

@@ -146,6 +146,6 @@ pub fn Ffreeproto(L: *lua.State, f: *lobject.Proto, page: *lmem.lua_Page) void {
 }
 
 pub fn Ffreeclosure(L: *lua.State, c: *lobject.Closure, page: *lmem.lua_Page) void {
-    const size = if (c.isC > 0) sizeCclosure(c.nupvalues) else sizeLclosure(c.nupvalues);
+    const size = if (c.isC != 0) sizeCclosure(c.nupvalues) else sizeLclosure(c.nupvalues);
     lmem.Mfreegco(L, @ptrCast(@alignCast(c)), size, c.header.memcat, page);
 }
