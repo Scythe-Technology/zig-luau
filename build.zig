@@ -31,12 +31,17 @@ pub fn build(b: *Build) !void {
     const build_Compiler = b.option(bool, "Compiler", "Build Luau Compiler") orelse true;
     const build_VM = b.option(bool, "VM", "Build Luau VM") orelse true;
 
+    const use_zig_backend = b.option(bool, "use_zig_backend", "Build Luau with zig written backend") orelse true;
     const use_4_vector = b.option(bool, "use_4_vector", "Build Luau to use 4-vectors instead of the default 3-vector.") orelse false;
     const wasm_env_name = b.option([]const u8, "wasm_env", "The environment to import symbols from when building for WebAssembly.") orelse "env";
+
+    const no_llvm = b.option(bool, "no_llvm", "Build without llvm (tests only + best with zig backend)") orelse false;
+    const no_bin = b.option(bool, "no_bin", "Build without binary artifacts") orelse false;
 
     // Expose build configuration to the zig-luau module
     const config = b.addOptions();
     config.addOption(bool, "use_4_vector", use_4_vector);
+    config.addOption(bool, "use_zig_backend", use_zig_backend);
     config.addOption(std.SemanticVersion, "luau_version", version);
 
     config.addOption(bool, "buildAst", build_Ast);
@@ -98,7 +103,8 @@ pub fn build(b: *Build) !void {
         if (build_Compiler) libCompiler else null,
         if (build_VM) libVM else null,
     );
-    b.installArtifact(lib);
+    if (!no_bin)
+        b.installArtifact(lib);
 
     // Zig module
     const luauModule = b.addModule("luau", .{
@@ -109,18 +115,22 @@ pub fn build(b: *Build) !void {
 
     // Tests
     const lib_tests = b.addTest(.{
+        .name = "lib-tests",
         .root_source_file = b.path("src/lib.zig"),
         .target = target,
         .optimize = optimize,
+        .use_llvm = !no_llvm,
     });
 
     try buildAndLinkModule(b, target, luau_dep, lib_tests.root_module, config, c_module, lib, use_4_vector);
 
     // Tests
     const tests = b.addTest(.{
+        .name = "tests",
         .root_source_file = b.path("src/tests.zig"),
         .target = target,
         .optimize = optimize,
+        .use_llvm = !no_llvm,
     });
     tests.root_module.addImport("luau", luauModule);
 
