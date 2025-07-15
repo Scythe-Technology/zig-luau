@@ -1,6 +1,8 @@
 const c = @import("c");
 const std = @import("std");
 
+const build_config = @import("config");
+
 const lua = @import("lua.zig");
 
 const lstring = @import("lstring.zig");
@@ -11,6 +13,7 @@ const lvm = @import("lvm.zig");
 const lfunc = @import("lfunc.zig");
 const ltable = @import("ltable.zig");
 const ludata = @import("ludata.zig");
+const lstate = @import("lstate.zig");
 const lbuffer = @import("lbuffer.zig");
 const lobject = @import("lobject.zig");
 const lvmutils = @import("lvmutils.zig");
@@ -33,7 +36,7 @@ pub inline fn api_checkvalidindex(L: *State, obj: *const lobject.TValue) void {
 }
 
 pub inline fn api_incr_top(L: *State) void {
-    api_check(L, @intFromPtr(L.top) <= @intFromPtr(L.stack_last));
+    api_check(L, @intFromPtr(L.top) < @intFromPtr(L.ci.?[0].top));
     L.top += 1;
 }
 
@@ -106,6 +109,9 @@ pub fn Apushobject(L: *lua.State, o: *const lobject.TValue) void {
 }
 
 pub fn checkstack(L: *lua.State, size: usize) Errorset.Memory!bool {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_checkstack(@ptrCast(L), @as(i32, @intCast(size))) != 0;
+    }
     if (size > lua.config.I_MAXCSTACK or (L.top[0].sub(@ptrCast(L.base)) + size) > lua.config.I_MAXCSTACK)
         return false
     else {
@@ -114,11 +120,17 @@ pub fn checkstack(L: *lua.State, size: usize) Errorset.Memory!bool {
     }
 }
 pub fn rawcheckstack(L: *lua.State, size: usize) Errorset.Memory!void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_rawcheckstack(@ptrCast(L), @as(i32, @intCast(size)));
+    }
     try ldo.Dcheckstack(L, size);
     ldo.expandstacklimit(L, &L.top[size]);
 }
 
 pub fn xmove(from: *lua.State, to: *lua.State, n: u32) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_xmove(@ptrCast(from), @ptrCast(to), @as(i32, @intCast(n)));
+    }
     if (from == to)
         return;
     api_checknelems(from, n);
@@ -136,17 +148,34 @@ pub fn xmove(from: *lua.State, to: *lua.State, n: u32) void {
 }
 
 pub fn xpush(from: *lua.State, to: *lua.State, idx: i32) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_xpush(@ptrCast(from), @ptrCast(to), idx);
+    }
     api_check(from, from.global == to.global);
     lgc.Cthreadbarrier(to);
     to.top[0].setobj(to, index2addr(from, idx));
     api_incr_top(to);
 }
 
-pub inline fn newthread(L: *lua.State) *lua.State {
-    return @ptrCast(@alignCast(c.lua_newthread(@ptrCast(L))));
+pub fn newthread(L: *lua.State) Errorset.Table!*lua.State {
+    if (comptime !build_config.use_zig_backend) {
+        return @ptrCast(@alignCast(c.lua_newthread(@ptrCast(L))));
+    }
+    try lgc.CcheckGC(L);
+    lgc.Cthreadbarrier(L);
+    const L1 = try lstate.Enewthread(L);
+    L.top[0].setthvalue(L, L1);
+    api_incr_top(L);
+    const g = L.global;
+    if (g.cb.userthread) |userthread|
+        userthread(L, L1);
+    return L1;
 }
 
 pub fn mainthread(L: *lua.State) *lua.State {
+    if (comptime !build_config.use_zig_backend) {
+        return @ptrCast(@alignCast(c.lua_mainthread(@ptrCast(L))));
+    }
     return L.global.mainthread;
 }
 
@@ -155,6 +184,9 @@ pub fn mainthread(L: *lua.State) *lua.State {
 //
 
 pub fn absindex(L: *lua.State, idx: i32) i32 {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_absindex(@ptrCast(L), idx);
+    }
     api_check(L, (idx > 0 and idx <= L.top[0].sub(@ptrCast(L.base))) or (idx < 0 and -idx <= L.top[0].sub(@ptrCast(L.base))) or lua.ispseudo(idx));
     return if (idx > 0 or lua.ispseudo(idx))
         idx
@@ -163,10 +195,16 @@ pub fn absindex(L: *lua.State, idx: i32) i32 {
 }
 
 pub fn gettop(L: *lua.State) usize {
+    if (comptime !build_config.use_zig_backend) {
+        return @intCast(c.lua_gettop(@ptrCast(L)));
+    }
     return L.top[0].sub(@ptrCast(L.base));
 }
 
 pub fn settop(L: *lua.State, idx: i32) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_settop(@ptrCast(L), idx);
+    }
     if (idx >= 0) {
         api_check(L, idx <= L.stack_last[0].sub(@ptrCast(L.base)));
         const t = L.base[@intCast(idx)..];
@@ -183,6 +221,9 @@ pub inline fn pop(L: *lua.State, n: i32) void {
 }
 
 pub fn remove(L: *lua.State, idx: i32) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_remove(@ptrCast(L), idx);
+    }
     var p: [*]lobject.TValue = @ptrCast(index2addr(L, idx));
     api_checkvalidindex(L, @ptrCast(p));
     p += 1;
@@ -192,6 +233,9 @@ pub fn remove(L: *lua.State, idx: i32) void {
 }
 
 pub fn insert(L: *lua.State, idx: i32) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_insert(@ptrCast(L), idx);
+    }
     lgc.Cthreadbarrier(L);
     const p = index2addr(L, idx);
     api_checkvalidindex(L, p);
@@ -205,6 +249,9 @@ pub fn insert(L: *lua.State, idx: i32) void {
 }
 
 pub fn replace(L: *lua.State, idx: i32) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_replace(@ptrCast(L), idx);
+    }
     api_checknelems(L, 1);
     lgc.Cthreadbarrier(L);
     const o = index2addr(L, idx);
@@ -231,6 +278,9 @@ pub fn replace(L: *lua.State, idx: i32) void {
 }
 
 pub fn pushvalue(L: *lua.State, idx: i32) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_pushvalue(@ptrCast(L), idx);
+    }
     lgc.Cthreadbarrier(L);
     const o = index2addr(L, idx);
     L.top[0].setobj(L, o);
@@ -242,6 +292,9 @@ pub fn pushvalue(L: *lua.State, idx: i32) void {
 //
 
 pub fn @"type"(L: *lua.State, idx: i32) i32 {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_type(@ptrCast(L), idx);
+    }
     const o: *const lobject.TValue = index2addr(L, idx);
     return if (o == lobject.Onilobject) @intFromEnum(lua.Type.None) else o.ttype();
 }
@@ -277,40 +330,64 @@ pub inline fn isnoneornil(L: *lua.State, idx: i32) bool {
 }
 
 pub fn typeOf(L: *lua.State, idx: i32) lua.Type {
+    if (comptime !build_config.use_zig_backend) {
+        return @enumFromInt(c.lua_type(@ptrCast(L), idx));
+    }
     return index2addr(L, idx).typeOf();
 }
 
 pub fn typename(t: lua.Type) [:0]const u8 {
+    if (comptime !build_config.use_zig_backend) {
+        return std.mem.span(c.lua_typename(undefined, @intFromEnum(t)));
+    }
     return if (t == .None) "no value" else ltm.typenames[@intCast(@intFromEnum(t))];
 }
 
 pub fn iscfunction(L: *lua.State, idx: i32) bool {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_iscfunction(@ptrCast(L), idx) != 0;
+    }
     const o: *const lobject.TValue = index2addr(L, idx);
     return o.iscfunction();
 }
 
 pub fn isLfunction(L: *lua.State, idx: i32) bool {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_isLfunction(@ptrCast(L), idx) != 0;
+    }
     const o: *const lobject.TValue = index2addr(L, idx);
     return o.isLfunction();
 }
 
 pub fn isnumber(L: *lua.State, idx: i32) bool {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_isnumber(@ptrCast(L), idx) != 0;
+    }
     var n: lobject.TValue = undefined;
     const o: *const lobject.TValue = index2addr(L, idx);
     return o.ttisnumber() and lvmutils.Vtonumber(o, &n) != null;
 }
 
 pub fn isstring(L: *lua.State, idx: i32) bool {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_isstring(@ptrCast(L), idx) != 0;
+    }
     const t = @"type"(L, idx);
     return t == @intFromEnum(lua.Type.String) or t == @intFromEnum(lua.Type.Number);
 }
 
 pub fn isuserdata(L: *lua.State, idx: i32) bool {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_isuserdata(@ptrCast(L), idx) != 0;
+    }
     const o: *const lobject.TValue = index2addr(L, idx);
     return o.ttisuserdata() or o.ttislightuserdata();
 }
 
 pub fn rawequal(L: *lua.State, index1: i32, index2: i32) bool {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_rawequal(@ptrCast(L), index1, index2) != 0;
+    }
     const o1 = index2addr(L, index1);
     const o2 = index2addr(L, index2);
     return if (o1 == lobject.Onilobject or o2 == lobject.Onilobject) false else lobject.OrawequalObj(o1, o2);
@@ -328,6 +405,13 @@ pub inline fn lessthan(L: *lua.State, index1: i32, index2: i32) bool {
 }
 
 pub fn tonumberx(L: *lua.State, idx: i32) ?f64 {
+    if (comptime !build_config.use_zig_backend) {
+        var isnum: i32 = 0;
+        const v = c.lua_tonumberx(@ptrCast(L), idx, &isnum);
+        if (isnum > 0)
+            return v;
+        return null;
+    }
     var n: lobject.TValue = undefined;
     const o: *const lobject.TValue = index2addr(L, idx);
     if (lvmutils.Vtonumber(o, &n)) |obj|
@@ -340,6 +424,13 @@ pub inline fn tonumber(L: *lua.State, idx: i32) ?f64 {
 }
 
 pub fn tointegerx(L: *lua.State, idx: i32) ?i32 {
+    if (comptime !build_config.use_zig_backend) {
+        var isnum: i32 = 0;
+        const v = c.lua_tointegerx(@ptrCast(L), idx, &isnum);
+        if (isnum > 0)
+            return v;
+        return null;
+    }
     var n: lobject.TValue = undefined;
     const o: *const lobject.TValue = index2addr(L, idx);
     if (lvmutils.Vtonumber(o, &n)) |obj|
@@ -352,6 +443,13 @@ pub fn tointeger(L: *lua.State, idx: i32) ?i32 {
 }
 
 pub fn tounsignedx(L: *lua.State, idx: i32) ?u32 {
+    if (comptime !build_config.use_zig_backend) {
+        var isnum: i32 = 0;
+        const v = c.lua_tounsignedx(@ptrCast(L), idx, &isnum);
+        if (isnum > 0)
+            return v;
+        return null;
+    }
     var n: lobject.TValue = undefined;
     const o: *const lobject.TValue = index2addr(L, idx);
     if (lvmutils.Vtonumber(o, &n)) |obj|
@@ -364,11 +462,18 @@ pub fn tounsigned(L: *lua.State, idx: i32) ?u32 {
 }
 
 pub fn toboolean(L: *lua.State, idx: i32) bool {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_toboolean(@ptrCast(L), idx) != 0;
+    }
     const o = index2addr(L, idx);
     return !o.l_isfalse();
 }
 
 pub fn tolstring(L: *lua.State, idx: i32) ?[:0]const u8 {
+    if (comptime !build_config.use_zig_backend) {
+        var len: usize = 0;
+        return if (c.lua_tolstring(@ptrCast(L), idx, &len)) |str| str[0..len :0] else null;
+    }
     var o = index2addr(L, idx);
     if (!o.ttisstring()) {
         lgc.Cthreadbarrier(L);
@@ -384,6 +489,15 @@ pub fn tostring(L: *lua.State, idx: i32) ?[:0]const u8 {
 }
 
 pub fn tolstringatom(L: *lua.State, idx: i32, atom: ?*i16) ?[:0]const u8 {
+    if (comptime !build_config.use_zig_backend) {
+        var len: usize = 0;
+        var atomptr: c_int = 0;
+        return if (c.lua_tolstringatom(@ptrCast(L), idx, &len, &atomptr)) |str| {
+            if (atom) |a|
+                a.* = @intCast(atomptr);
+            return str[0..len :0];
+        } else null;
+    }
     const o = index2addr(L, idx);
     if (!o.ttisstring())
         return null;
@@ -400,6 +514,14 @@ pub inline fn tostringatom(L: *lua.State, idx: i32, atom: ?*i16) ?[:0]const u8 {
 }
 
 pub fn namecallatom(L: *lua.State, atom: ?*i16) ?[:0]const u8 {
+    if (comptime !build_config.use_zig_backend) {
+        var atomptr: c_int = 0;
+        return if (c.lua_namecallatom(@ptrCast(L), &atomptr)) |str| {
+            if (atom) |a|
+                a.* = @intCast(atomptr);
+            return std.mem.span(str);
+        } else null;
+    }
     const s = L.namecall orelse return null;
     if (atom) |a| {
         updateatom(L, s);
@@ -409,13 +531,19 @@ pub fn namecallatom(L: *lua.State, atom: ?*i16) ?[:0]const u8 {
 }
 
 pub fn namecallstr(L: *lua.State) ?[]const u8 {
+    if (comptime !build_config.use_zig_backend) {
+        return if (c.lua_namecallatom(@ptrCast(L), null)) |str| std.mem.span(str) else null;
+    }
     const s = L.namecall;
     if (s) |str|
-        return std.mem.span(str.getstr());
+        return str.toSlice();
     return null;
 }
 
 pub fn tovector(L: *lua.State, idx: i32) ?[]const f32 {
+    if (comptime !build_config.use_zig_backend) {
+        return if (c.lua_tovector(@ptrCast(L), idx)) |vec| vec[0..lua.config.VECTOR_SIZE] else null;
+    }
     const o = index2addr(L, idx);
     return if (!o.ttisvector())
         null
@@ -424,6 +552,9 @@ pub fn tovector(L: *lua.State, idx: i32) ?[]const f32 {
 }
 
 pub fn objlen(L: *lua.State, idx: i32) usize {
+    if (comptime !build_config.use_zig_backend) {
+        return @intCast(c.lua_objlen(@ptrCast(L), idx));
+    }
     const o = index2addr(L, idx);
     switch (o.ttype()) {
         @intFromEnum(lua.Type.String) => return @intCast(o.tsvalue().len),
@@ -438,6 +569,9 @@ pub inline fn strlen(L: *lua.State, idx: i32) usize {
 }
 
 pub fn tocfunction(L: *lua.State, idx: i32) ?lua.CFunction {
+    if (comptime !build_config.use_zig_backend) {
+        return @ptrCast(@alignCast(c.lua_tocfunction(@ptrCast(L), idx)));
+    }
     const o: *const lobject.TValue = index2addr(L, idx);
     return if (!o.iscfunction())
         null
@@ -446,6 +580,9 @@ pub fn tocfunction(L: *lua.State, idx: i32) ?lua.CFunction {
 }
 
 pub fn tolightuserdata(L: *lua.State, comptime T: type, idx: i32) ?*T {
+    if (comptime !build_config.use_zig_backend) {
+        return @ptrCast(@alignCast(c.lua_tolightuserdata(@ptrCast(L), idx)));
+    }
     const o: *const lobject.TValue = index2addr(L, idx);
     return if (!o.ttislightuserdata())
         null
@@ -454,6 +591,9 @@ pub fn tolightuserdata(L: *lua.State, comptime T: type, idx: i32) ?*T {
 }
 
 pub fn tolightuserdatatagged(L: *lua.State, comptime T: type, idx: i32, tag: i32) ?*T {
+    if (comptime !build_config.use_zig_backend) {
+        return @ptrCast(@alignCast(c.lua_tolightuserdatatagged(@ptrCast(L), idx, @intCast(tag))));
+    }
     const o: *const lobject.TValue = index2addr(L, idx);
     return if (!o.ttislightuserdata() or o.lightuserdatatag() != tag)
         null
@@ -462,6 +602,9 @@ pub fn tolightuserdatatagged(L: *lua.State, comptime T: type, idx: i32, tag: i32
 }
 
 pub fn touserdata(L: *lua.State, comptime T: type, idx: i32) ?*T {
+    if (comptime !build_config.use_zig_backend) {
+        return @ptrCast(@alignCast(c.lua_touserdata(@ptrCast(L), idx)));
+    }
     const o: *const lobject.TValue = index2addr(L, idx);
     if (o.ttisuserdata())
         return @ptrCast(@alignCast(&o.uvalue().data))
@@ -471,31 +614,45 @@ pub fn touserdata(L: *lua.State, comptime T: type, idx: i32) ?*T {
         return null;
 }
 
-pub fn touserdatatagged(L: *lua.State, comptime T: type, idx: i32, tag: i32) ?*T {
+pub fn touserdatatagged(L: *lua.State, comptime T: type, idx: i32, tag: u8) ?*T {
+    if (comptime !build_config.use_zig_backend) {
+        return @ptrCast(@alignCast(c.lua_touserdatatagged(@ptrCast(L), idx, @intCast(tag))));
+    }
     const o: *const lobject.TValue = index2addr(L, idx);
-    return if (!o.ttisuserdata() or @as(i32, @intCast(o.uvalue().tag)) != tag)
+    return if (!o.ttisuserdata() or o.uvalue().tag != tag)
         null
     else
         @ptrCast(@alignCast(&o.uvalue().data));
 }
 
-pub fn userdatatag(L: *lua.State, idx: i32) i32 {
+pub fn userdatatag(L: *lua.State, idx: i32) ?u8 {
+    if (comptime !build_config.use_zig_backend) {
+        const tag = c.lua_userdatatag(@ptrCast(L), idx);
+        return if (tag >= 0) @intCast(tag) else null;
+    }
     const o: *const lobject.TValue = index2addr(L, idx);
     return if (o.ttisuserdata())
         @intCast(o.uvalue().tag)
     else
-        -1;
+        null;
 }
 
-pub fn lightuserdatatag(L: *lua.State, idx: i32) i32 {
+pub fn lightuserdatatag(L: *lua.State, idx: i32) ?u8 {
+    if (comptime !build_config.use_zig_backend) {
+        const tag = c.lua_lightuserdatatag(@ptrCast(L), idx);
+        return if (tag >= 0) @intCast(tag) else null;
+    }
     const o: *const lobject.TValue = index2addr(L, idx);
     return if (o.ttislightuserdata())
         o.lightuserdatatag()
     else
-        -1;
+        null;
 }
 
 pub fn tothread(L: *lua.State, idx: i32) ?*lua.State {
+    if (comptime !build_config.use_zig_backend) {
+        return @ptrCast(@alignCast(c.lua_tothread(@ptrCast(L), idx)));
+    }
     const o: *const lobject.TValue = index2addr(L, idx);
     return if (!o.ttisthread())
         null
@@ -504,6 +661,10 @@ pub fn tothread(L: *lua.State, idx: i32) ?*lua.State {
 }
 
 pub fn tobuffer(L: *lua.State, idx: i32) ?[]u8 {
+    if (comptime !build_config.use_zig_backend) {
+        var len: usize = 0;
+        return if (c.lua_tobuffer(@ptrCast(L), idx, &len)) |buf| @as([*]u8, @ptrCast(@alignCast(buf)))[0..len] else null;
+    }
     const o: *const lobject.TValue = index2addr(L, idx);
     if (!o.ttisbuffer())
         return null;
@@ -512,6 +673,9 @@ pub fn tobuffer(L: *lua.State, idx: i32) ?[]u8 {
 }
 
 pub fn topointer(L: *lua.State, idx: i32) ?*const anyopaque {
+    if (comptime !build_config.use_zig_backend) {
+        return if (c.lua_topointer(@ptrCast(L), idx)) |ptr| ptr else null;
+    }
     const o: *const lobject.TValue = index2addr(L, idx);
     switch (o.tt) {
         @intFromEnum(lua.Type.Userdata) => return @ptrCast(&o.uvalue().data),
@@ -527,31 +691,51 @@ pub fn topointer(L: *lua.State, idx: i32) ?*const anyopaque {
 // push functions (C -> stack)
 //
 pub fn pushnil(L: *lua.State) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_pushnil(@ptrCast(L));
+    }
     L.top[0].setnilvalue();
     api_incr_top(L);
 }
 
 pub fn pushnumber(L: *lua.State, n: f64) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_pushnumber(@ptrCast(L), n);
+    }
     L.top[0].setnvalue(n);
     api_incr_top(L);
 }
 
 pub fn pushinteger(L: *lua.State, n: i32) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_pushinteger(@ptrCast(L), n);
+    }
     L.top[0].setnvalue(@floatFromInt(n));
     api_incr_top(L);
 }
 
 pub fn pushunsigned(L: *lua.State, n: u32) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_pushunsigned(@ptrCast(L), n);
+    }
     L.top[0].setnvalue(@floatFromInt(n));
     api_incr_top(L);
 }
 
 pub fn pushvector(L: *lua.State, x: f32, y: f32, z: f32, w: ?f32) void {
+    if (comptime !build_config.use_zig_backend) {
+        if (comptime lua.config.VECTOR_SIZE == 4)
+            @compileError("use zig backend for 4D vectors");
+        return c.lua_pushvector(@ptrCast(L), x, y, z);
+    }
     L.top[0].setvvalue(x, y, z, w);
     api_incr_top(L);
 }
 
 pub fn pushlstring(L: *lua.State, s: []const u8) Errorset.Table!void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_pushlstring(@ptrCast(L), s.ptr, s.len);
+    }
     try lgc.CcheckGC(L);
     lgc.Cthreadbarrier(L);
     L.top[0].setsvalue(L, try lstring.Snewlstr(L, s));
@@ -578,6 +762,9 @@ pub fn pushcclosurek(
     nup: u8,
     cont: ?lua.Continuation,
 ) Errorset.Table!void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_pushcclosurek(@ptrCast(L), @ptrCast(@alignCast(f)), debugname, nup, @ptrCast(@alignCast(cont)));
+    }
     try lgc.CcheckGC(L);
     lgc.Cthreadbarrier(L);
     api_checknelems(L, nup);
@@ -603,11 +790,17 @@ pub inline fn pushcclosure(L: *lua.State, f: lua.CFunction, debugname: [:0]const
 }
 
 pub fn pushboolean(L: *lua.State, b: bool) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_pushboolean(@ptrCast(L), if (b) 1 else 0);
+    }
     L.top[0].setbvalue(b);
     api_incr_top(L);
 }
 
-pub fn pushlightuserdatatagged(L: *lua.State, p: ?*anyopaque, tag: u32) void {
+pub fn pushlightuserdatatagged(L: *lua.State, p: ?*anyopaque, tag: u8) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_pushlightuserdatatagged(@ptrCast(L), p, @intCast(tag));
+    }
     api_check(L, tag < lua.config.LUTAG_LIMIT);
     L.top[0].setpvalue(p, tag);
     api_incr_top(L);
@@ -617,6 +810,9 @@ pub inline fn pushlightuserdata(L: *lua.State, p: ?*anyopaque) void {
 }
 
 pub fn pushthread(L: *lua.State) bool {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_pushthread(@ptrCast(L)) != 0;
+    }
     lgc.Cthreadbarrier(L);
     L.top[0].setthvalue(L, L);
     api_incr_top(L);
@@ -638,7 +834,17 @@ pub inline fn getglobal(L: *lua.State, k: [:0]const u8) !lua.Type {
     return getfield(L, lua.GLOBALSINDEX, k);
 }
 
-pub fn rawgetfield(L: *lua.State, idx: i32, k: [:0]const u8) lua.Type {
+pub fn rawgetfield(L: *lua.State, idx: i32, k: []const u8) lua.Type {
+    if (comptime !build_config.use_zig_backend) {
+        // small static buffer for field because the 'k' type
+        // does not require a zero sentinel, but the C api does.
+        var static: [256:0]u8 = undefined;
+        if (k.len > static.len)
+            @panic("key too long, use zig backend");
+        @memcpy(static[0..k.len], k);
+        static[k.len] = 0;
+        return @enumFromInt(c.lua_rawgetfield(@ptrCast(L), idx, &static));
+    }
     lgc.Cthreadbarrier(L);
     const t = index2addr(L, idx);
     api_check(L, t.ttistable());
@@ -656,6 +862,9 @@ pub fn rawgetfield(L: *lua.State, idx: i32, k: [:0]const u8) lua.Type {
 /// * pushes value to stack
 /// * expects value at `idx` to be *table*
 pub fn rawget(L: *lua.State, idx: i32) lua.Type {
+    if (comptime !build_config.use_zig_backend) {
+        return @enumFromInt(c.lua_rawget(@ptrCast(L), idx));
+    }
     lgc.Cthreadbarrier(L);
     const t = index2addr(L, idx);
     api_check(L, t.ttistable());
@@ -667,6 +876,9 @@ pub fn rawget(L: *lua.State, idx: i32) lua.Type {
 /// * pushes value to stack
 /// * expects value at `idx` to be *table*
 pub fn rawgeti(L: *lua.State, idx: i32, n: i32) lua.Type {
+    if (comptime !build_config.use_zig_backend) {
+        return @enumFromInt(c.lua_rawgeti(@ptrCast(L), idx, n));
+    }
     lgc.Cthreadbarrier(L);
     const t = index2addr(L, idx);
     api_check(L, t.ttistable());
@@ -677,6 +889,9 @@ pub fn rawgeti(L: *lua.State, idx: i32, n: i32) lua.Type {
 
 /// create a new table and push it to the stack
 pub fn createtable(L: *lua.State, narray: u32, nrec: u32) !void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_createtable(@ptrCast(L), @intCast(narray), @intCast(nrec));
+    }
     try lgc.CcheckGC(L);
     lgc.Cthreadbarrier(L);
     L.top[0].sethvalue(L, try ltable.Hnew(L, narray, nrec));
@@ -689,6 +904,9 @@ pub inline fn newtable(L: *lua.State) !void {
 
 /// set readonly flag for table at `idx`
 pub fn setreadonly(L: *lua.State, idx: i32, enabled: bool) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_setreadonly(@ptrCast(L), idx, if (enabled) 1 else 0);
+    }
     const o = index2addr(L, idx);
     api_check(L, o.ttistable());
     const t = o.hvalue();
@@ -698,6 +916,9 @@ pub fn setreadonly(L: *lua.State, idx: i32, enabled: bool) void {
 
 /// get readonly flag for table at `idx`
 pub fn getreadonly(L: *lua.State, idx: i32) bool {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_getreadonly(@ptrCast(L), idx) != 0;
+    }
     const o: *const lobject.TValue = index2addr(L, idx);
     api_check(L, o.ttistable());
     return o.hvalue().readonly != 0;
@@ -705,6 +926,9 @@ pub fn getreadonly(L: *lua.State, idx: i32) bool {
 
 /// set safeenv flag for table at `idx`
 pub fn setsafeenv(L: *lua.State, idx: i32, enabled: bool) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_setsafeenv(@ptrCast(L), idx, if (enabled) 1 else 0);
+    }
     const o = index2addr(L, idx);
     api_check(L, o.ttistable());
     o.hvalue().safeenv = if (enabled) 1 else 0;
@@ -714,6 +938,9 @@ pub fn setsafeenv(L: *lua.State, idx: i32, enabled: bool) void {
 /// * returns **true** if metatable is found
 ///   * pushes metatable to stack
 pub fn getmetatable(L: *lua.State, idx: i32) bool {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_getmetatable(@ptrCast(L), idx) != 0;
+    }
     lgc.Cthreadbarrier(L);
     var mt: ?*lobject.LuaTable = null;
     const o: *const lobject.TValue = index2addr(L, idx);
@@ -730,6 +957,9 @@ pub fn getmetatable(L: *lua.State, idx: i32) bool {
 }
 
 pub fn getfenv(L: *lua.State, idx: i32) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_getfenv(@ptrCast(L), idx);
+    }
     lgc.Cthreadbarrier(L);
     const o: *const lobject.TValue = index2addr(L, idx);
     api_checkvalidindex(L, o);
@@ -769,6 +999,16 @@ pub inline fn setglobal(L: *lua.State, k: [:0]const u8) !void {
 /// ignoring metamethods.
 /// * pops **top**
 pub fn rawsetfield(L: *lua.State, idx: i32, k: []const u8) Errorset.Table!void {
+    if (comptime !build_config.use_zig_backend) {
+        // small static buffer for field because the 'k' type
+        // does not require a zero sentinel, but the C api does.
+        var static: [256:0]u8 = undefined;
+        if (k.len > static.len)
+            @panic("key too long, use zig backend");
+        @memcpy(static[0..k.len], k);
+        static[k.len] = 0;
+        return c.lua_rawsetfield(@ptrCast(L), idx, &static);
+    }
     api_checknelems(L, 1);
     const t = index2addr(L, idx);
     api_check(L, t.ttistable());
@@ -785,6 +1025,9 @@ pub fn rawsetfield(L: *lua.State, idx: i32, k: []const u8) Errorset.Table!void {
 /// * returns error "readonly" if *table* is readonly
 /// * returns error index if key is *nil*/*NaN*/*NaN vector*
 pub fn rawset(L: *lua.State, idx: i32) Errorset.Table!void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_rawset(@ptrCast(L), idx);
+    }
     api_checknelems(L, 2);
     const t = index2addr(L, idx);
     api_check(L, t.ttistable());
@@ -800,6 +1043,9 @@ pub fn rawset(L: *lua.State, idx: i32) Errorset.Table!void {
 /// * pops **top**
 /// * throws lua error if *table* is readonly
 pub fn rawseti(L: *lua.State, idx: i32, n: i32) Errorset.Table!void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_rawseti(@ptrCast(L), idx, n);
+    }
     api_checknelems(L, 2);
     const t = index2addr(L, idx);
     api_check(L, t.ttistable());
@@ -815,6 +1061,9 @@ pub fn rawseti(L: *lua.State, idx: i32, n: i32) Errorset.Table!void {
 /// * expects **top** to be *table* or *nil*
 /// * always returns `1`
 pub fn setmetatable(L: *lua.State, idx: i32) Errorset.Table!u1 {
+    if (comptime !build_config.use_zig_backend) {
+        return @intCast(c.lua_setmetatable(@ptrCast(L), idx));
+    }
     api_checknelems(L, 1);
     const obj = index2addr(L, idx);
     api_checkvalidindex(L, obj);
@@ -843,6 +1092,9 @@ pub fn setmetatable(L: *lua.State, idx: i32) Errorset.Table!u1 {
 }
 
 pub fn setfenv(L: *lua.State, idx: i32) bool {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_setfenv(@ptrCast(L), idx) != 0;
+    }
     api_checknelems(L, 1);
     const o = index2addr(L, idx);
     api_checkvalidindex(L, o);
@@ -898,6 +1150,9 @@ pub fn getthreaddata(L: *lua.State, comptime T: type) T {
         },
         else => @compileError("T must be optional or a pointer type"),
     }
+    if (comptime !build_config.use_zig_backend) {
+        return @ptrCast(@alignCast(c.lua_getthreaddata(@ptrCast(L))));
+    }
     return @ptrCast(@alignCast(L.userdata));
 }
 
@@ -909,6 +1164,9 @@ pub fn setthreaddata(L: *lua.State, comptime T: type, data: T) void {
                 @compileError("T optional type must be a pointer type");
         },
         else => @compileError("T must be optional or a pointer type"),
+    }
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_setthreaddata(@ptrCast(L), @ptrCast(@alignCast(data)));
     }
     L.userdata = @ptrCast(data);
 }
@@ -922,6 +1180,9 @@ pub inline fn gc(L: *lua.State, what: lua.GCOp, data: i32) i32 {
 }
 
 pub fn @"error"(L: *lua.State) noreturn {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_error(@ptrCast(L));
+    }
     api_checknelems(L, 1);
     ldo.throw(L, .ErrRun);
     unreachable;
@@ -932,6 +1193,9 @@ pub fn next(L: *lua.State, idx: i32) bool {
 }
 
 pub fn rawiter(L: *lua.State, idx: i32, _iter: usize) i32 {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_rawiter(@ptrCast(L), idx, @intCast(_iter));
+    }
     var iter: usize = _iter;
     lgc.Cthreadbarrier(L);
     const t = index2addr(L, idx);
@@ -978,6 +1242,9 @@ pub inline fn concat(L: *lua.State, idx: i32) void {
 }
 
 pub fn newuserdatatagged(L: *lua.State, comptime T: type, tag: u8) Errorset.Table!*T {
+    if (comptime !build_config.use_zig_backend) {
+        return @ptrCast(@alignCast(c.lua_newuserdatatagged(@ptrCast(L), @sizeOf(T), @intCast(tag)).?));
+    }
     api_check(L, tag < lua.config.UTAG_LIMIT or tag == ludata.UTAG_PROXY);
     try lgc.CcheckGC(L);
     lgc.Cthreadbarrier(L);
@@ -991,6 +1258,9 @@ pub inline fn newuserdata(L: *lua.State, comptime T: type) Errorset.Table!*T {
 }
 
 pub fn newuserdatataggedwithmetatable(L: *lua.State, comptime T: type, tag: i32) Errorset.Table!*T {
+    if (comptime !build_config.use_zig_backend) {
+        return @ptrCast(@alignCast(c.lua_newuserdatataggedwithmetatable(@ptrCast(L), @sizeOf(T), @intCast(tag)).?));
+    }
     api_check(L, tag < lua.config.UTAG_LIMIT);
     try lgc.CcheckGC(L);
     lgc.Cthreadbarrier(L);
@@ -1016,6 +1286,9 @@ pub fn newuserdatadtor(L: *lua.State, comptime T: type, comptime dtorFn: *const 
         }
     }.inner;
     const sz = @sizeOf(T);
+    if (comptime !build_config.use_zig_backend) {
+        return @ptrCast(@alignCast(c.lua_newuserdatadtor(@ptrCast(L), sz, dtor).?));
+    }
 
     try lgc.CcheckGC(L);
     lgc.Cthreadbarrier(L);
@@ -1029,6 +1302,9 @@ pub fn newuserdatadtor(L: *lua.State, comptime T: type, comptime dtorFn: *const 
 }
 
 pub fn newbuffer(L: *lua.State, sz: usize) Errorset.Table![]u8 {
+    if (comptime !build_config.use_zig_backend) {
+        return @as([*]u8, @ptrCast(@alignCast(c.lua_newbuffer(@ptrCast(L), sz).?)))[0..sz];
+    }
     try lgc.CcheckGC(L);
     lgc.Cthreadbarrier(L);
     const b = try lbuffer.Bnewbuffer(L, sz);
@@ -1052,11 +1328,20 @@ pub inline fn setupvalue(L: *lua.State, funcidx: i32, n: i32) ?[:0]const u8 {
 }
 
 pub fn encodepointer(L: *lua.State, p: usize) usize {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_encodepointer(@ptrCast(L), p);
+    }
     const g = L.global;
     return @intCast(g.ptrenckey[0] * p + g.ptrenckey[2] ^ (g.ptrenckey[1] * p + g.ptrenckey[3]));
 }
 
 pub fn ref(L: *lua.State, idx: i32) Errorset.Table!?i32 {
+    if (comptime !build_config.use_zig_backend) {
+        const r = c.lua_ref(@ptrCast(L), idx);
+        if (r == lua.REFNIL)
+            return null;
+        return @intCast(r);
+    }
     api_check(L, idx != lua.REGISTRYINDEX); // idx is a stack index for value
 
     const g = L.global;
@@ -1081,6 +1366,9 @@ pub fn ref(L: *lua.State, idx: i32) Errorset.Table!?i32 {
 }
 
 pub fn unref(L: *lua.State, r: i32) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_unref(@ptrCast(L), r);
+    }
     if (r <= lua.REFNIL)
         return;
 
@@ -1100,15 +1388,17 @@ pub fn unref(L: *lua.State, r: i32) void {
 }
 
 pub fn setuserdatatag(L: *lua.State, idx: i32, tag: u8) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_setuserdatatag(@ptrCast(L), idx, @intCast(tag));
+    }
     api_check(L, tag < lua.config.UTAG_LIMIT);
     const o = index2addr(L, idx);
     api_check(L, o.ttisuserdata());
     o.uvalue().tag = tag;
 }
 
-pub fn setuserdatadtor(L: *lua.State, comptime T: type, tag: u32, comptime dtorfn: ?*const fn (L: *lua.State, ptr: *T) void) void {
-    api_check(L, tag < lua.config.UTAG_LIMIT);
-    L.global.udatagc[tag] = if (dtorfn) |dtor| struct {
+pub fn setuserdatadtor(L: *lua.State, comptime T: type, tag: u8, comptime dtorfn: ?*const fn (L: *lua.State, ptr: *T) void) void {
+    const dtor = if (dtorfn) |dtor| struct {
         fn inner(state: *lua.State, ptr: ?*anyopaque) callconv(.c) void {
             @call(.always_inline, dtor, .{
                 state,
@@ -1116,14 +1406,25 @@ pub fn setuserdatadtor(L: *lua.State, comptime T: type, tag: u32, comptime dtorf
             });
         }
     }.inner else null;
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_setuserdatadtor(@ptrCast(L), @intCast(tag), @ptrCast(@alignCast(dtor)));
+    }
+    api_check(L, tag < lua.config.UTAG_LIMIT);
+    L.global.udatagc[tag] = dtor;
 }
 
-pub fn getuserdatadtor(L: *lua.State, tag: u32) ?lua.Destructor {
+pub fn getuserdatadtor(L: *lua.State, tag: u8) ?lua.Destructor {
+    if (comptime !build_config.use_zig_backend) {
+        return @ptrCast(@alignCast(c.lua_getuserdatadtor(@ptrCast(L), @intCast(tag))));
+    }
     api_check(L, tag < lua.config.UTAG_LIMIT);
     return L.global.udatagc[tag];
 }
 
-pub fn setuserdatametatable(L: *lua.State, tag: u32) void {
+pub fn setuserdatametatable(L: *lua.State, tag: u8) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_setuserdatametatable(@ptrCast(L), @intCast(tag));
+    }
     api_check(L, tag < lua.config.UTAG_LIMIT);
     api_check(L, L.global.udatamt[tag] == null); // reassignment not supported
     api_check(L, L.top[1].ttistable());
@@ -1133,6 +1434,9 @@ pub fn setuserdatametatable(L: *lua.State, tag: u32) void {
 }
 
 pub fn getuserdatametatable(L: *lua.State, tag: u8) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_getuserdatametatable(@ptrCast(L), @intCast(tag));
+    }
     api_check(L, tag < lua.config.UTAG_LIMIT);
     lgc.Cthreadbarrier(L);
 
@@ -1144,23 +1448,42 @@ pub fn getuserdatametatable(L: *lua.State, tag: u8) void {
     api_incr_top(L);
 }
 
-pub fn setlightuserdataname(L: *lua.State, tag: u8, name: [:0]const u8) Errorset.Memory!void {
+pub fn setlightuserdataname(L: *lua.State, tag: u8, name: []const u8) Errorset.Memory!void {
+    if (comptime !build_config.use_zig_backend) {
+        // small static buffer for name because the 'name' type
+        // does not require a zero sentinel, but the C api does.
+        var static: [256:0]u8 = undefined;
+        if (name.len > static.len)
+            @panic("name too long, use zig backend");
+        @memcpy(static[0..name.len], name);
+        static[name.len] = 0;
+        return c.lua_setlightuserdataname(@ptrCast(L), @intCast(tag), &static);
+    }
     api_check(L, tag < lua.config.LUTAG_LIMIT);
     api_check(L, L.global.lightuserdataname[tag] == null); // renaming not supported
     L.global.lightuserdataname[tag] = try lstring.Snew(L, name);
     lstring.Sfix(L.global.lightuserdataname[tag].?); // never collect these names
 }
 
-pub fn getlightuserdataname(L: *lua.State, tag: u32) ?[:0]const u8 {
+pub fn getlightuserdataname(L: *lua.State, tag: u8) ?[:0]const u8 {
+    if (comptime !build_config.use_zig_backend) {
+        const name = c.lua_getlightuserdataname(@ptrCast(L), @intCast(tag));
+        if (name != null)
+            return std.mem.span(name);
+        return null;
+    }
     api_check(L, tag < lua.config.LUTAG_LIMIT);
     const name = L.global.lightuserdataname[tag];
     return if (name) |s|
-        std.mem.span(s.getstr())
+        s.toSlice()
     else
         null;
 }
 
 pub fn clonefunction(L: *lua.State, idx: i32) !void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_clonefunction(@ptrCast(L), idx);
+    }
     try lgc.CcheckGC(L);
     lgc.Cthreadbarrier(L);
     const p = index2addr(L, idx);
@@ -1174,6 +1497,9 @@ pub fn clonefunction(L: *lua.State, idx: i32) !void {
 }
 
 pub fn cleartable(L: *lua.State, idx: i32) Errorset.Table!void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_cleartable(@ptrCast(L), idx);
+    }
     const t = index2addr(L, idx);
     api_check(L, t.ttistable());
     const tt = t.hvalue();
@@ -1183,6 +1509,9 @@ pub fn cleartable(L: *lua.State, idx: i32) Errorset.Table!void {
 }
 
 pub fn clonetable(L: *lua.State, idx: i32) Errorset.Table!void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_clonetable(@ptrCast(L), idx);
+    }
     const t = index2addr(L, idx);
     api_check(L, t.ttistable());
 
@@ -1192,15 +1521,25 @@ pub fn clonetable(L: *lua.State, idx: i32) Errorset.Table!void {
 }
 
 pub fn callbacks(L: *lua.State) *lua.Callbacks {
+    if (comptime !build_config.use_zig_backend) {
+        return @ptrCast(@alignCast(c.lua_callbacks(@ptrCast(L))));
+    }
     return &L.global.cb;
 }
 
 pub fn setmemcat(L: *lua.State, category: u8) void {
+    if (comptime !build_config.use_zig_backend) {
+        c.lua_setmemcat(@ptrCast(L), @intCast(category));
+        return;
+    }
     api_check(L, category < lua.config.MEMORY_CATEGORIES);
     L.activememcat = category;
 }
 
-pub fn totalbytes(L: *lua.State, category: i32) usize {
+pub fn totalbytes(L: *lua.State, category: u8) usize {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_totalbytes(@ptrCast(L), @intCast(category));
+    }
     api_check(L, category < lua.config.MEMORY_CATEGORIES);
     return if (category < 0)
         L.global.totalbytes
@@ -1209,6 +1548,9 @@ pub fn totalbytes(L: *lua.State, category: i32) usize {
 }
 
 pub fn getallocf(L: *lua.State, ud: ?*?*anyopaque) ?lua.Alloc {
+    if (comptime !build_config.use_zig_backend) {
+        return @ptrCast(@alignCast(c.lua_getallocf(@ptrCast(L), @ptrCast(ud))));
+    }
     const f = L.global.frealloc;
     if (ud) |ptr|
         ptr.* = L.global.ud;
