@@ -3,6 +3,7 @@ const std = @import("std");
 const cpp_std = @import("../cpp_std.zig");
 
 const Ast = @import("Ast.zig");
+const Cst = @import("Cst.zig");
 const Lexer = @import("Lexer.zig");
 const Location = @import("Location.zig").Location;
 const Allocator = @import("Allocator.zig");
@@ -43,22 +44,20 @@ const ParseOptions = extern struct {
     };
 };
 
-extern "c" fn zig_Luau_Ast_Parser_parse([*]const u8, usize, *Lexer.AstNameTable, *Allocator, *ParseOptions) *ParseResult;
-extern "c" fn zig_Luau_Ast_Parser_parseExpr([*]const u8, usize, *Lexer.AstNameTable, *Allocator, *ParseOptions) *ParseExprResult;
+extern "c" fn zig_Luau_Ast_Parser_parse([*]const u8, usize, *Lexer.AstNameTable, *Allocator, *const ParseOptions) *ParseResult;
+extern "c" fn zig_Luau_Ast_Parser_parseExpr([*]const u8, usize, *Lexer.AstNameTable, *Allocator, *const ParseOptions) *ParseExprResult;
 extern "c" fn zig_Luau_Ast_ParseResult_dtor(*ParseResult) void;
 extern "c" fn zig_Luau_Ast_ParseExprResult_dtor(*ParseExprResult) void;
 
 pub fn parse(source: []const u8, nameTable: *Lexer.AstNameTable, allocator: *Allocator, options: ParseOptions) *ParseResult {
-    var opts = options;
-    return zig_Luau_Ast_Parser_parse(source.ptr, source.len, nameTable, allocator, &opts);
+    return zig_Luau_Ast_Parser_parse(source.ptr, source.len, nameTable, allocator, &options);
 }
 
 pub fn parseExpr(source: []const u8, nameTable: *Lexer.AstNameTable, allocator: *Allocator, options: ParseOptions) *ParseExprResult {
-    var opts = options;
-    return zig_Luau_Ast_Parser_parseExpr(source.ptr, source.len, nameTable, allocator, &opts);
+    return zig_Luau_Ast_Parser_parseExpr(source.ptr, source.len, nameTable, allocator, &options);
 }
 
-pub const CstNodeMap = DenseHash.DenseHashMap(?*Ast.Node, *anyopaque, struct {});
+pub const CstNodeMap = DenseHash.DenseHashMap(*Ast.Node, *Cst.Node, struct {});
 
 pub const ParseResult = extern struct {
     root: *Ast.StatBlock,
@@ -69,7 +68,7 @@ pub const ParseResult = extern struct {
 
     commentLocations: cpp_std.Vector(Comment),
 
-    cstNodeMap: CstNodeMap = .init(null, 0),
+    cstNodeMap: CstNodeMap,
 
     pub inline fn deinit(self: *ParseResult) void {
         zig_Luau_Ast_ParseResult_dtor(self);
@@ -85,7 +84,7 @@ pub const ParseExprResult = extern struct {
 
     commentLocations: cpp_std.Vector(Comment),
 
-    cstNodeMap: CstNodeMap = .init(null, 0),
+    cstNodeMap: CstNodeMap,
 
     pub inline fn deinit(self: *ParseExprResult) void {
         zig_Luau_Ast_ParseExprResult_dtor(self);

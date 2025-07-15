@@ -13,7 +13,7 @@ ZIG_EXPORT Luau::ParseResult* ZIG_LUAU_AST(Parser_parse)(
     const char* source, size_t sourceLen,
     Luau::AstNameTable* names,
     Luau::Allocator* allocator,
-    luau_ParseOptions* options
+    const luau_ParseOptions* options
 )
 {
     Luau::ParseOptions parseOptions;
@@ -35,7 +35,7 @@ ZIG_EXPORT Luau::ParseExprResult* ZIG_LUAU_AST(Parser_parseExpr)(
     const char* source, size_t sourceLen,
     Luau::AstNameTable* names,
     Luau::Allocator* allocator,
-    luau_ParseOptions* options
+    const luau_ParseOptions* options
 )
 {
     Luau::ParseOptions parseOptions;

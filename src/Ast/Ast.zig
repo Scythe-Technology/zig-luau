@@ -283,8 +283,8 @@ pub const Attr = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        _ = Visitor.visit(visitor, self);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        _ = try Visitor.visit(visitor, self);
     }
 };
 
@@ -300,8 +300,8 @@ pub const Expr = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        Visitor.selfVisit(visitor, self);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        return Visitor.selfVisit(visitor, self);
     }
 
     pub fn isLValue(expr: *const Expr) bool {
@@ -336,8 +336,8 @@ pub const Stat = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        Visitor.selfVisit(visitor, self);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        return Visitor.selfVisit(visitor, self);
     }
 };
 
@@ -356,10 +356,10 @@ pub const GenericType = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
             if (self.defaultValue) |node|
-                node.visit(visitor);
+                try node.visit(visitor);
         }
     }
 };
@@ -379,10 +379,10 @@ pub const GenericTypePack = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
             if (self.defaultValue) |node|
-                node.visit(visitor);
+                try node.visit(visitor);
         }
     }
 };
@@ -401,9 +401,9 @@ pub const ExprGroup = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
-            self.expr.visit(visitor);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
+            try self.expr.visit(visitor);
         }
     }
 };
@@ -420,8 +420,8 @@ pub const ExprConstantNil = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        _ = Visitor.visit(visitor, self);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        _ = try Visitor.visit(visitor, self);
     }
 };
 
@@ -439,8 +439,8 @@ pub const ExprConstantBool = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        _ = Visitor.visit(visitor, self);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        _ = try Visitor.visit(visitor, self);
     }
 };
 
@@ -467,8 +467,8 @@ pub const ExprConstantNumber = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        _ = Visitor.visit(visitor, self);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        _ = try Visitor.visit(visitor, self);
     }
 };
 
@@ -493,8 +493,8 @@ pub const ExprConstantString = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        _ = Visitor.visit(visitor, self);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        _ = try Visitor.visit(visitor, self);
     }
 };
 
@@ -513,8 +513,8 @@ pub const ExprLocal = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        _ = Visitor.visit(visitor, self);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        _ = try Visitor.visit(visitor, self);
     }
 };
 
@@ -532,8 +532,8 @@ pub const ExprGlobal = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        _ = Visitor.visit(visitor, self);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        _ = try Visitor.visit(visitor, self);
     }
 };
 
@@ -549,8 +549,8 @@ pub const ExprVarargs = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        _ = Visitor.visit(visitor, self);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        _ = try Visitor.visit(visitor, self);
     }
 };
 
@@ -571,12 +571,12 @@ pub const ExprCall = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
-            self.func.visit(visitor);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
+            try self.func.visit(visitor);
 
             for (self.args.slice()) |arg|
-                arg.visit(visitor);
+                try arg.visit(visitor);
         }
     }
 };
@@ -599,9 +599,9 @@ pub const ExprIndexName = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
-            self.expr.visit(visitor);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
+            try self.expr.visit(visitor);
         }
     }
 };
@@ -621,10 +621,10 @@ pub const ExprIndexExpr = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
-            self.expr.visit(visitor);
-            self.index.visit(visitor);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
+            try self.expr.visit(visitor);
+            try self.index.visit(visitor);
         }
     }
 };
@@ -655,19 +655,19 @@ pub const ExprFunction = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
             for (self.args.slice()) |arg|
                 if (arg.annotation) |node|
-                    node.visit(visitor);
+                    try node.visit(visitor);
 
             if (self.varargAnnotation) |node|
-                node.visit(visitor);
+                try node.visit(visitor);
 
             if (self.returnAnnotation) |annotation|
-                annotation.visit(visitor);
+                try annotation.visit(visitor);
 
-            self.body.visit(visitor);
+            try self.body.visit(visitor);
         }
     }
 
@@ -719,13 +719,13 @@ pub const ExprTable = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
             for (self.items.slice()) |item| {
                 if (item.key) |key|
-                    key.visit(visitor);
+                    try key.visit(visitor);
 
-                item.value.visit(visitor);
+                try item.value.visit(visitor);
             }
         }
     }
@@ -760,9 +760,9 @@ pub const ExprUnary = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
-            self.expr.visit(visitor);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
+            try self.expr.visit(visitor);
         }
     }
 };
@@ -824,10 +824,10 @@ pub const ExprBinary = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
-            self.left.visit(visitor);
-            self.right.visit(visitor);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
+            try self.left.visit(visitor);
+            try self.right.visit(visitor);
         }
     }
 };
@@ -847,10 +847,10 @@ pub const ExprTypeAssertion = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
-            self.expr.visit(visitor);
-            self.annotation.visit(visitor);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
+            try self.expr.visit(visitor);
+            try self.annotation.visit(visitor);
         }
     }
 };
@@ -873,11 +873,11 @@ pub const ExprIfElse = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
-            self.condition.visit(visitor);
-            self.trueExpr.visit(visitor);
-            self.falseExpr.visit(visitor);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
+            try self.condition.visit(visitor);
+            try self.trueExpr.visit(visitor);
+            try self.falseExpr.visit(visitor);
         }
     }
 };
@@ -900,10 +900,10 @@ pub const ExprInterpString = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
             for (self.expressions.slice()) |expr|
-                expr.visit(visitor);
+                try expr.visit(visitor);
         }
     }
 };
@@ -933,10 +933,10 @@ pub const StatBlock = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *StatBlock, visitor: anytype) void {
-        if (Visitor.visit(visitor, self))
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self))
             for (self.body.slice()) |stat|
-                stat.visit(visitor);
+                try stat.visit(visitor);
     }
 };
 
@@ -960,13 +960,13 @@ pub const StatIf = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
-            self.condition.visit(visitor);
-            self.thenbody.visit(visitor);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
+            try self.condition.visit(visitor);
+            try self.thenbody.visit(visitor);
 
             if (self.elsebody) |elsebody|
-                elsebody.visit(visitor);
+                try elsebody.visit(visitor);
         }
     }
 };
@@ -989,10 +989,10 @@ pub const StatWhile = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
-            self.condition.visit(visitor);
-            self.body.visit(visitor);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
+            try self.condition.visit(visitor);
+            try self.body.visit(visitor);
         }
     }
 };
@@ -1014,10 +1014,10 @@ pub const StatRepeat = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
-            self.body.visit(visitor);
-            self.condition.visit(visitor);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
+            try self.body.visit(visitor);
+            try self.condition.visit(visitor);
         }
     }
 };
@@ -1035,8 +1035,8 @@ pub const StatBreak = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        _ = Visitor.visit(visitor, self);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        _ = try Visitor.visit(visitor, self);
     }
 };
 
@@ -1053,8 +1053,8 @@ pub const StatContinue = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        _ = Visitor.visit(visitor, self);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        _ = try Visitor.visit(visitor, self);
     }
 };
 
@@ -1073,10 +1073,10 @@ pub const StatReturn = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
             for (self.list.slice()) |expr|
-                expr.visit(visitor);
+                try expr.visit(visitor);
         }
     }
 };
@@ -1096,9 +1096,9 @@ pub const StatExpr = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self))
-            self.expr.visit(visitor);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self))
+            try self.expr.visit(visitor);
     }
 };
 
@@ -1119,14 +1119,14 @@ pub const StatLocal = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
             for (self.vars.slice()) |@"var"|
                 if (@"var".annotation) |node|
-                    node.visit(visitor);
+                    try node.visit(visitor);
 
             for (self.values.slice()) |expr|
-                expr.visit(visitor);
+                try expr.visit(visitor);
         }
     }
 };
@@ -1152,18 +1152,18 @@ pub const StatFor = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
             if (self.variable.annotation) |node|
-                node.visit(visitor);
+                try node.visit(visitor);
 
-            self.from.visit(visitor);
-            self.to.visit(visitor);
+            try self.from.visit(visitor);
+            try self.to.visit(visitor);
 
             if (self.step) |step|
-                step.visit(visitor);
+                try step.visit(visitor);
 
-            self.body.visit(visitor);
+            try self.body.visit(visitor);
         }
     }
 };
@@ -1189,16 +1189,16 @@ pub const StatForIn = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
             for (self.vars.slice()) |@"var"|
                 if (@"var".annotation) |node|
-                    node.visit(visitor);
+                    try node.visit(visitor);
 
             for (self.values.slice()) |expr|
-                expr.visit(visitor);
+                try expr.visit(visitor);
 
-            self.body.visit(visitor);
+            try self.body.visit(visitor);
         }
     }
 };
@@ -1219,13 +1219,13 @@ pub const StatAssign = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
             for (self.vars.slice()) |lvalue|
-                lvalue.visit(visitor);
+                try lvalue.visit(visitor);
 
             for (self.values.slice()) |expr|
-                expr.visit(visitor);
+                try expr.visit(visitor);
         }
     }
 };
@@ -1247,10 +1247,10 @@ pub const StatCompoundAssign = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
-            self.variable.visit(visitor);
-            self.value.visit(visitor);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
+            try self.variable.visit(visitor);
+            try self.value.visit(visitor);
         }
     }
 };
@@ -1271,10 +1271,10 @@ pub const StatFunction = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
-            self.name.visit(visitor);
-            self.func.visit(visitor);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
+            try self.name.visit(visitor);
+            try self.func.visit(visitor);
         }
     }
 };
@@ -1295,9 +1295,9 @@ pub const StatLocalFunction = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
-            self.func.visit(visitor);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
+            try self.func.visit(visitor);
         }
     }
 };
@@ -1322,15 +1322,15 @@ pub const StatTypeAlias = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
             for (self.generics.slice()) |el|
-                el.visit(visitor);
+                try el.visit(visitor);
 
             for (self.genericPacks.slice()) |el|
-                el.visit(visitor);
+                try el.visit(visitor);
 
-            self.type.visit(visitor);
+            try self.type.visit(visitor);
         }
     }
 };
@@ -1354,9 +1354,9 @@ pub const StatTypeFunction = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
-            self.body.visit(visitor);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
+            try self.body.visit(visitor);
         }
     }
 };
@@ -1378,9 +1378,9 @@ pub const StatDeclareGlobal = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
-            self.type.visit(visitor);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
+            try self.type.visit(visitor);
         }
     }
 };
@@ -1420,10 +1420,10 @@ pub const StatDeclareFunction = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
-            Visitor.visitTypeList(visitor, self.params);
-            self.retTypes.visit(visitor);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
+            try Visitor.visitTypeList(visitor, self.params);
+            try self.retTypes.visit(visitor);
         }
     }
 
@@ -1496,10 +1496,10 @@ pub const StatDeclareExternType = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
             for (self.props.slice()) |prop|
-                prop.ty.visit(visitor);
+                try prop.ty.visit(visitor);
         }
     }
 };
@@ -1516,8 +1516,8 @@ pub const Type = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        Visitor.selfVisit(visitor, self);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        return Visitor.selfVisit(visitor, self);
     }
 };
 
@@ -1546,13 +1546,13 @@ pub const TypeReference = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
             for (self.parameters.slice()) |param|
                 if (param.type) |node| {
-                    node.visit(visitor);
+                    try node.visit(visitor);
                 } else {
-                    param.typePack.?.visit(visitor);
+                    try param.typePack.?.visit(visitor);
                 };
         }
     }
@@ -1581,14 +1581,14 @@ pub const TypeTable = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
             for (self.props.slice()) |node|
-                node.type.visit(visitor);
+                try node.type.visit(visitor);
 
             if (self.indexer) |indexer| {
-                indexer.indexType.visit(visitor);
-                indexer.resultType.visit(visitor);
+                try indexer.indexType.visit(visitor);
+                try indexer.resultType.visit(visitor);
             }
         }
     }
@@ -1613,10 +1613,10 @@ pub const TypeFunction = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
-            Visitor.visitTypeList(visitor, self.argTypes);
-            self.returnTypes.visit(visitor);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
+            try Visitor.visitTypeList(visitor, self.argTypes);
+            try self.returnTypes.visit(visitor);
         }
     }
 
@@ -1651,9 +1651,9 @@ pub const TypeTypeof = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
-            self.expr.visit(visitor);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
+            try self.expr.visit(visitor);
         }
     }
 };
@@ -1670,8 +1670,8 @@ pub const TypeOptional = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        _ = Visitor.visit(visitor, self);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        _ = try Visitor.visit(visitor, self);
     }
 };
 
@@ -1689,10 +1689,10 @@ pub const TypeUnion = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
             for (self.types.slice()) |node|
-                node.visit(visitor);
+                try node.visit(visitor);
         }
     }
 };
@@ -1711,10 +1711,10 @@ pub const TypeIntersection = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
             for (self.types.slice()) |node|
-                node.visit(visitor);
+                try node.visit(visitor);
         }
     }
 };
@@ -1734,10 +1734,10 @@ pub const ExprError = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
             for (self.expressions.slice()) |expression|
-                expression.visit(visitor);
+                try expression.visit(visitor);
         }
     }
 };
@@ -1759,13 +1759,13 @@ pub const StatError = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
             for (self.expressions.slice()) |expression|
-                expression.visit(visitor);
+                try expression.visit(visitor);
 
             for (self.statements.slice()) |statement|
-                statement.visit(visitor);
+                try statement.visit(visitor);
         }
     }
 };
@@ -1786,10 +1786,10 @@ pub const TypeError = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
             for (self.types.slice()) |node|
-                node.visit(visitor);
+                try node.visit(visitor);
         }
     }
 };
@@ -1808,8 +1808,8 @@ pub const TypeSingletonBool = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        _ = Visitor.visit(visitor, self);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        _ = try Visitor.visit(visitor, self);
     }
 };
 
@@ -1827,8 +1827,8 @@ pub const TypeSingletonString = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        _ = Visitor.visit(visitor, self);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        _ = try Visitor.visit(visitor, self);
     }
 };
 
@@ -1846,9 +1846,9 @@ pub const TypeGroup = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
-            self.type.visit(visitor);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
+            try self.type.visit(visitor);
         }
     }
 };
@@ -1865,8 +1865,8 @@ pub const TypePack = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        Visitor.selfVisit(visitor, self);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        return Visitor.selfVisit(visitor, self);
     }
 };
 
@@ -1884,13 +1884,13 @@ pub const TypePackExplicit = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self)) {
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
             for (self.typeList.types.slice()) |node|
-                node.visit(visitor);
+                try node.visit(visitor);
 
             if (self.typeList.tailType) |node|
-                node.visit(visitor);
+                try node.visit(visitor);
         }
     }
 };
@@ -1909,9 +1909,9 @@ pub const TypePackVariadic = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        if (Visitor.visit(visitor, self))
-            self.variadicType.visit(visitor);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self))
+            try self.variadicType.visit(visitor);
     }
 };
 
@@ -1929,18 +1929,18 @@ pub const TypePackGeneric = extern struct {
     pub const asStat = AsStatCastFn;
     pub const asType = AsTypeCastFn;
 
-    pub fn visit(self: *@This(), visitor: anytype) void {
-        _ = Visitor.visit(visitor, self);
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        _ = try Visitor.visit(visitor, self);
     }
 };
 
 pub const Visitor = struct {
-    pub fn visitTypeList(self: anytype, this: TypeList) void {
+    pub fn visitTypeList(self: anytype, this: TypeList) !void {
         for (this.types.slice()) |node|
-            node.visit(self);
+            try node.visit(self);
 
         if (this.tailType) |node|
-            node.visit(self);
+            try node.visit(self);
     }
 
     fn getVisitorStruct(comptime self: type) type {
@@ -1955,7 +1955,7 @@ pub const Visitor = struct {
         return @hasDecl(getVisitorStruct(self), name);
     }
 
-    fn callVisitorDecl(self: anytype, comptime name: [:0]const u8, this: anytype) bool {
+    fn callVisitorDecl(self: anytype, comptime name: [:0]const u8, this: anytype) !bool {
         const visitor_type = @TypeOf(self);
         const visitor_struct = getVisitorStruct(visitor_type);
         const visitor_fn = @field(visitor_struct, name);
@@ -1996,17 +1996,17 @@ pub const Visitor = struct {
         @compileError("Invalid Ast type");
     }
 
-    pub fn selfVisit(self: anytype, this: anytype) void {
+    pub fn selfVisit(self: anytype, this: anytype) anyerror!void {
         switch (this.classIndex) {
             inline else => |kind| {
                 const kind_type = kind.Type();
                 if (@hasDecl(kind_type, "visit"))
-                    kind_type.visit(@ptrCast(@alignCast(this)), self);
+                    try kind_type.visit(@ptrCast(@alignCast(this)), self);
             },
         }
     }
 
-    pub fn visit(self: anytype, this: anytype) bool {
+    pub fn visit(self: anytype, this: anytype) anyerror!bool {
         const node_type = @typeInfo(@TypeOf(this));
         const ast_type = node_type.pointer.child;
         comptime if (node_type != .pointer)
@@ -2065,12 +2065,12 @@ test Node {
         const stats = root.body.slice();
         try std.testing.expectEqual(3, stats.len);
 
-        for (stats) |node| {
+        for (stats, 1..) |node, order| {
             switch (node.classIndex) {
                 .stat_local => {
                     const local: *StatLocal = node.as(.stat_local).?;
                     try std.testing.expectEqualStrings("x", std.mem.span(local.vars.slice()[0].name.value));
-                    std.debug.print("{}\n", .{(local.values.slice()[0].as(.expr_constant_number).?.value)});
+                    try std.testing.expect(@as(f64, @floatFromInt(order)) == local.values.slice()[0].as(.expr_constant_number).?.value);
                 },
                 else => {},
             }
@@ -2093,26 +2093,54 @@ test Node {
         const parseResult = Parser.parse(source, astNameTable, allocator, .{});
         defer parseResult.deinit();
 
-        const FunctionVisitor = struct {
-            hasNativeFunction: bool = false,
+        {
+            const FunctionVisitor = struct {
+                hasNativeFunction: bool = false,
 
-            pub fn visitExprFunction(self: *@This(), node: *Ast.ExprFunction) bool {
-                node.body.visit(self);
+                pub fn visitExprFunction(self: *@This(), node: *Ast.ExprFunction) !bool {
+                    errdefer unreachable;
+                    try node.body.visit(self);
 
-                if (!self.hasNativeFunction and node.hasNativeAttribute())
-                    self.hasNativeFunction = true;
+                    if (!self.hasNativeFunction and node.hasNativeAttribute())
+                        self.hasNativeFunction = true;
 
-                return false;
-            }
-        };
-        var visitor: FunctionVisitor = .{};
+                    return false;
+                }
+            };
+            var visitor: FunctionVisitor = .{};
 
-        parseResult.root.visit(&visitor);
+            parseResult.root.visit(&visitor) catch unreachable;
+            // no errors expected, since none of the visitor method does error
 
-        try std.testing.expect(visitor.hasNativeFunction);
+            try std.testing.expect(visitor.hasNativeFunction);
+        }
+        {
+            const FunctionVisitor = struct {
+                hasNativeFunction: bool = false,
+
+                pub fn visitExprFunction(self: *@This(), node: *Ast.ExprFunction) !bool {
+                    try node.body.visit(self);
+
+                    if (!self.hasNativeFunction and node.hasNativeAttribute()) {
+                        self.hasNativeFunction = true;
+                        return error.Done;
+                    }
+
+                    return false;
+                }
+            };
+            var visitor: FunctionVisitor = .{};
+
+            parseResult.root.visit(&visitor) catch |err| switch (err) {
+                error.Done => {}, // this error is defined in the visitor
+                else => unreachable,
+            };
+
+            try std.testing.expect(visitor.hasNativeFunction);
+        }
     }
 }
 
 // sources:
-// https://github.com/luau-lang/luau/blob/a2303a6ae68c53035eccf230c4450b9f068536af/Ast/include/Luau/Ast.h
-// https://github.com/luau-lang/luau/blob/a2303a6ae68c53035eccf230c4450b9f068536af/Ast/src/Ast.cpp
+// https://github.com/luau-lang/luau/blob/6ff0650a8d4ba90df9826492b68c88911e39b1c1/Ast/include/Luau/Ast.h
+// https://github.com/luau-lang/luau/blob/6ff0650a8d4ba90df9826492b68c88911e39b1c1/Ast/src/Ast.cpp
