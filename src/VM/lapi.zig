@@ -1192,11 +1192,12 @@ pub fn next(L: *lua.State, idx: i32) !bool {
     return c.lua_next(@ptrCast(L), idx) != 0;
 }
 
-pub fn rawiter(L: *lua.State, idx: i32, _iter: usize) i32 {
+pub fn rawiter(L: *lua.State, idx: i32, _iter: i32) i32 {
     if (comptime !build_config.use_zig_backend) {
-        return c.lua_rawiter(@ptrCast(L), idx, @intCast(_iter));
+        return c.lua_rawiter(@ptrCast(L), idx, _iter);
     }
-    var iter: usize = _iter;
+    std.debug.assert(_iter >= 0);
+    var iter: usize = @intCast(_iter);
     lgc.Cthreadbarrier(L);
     const t = index2addr(L, idx);
     api_check(L, t.ttistable());
