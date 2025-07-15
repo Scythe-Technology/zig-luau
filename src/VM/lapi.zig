@@ -28,7 +28,7 @@ pub fn api_check(L: *State, cond: bool) void {
 }
 
 pub inline fn api_checknelems(L: *State, n: u32) void {
-    api_check(L, n <= L.top[0].sub(@ptrCast(L.base)));
+    api_check(L, n <= L.top - L.base);
 }
 
 pub inline fn api_checkvalidindex(L: *State, obj: *const lobject.TValue) void {
@@ -85,14 +85,14 @@ pub noinline fn pseudo2addr(L: *State, idx: i32) *lobject.TValue {
 pub inline fn index2addr(L: *State, idx: i32) *lobject.TValue {
     if (idx > 0) {
         const o: usize = @intFromPtr(&L.base[@intCast(idx - 1)]);
-        api_check(L, idx <= L.ci.?[0].top[0].sub(@ptrCast(L.base)));
+        api_check(L, idx <= L.ci.?[0].top - L.base);
         if (o >= @intFromPtr(L.top))
             return @constCast(lobject.Onilobject)
         else
             return @ptrFromInt(o);
     } else if (idx > lua.REGISTRYINDEX) {
-        api_check(L, idx != 0 and -idx <= L.top[0].sub(@ptrCast(L.base)));
-        return L.top[0].add_num(idx);
+        api_check(L, idx != 0 and -idx <= L.top - L.base);
+        return @ptrCast(L.top - @as(usize, @intCast(-idx)));
     } else {
         return pseudo2addr(L, idx);
     }
@@ -112,7 +112,7 @@ pub fn checkstack(L: *lua.State, size: usize) Errorset.Memory!bool {
     if (comptime !build_config.use_zig_backend) {
         return c.lua_checkstack(@ptrCast(L), @as(i32, @intCast(size))) != 0;
     }
-    if (size > lua.config.I_MAXCSTACK or (L.top[0].sub(@ptrCast(L.base)) + size) > lua.config.I_MAXCSTACK)
+    if (size > lua.config.I_MAXCSTACK or (L.top - L.base + size) > lua.config.I_MAXCSTACK)
         return false
     else {
         try @call(.always_inline, rawcheckstack, .{ L, size });
@@ -135,7 +135,7 @@ pub fn xmove(from: *lua.State, to: *lua.State, n: u32) void {
         return;
     api_checknelems(from, n);
     api_check(from, from.global == to.global);
-    api_check(from, to.ci.?[0].top[0].sub(@ptrCast(to.top)) >= n);
+    api_check(from, to.ci.?[0].top - to.top >= n);
     lgc.Cthreadbarrier(to);
 
     const ttop = to.top;
@@ -187,18 +187,18 @@ pub fn absindex(L: *lua.State, idx: i32) i32 {
     if (comptime !build_config.use_zig_backend) {
         return c.lua_absindex(@ptrCast(L), idx);
     }
-    api_check(L, (idx > 0 and idx <= L.top[0].sub(@ptrCast(L.base))) or (idx < 0 and -idx <= L.top[0].sub(@ptrCast(L.base))) or lua.ispseudo(idx));
+    api_check(L, (idx > 0 and idx <= L.top - L.base) or (idx < 0 and -idx <= L.top - L.base) or lua.ispseudo(idx));
     return if (idx > 0 or lua.ispseudo(idx))
         idx
     else
-        @as(i32, @intCast(L.top[0].sub(@ptrCast(L.base)))) + idx + 1;
+        @as(i32, @intCast(L.top - L.base)) + idx + 1;
 }
 
 pub fn gettop(L: *lua.State) usize {
     if (comptime !build_config.use_zig_backend) {
         return @intCast(c.lua_gettop(@ptrCast(L)));
     }
-    return L.top[0].sub(@ptrCast(L.base));
+    return L.top - L.base;
 }
 
 pub fn settop(L: *lua.State, idx: i32) void {
@@ -206,14 +206,14 @@ pub fn settop(L: *lua.State, idx: i32) void {
         return c.lua_settop(@ptrCast(L), idx);
     }
     if (idx >= 0) {
-        api_check(L, idx <= L.stack_last[0].sub(@ptrCast(L.base)));
+        api_check(L, idx <= L.stack_last - L.base);
         const t = L.base[@intCast(idx)..];
         while (@intFromPtr(L.top) < @intFromPtr(t)) : (L.top = L.top[1..])
             L.top[0].setnilvalue();
         L.top = t;
     } else {
-        api_check(L, -(idx + 1) <= L.top[0].sub(@ptrCast(L.base)));
-        L.top = @ptrCast(L.top[0].add_num(idx + 1)); // `subtract' index (index is negative)
+        api_check(L, -(idx + 1) <= L.top - L.base);
+        L.top = L.top - @as(usize, @intCast(-(idx + 1))); // `subtract' index (index is negative)
     }
 }
 pub inline fn pop(L: *lua.State, n: i32) void {
@@ -1237,7 +1237,7 @@ pub fn rawiter(L: *lua.State, idx: i32, _iter: usize) i32 {
     return -1;
 }
 
-pub inline fn concat(L: *lua.State, idx: i32) void {
+pub inline fn concat(L: *lua.State, idx: i32) !void {
     c.lua_concat(@ptrCast(L), idx);
 }
 

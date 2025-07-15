@@ -76,7 +76,7 @@ pub fn Lwhere(L: *lua.State, level: i32) Errorset.Table!void {
 pub fn LerrorL(L: *lua.State, comptime fmt: []const u8, args: anytype) Errorset.Table!noreturn {
     try Lwhere(L, 1);
     try L.pushvfstring(fmt, args);
-    L.concat(2);
+    try L.concat(2);
     L.raiseerror();
 }
 

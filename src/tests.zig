@@ -506,7 +506,7 @@ test "concat" {
     _ = try lua.pushstring("hello ");
     lua.pushnumber(10);
     _ = try lua.pushstring(" wow!");
-    lua.concat(3);
+    try lua.concat(3);
 
     try expectEqualStrings("hello 10 wow!", lua.tostring(-1) orelse @panic("bad"));
 }
