@@ -1258,7 +1258,7 @@ pub inline fn newuserdata(L: *lua.State, comptime T: type) Errorset.Table!*T {
     return newuserdatatagged(L, T, 0);
 }
 
-pub fn newuserdatataggedwithmetatable(L: *lua.State, comptime T: type, tag: i32) Errorset.Table!*T {
+pub fn newuserdatataggedwithmetatable(L: *lua.State, comptime T: type, tag: u8) Errorset.Table!*T {
     if (comptime !build_config.use_zig_backend) {
         return @ptrCast(@alignCast(c.lua_newuserdatataggedwithmetatable(@ptrCast(L), @sizeOf(T), @intCast(tag)).?));
     }
