@@ -311,7 +311,7 @@ fn traverseproto(g: *lstate.global_State, f: *lobject.Proto) void {
 
 fn traverseclosure(g: *lstate.global_State, cl: *lobject.Closure) void {
     markobject(g, @ptrCast(@alignCast(cl.env)));
-    if (cl.isC > 0) {
+    if (cl.isC != 0) {
         for (0..cl.nupvalues) |i| // mark its upvalues
             markvalue(g, &cl.d.c.upvalues()[i]);
     } else {
@@ -383,7 +383,7 @@ fn propagatemark(g: *lstate.global_State) Errorset.Memory!usize {
             const cl = o.tocl();
             g.gray = cl.gclist;
             traverseclosure(g, cl);
-            return if (cl.isC > 0) lfunc.sizeCclosure(cl.nupvalues) else lfunc.sizeLclosure(cl.nupvalues);
+            return if (cl.isC != 0) lfunc.sizeCclosure(cl.nupvalues) else lfunc.sizeLclosure(cl.nupvalues);
         },
         @intFromEnum(lua.Type.Thread) => {
             const th = o.toth();
@@ -598,7 +598,7 @@ fn clearupvals(L: *lua.State) usize {
         std.debug.assert(!isblack(@ptrCast(@alignCast(uv.?)))); // open upvalues are never black
         std.debug.assert(iswhite(@ptrCast(@alignCast(uv.?))) or !uv.?.v.iscollectable() or !iswhite(@ptrCast(@alignCast(uv.?.v)))); // open upvalues are always white
 
-        if (uv.?.markedopen > 0) {
+        if (uv.?.markedopen != 0) {
             // upvalue is still open (belongs to alive thread)
             std.debug.assert(isgray(@ptrCast(@alignCast(uv.?))));
             uv.?.markedopen = 0; // for next cycle
@@ -671,7 +671,7 @@ fn sweepgcopage(L: *lua.State, page: *lmem.lua_Page) usize {
     const g = L.global;
 
     const deadmask = otherwhite(g);
-    std.debug.assert(testbit(deadmask, FIXEDBIT) > 0); // make sure we never sweep fixed objects
+    std.debug.assert(testbit(deadmask, FIXEDBIT) != 0); // make sure we never sweep fixed objects
 
     const newwhite = Cwhite(g);
 
@@ -684,7 +684,7 @@ fn sweepgcopage(L: *lua.State, page: *lmem.lua_Page) usize {
             continue;
 
         // is the object alive?
-        if ((gco.gch.header.marked ^ WHITEBITS) & deadmask > 0) {
+        if ((gco.gch.header.marked ^ WHITEBITS) & deadmask != 0) {
             std.debug.assert(!isdead(g, gco));
             // make it white (for next cycle)
             gco.gch.header.marked = (gco.gch.header.marked & maskmarks) | newwhite;

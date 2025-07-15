@@ -393,14 +393,14 @@ pub fn rawequal(L: *lua.State, index1: i32, index2: i32) bool {
     return if (o1 == lobject.Onilobject or o2 == lobject.Onilobject) false else lobject.OrawequalObj(o1, o2);
 }
 
-pub inline fn equal(L: *lua.State, index1: i32, index2: i32) bool {
+pub inline fn equal(L: *lua.State, index1: i32, index2: i32) !bool {
     return c.lua_equal(@ptrCast(L), index1, index2) != 0;
     // const o1 = index2addr(L, index1);
     // const o2 = index2addr(L, index2);
     // return if (o1 == lobject.Onilobject or o2 == lobject.Onilobject) false else lvm.equalobj(L, o1, o2);
 }
 
-pub inline fn lessthan(L: *lua.State, index1: i32, index2: i32) bool {
+pub inline fn lessthan(L: *lua.State, index1: i32, index2: i32) !bool {
     return c.lua_lessthan(@ptrCast(L), index1, index2) != 0;
 }
 
@@ -408,7 +408,7 @@ pub fn tonumberx(L: *lua.State, idx: i32) ?f64 {
     if (comptime !build_config.use_zig_backend) {
         var isnum: i32 = 0;
         const v = c.lua_tonumberx(@ptrCast(L), idx, &isnum);
-        if (isnum > 0)
+        if (isnum != 0)
             return v;
         return null;
     }
@@ -427,7 +427,7 @@ pub fn tointegerx(L: *lua.State, idx: i32) ?i32 {
     if (comptime !build_config.use_zig_backend) {
         var isnum: i32 = 0;
         const v = c.lua_tointegerx(@ptrCast(L), idx, &isnum);
-        if (isnum > 0)
+        if (isnum != 0)
             return v;
         return null;
     }
@@ -446,7 +446,7 @@ pub fn tounsignedx(L: *lua.State, idx: i32) ?u32 {
     if (comptime !build_config.use_zig_backend) {
         var isnum: i32 = 0;
         const v = c.lua_tounsignedx(@ptrCast(L), idx, &isnum);
-        if (isnum > 0)
+        if (isnum != 0)
             return v;
         return null;
     }
@@ -1012,7 +1012,7 @@ pub fn rawsetfield(L: *lua.State, idx: i32, k: []const u8) Errorset.Table!void {
     api_checknelems(L, 1);
     const t = index2addr(L, idx);
     api_check(L, t.ttistable());
-    if (t.hvalue().readonly > 0)
+    if (t.hvalue().readonly != 0)
         return Errorset.TableReadonly;
     (try ltable.Hsetstr(L, t.hvalue(), try lstring.Snew(L, k))).setobj(L, @ptrCast(L.top - 1));
     lgc.Cbarriert(L, t.hvalue(), @ptrCast(L.top - 1));
@@ -1031,7 +1031,7 @@ pub fn rawset(L: *lua.State, idx: i32) Errorset.Table!void {
     api_checknelems(L, 2);
     const t = index2addr(L, idx);
     api_check(L, t.ttistable());
-    if (t.hvalue().readonly > 0)
+    if (t.hvalue().readonly != 0)
         return Errorset.TableReadonly;
     (try ltable.Hset(L, t.hvalue(), @ptrCast(L.top - 2))).setobj(L, @ptrCast(L.top - 1));
     lgc.Cbarriert(L, t.hvalue(), @ptrCast(L.top - 1));
@@ -1049,7 +1049,7 @@ pub fn rawseti(L: *lua.State, idx: i32, n: i32) Errorset.Table!void {
     api_checknelems(L, 2);
     const t = index2addr(L, idx);
     api_check(L, t.ttistable());
-    if (t.hvalue().readonly > 0)
+    if (t.hvalue().readonly != 0)
         return Errorset.TableReadonly;
     (try ltable.Hsetnum(L, t.hvalue(), n)).setobj(L, @ptrCast(L.top - 1));
     lgc.Cbarriert(L, t.hvalue(), @ptrCast(L.top - 1));
@@ -1074,7 +1074,7 @@ pub fn setmetatable(L: *lua.State, idx: i32) Errorset.Table!u1 {
     }
     switch (obj.ttype()) {
         @intFromEnum(lua.Type.Table) => {
-            if (obj.hvalue().readonly > 0)
+            if (obj.hvalue().readonly != 0)
                 return Errorset.TableReadonly;
             obj.hvalue().metatable = mt;
             if (mt) |m|
@@ -1188,7 +1188,7 @@ pub fn @"error"(L: *lua.State) noreturn {
     unreachable;
 }
 
-pub fn next(L: *lua.State, idx: i32) bool {
+pub fn next(L: *lua.State, idx: i32) !bool {
     return c.lua_next(@ptrCast(L), idx) != 0;
 }
 
@@ -1313,18 +1313,59 @@ pub fn newbuffer(L: *lua.State, sz: usize) Errorset.Table![]u8 {
     return @as([*]u8, @ptrCast(@alignCast(&b.data)))[0..sz];
 }
 
-pub inline fn getupvalue(L: *lua.State, funcidx: i32, n: i32) ?[:0]const u8 {
-    const name = c.lua_getupvalue(@ptrCast(L), funcidx, n);
-    if (name != null)
-        return std.mem.span(name);
-    return null;
+fn aux_upvalue(fi: *lobject.TValue, n: u32, val: **lobject.TValue) ?[:0]const u8 {
+    if (!fi.ttisfunction())
+        return null;
+    const f = fi.clvalue();
+    if (f.isC != 0) {
+        if (!(1 <= n and n <= f.nupvalues))
+            return null;
+        val.* = &f.d.c.upvalues()[n - 1];
+        return "";
+    } else {
+        const p = f.d.l.p;
+        if (!(1 <= n and n <= p.nups)) // not a valid upvalue
+            return null;
+        const r = &f.d.l.upreferences()[n - 1];
+        val.* = if (r.ttisupval()) r.upvalue().v else r;
+        if (!(1 <= n and n <= p.sizeupvalues)) // don't have a name for this upvalue
+            return "";
+        return p.upvalues.?[n - 1].?.toSlice();
+    }
 }
 
-pub inline fn setupvalue(L: *lua.State, funcidx: i32, n: i32) ?[:0]const u8 {
-    const name = c.lua_setupvalue(@ptrCast(L), funcidx, n);
-    if (name != null)
-        return std.mem.span(name);
-    return null;
+pub fn getupvalue(L: *lua.State, funcindex: i32, n: u32) ?[:0]const u8 {
+    if (comptime !build_config.use_zig_backend) {
+        const name = c.lua_getupvalue(@ptrCast(L), funcindex, n);
+        if (name != null)
+            return std.mem.span(name);
+        return null;
+    }
+    lgc.Cthreadbarrier(L);
+    var val: *lobject.TValue = undefined;
+    if (aux_upvalue(index2addr(L, funcindex), n, &val)) |name| {
+        L.top[0].setobj(L, val);
+        api_incr_top(L);
+        return name;
+    } else return null;
+}
+
+pub fn setupvalue(L: *lua.State, funcidx: i32, n: u32) ?[:0]const u8 {
+    if (comptime !build_config.use_zig_backend) {
+        const name = c.lua_setupvalue(@ptrCast(L), funcidx, n);
+        if (name != null)
+            return std.mem.span(name);
+        return null;
+    }
+    api_checknelems(L, 1);
+    const fi = index2addr(L, funcidx);
+    var val: *lobject.TValue = undefined;
+    if (aux_upvalue(fi, n, &val)) |name| {
+        L.top -= 1;
+        val.setobj(L, @ptrCast(L.top));
+        lgc.Cbarrier(L, @ptrCast(@alignCast(fi.clvalue())), @ptrCast(L.top));
+        return name;
+    } else return null;
 }
 
 pub fn encodepointer(L: *lua.State, p: usize) usize {
@@ -1503,7 +1544,7 @@ pub fn cleartable(L: *lua.State, idx: i32) Errorset.Table!void {
     const t = index2addr(L, idx);
     api_check(L, t.ttistable());
     const tt = t.hvalue();
-    if (tt.readonly > 0)
+    if (tt.readonly != 0)
         return Errorset.TableReadonly;
     ltable.Hclear(tt);
 }
