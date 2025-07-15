@@ -1,6 +1,8 @@
 const c = @import("c");
 const std = @import("std");
 
+const build_config = @import("config");
+
 const zapi = @import("zapi.zig");
 
 const ldo = @import("ldo.zig");
@@ -701,11 +703,6 @@ pub const GCObject = extern union {
     }
 };
 
-fn freestack(L: *lua_State, L1: *lua.State) void {
-    lmem.Mfreearray(L, CallInfo, @ptrCast(@alignCast(L1.base_ci)), @intCast(L1.size_ci), L1.header.memcat);
-    lmem.Mfreearray(L, lobject.TValue, @ptrCast(@alignCast(L1.stack)), @intCast(L1.stacksize), L1.header.memcat);
-}
-
 pub inline fn Lnewstate() !*lua.State {
     if (c.luaL_newstate()) |s|
         return @ptrCast(@alignCast(s))
@@ -714,6 +711,9 @@ pub inline fn Lnewstate() !*lua.State {
 }
 
 pub fn close(L: *lua_State) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_close(@ptrCast(L));
+    }
     const GL = L.global.mainthread; // only the main thread can be closed
     lfunc.Fclose(GL, @ptrCast(GL.stack)); // close all upvalues for this thread
     close_state(GL);
@@ -740,6 +740,11 @@ fn stack_init(L1: *lua.State, L: *lua_State) Errorset.Memory!void {
     L1.base = L1.top;
     L1.ci.?[0].base = L1.top;
     L1.ci.?[0].top = L1.top[@intCast(lua.config.MINSTACK)..];
+}
+
+fn freestack(L: *lua_State, L1: *lua.State) void {
+    lmem.Mfreearray(L, CallInfo, L1.base_ci, @intCast(L1.size_ci), L1.header.memcat);
+    lmem.Mfreearray(L, lobject.TValue, L1.stack, @intCast(L1.stacksize), L1.header.memcat);
 }
 
 fn f_luaopen(L: *lua_State) Errorset.Table!void {
@@ -818,6 +823,9 @@ pub fn Efreethread(L: *lua_State, L1: *lua.State, page: *lmem.lua_Page) void {
 }
 
 pub fn resetthread(L: *lua_State) Errorset.Memory!void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_resetthread(@ptrCast(L));
+    }
     // close upvalues before clearing anything
     lfunc.Fclose(L, @ptrCast(L.stack));
     // clear call frames
@@ -843,10 +851,16 @@ pub fn resetthread(L: *lua_State) Errorset.Memory!void {
 }
 
 pub fn isthreadreset(L: *lua_State) bool {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_isthreadreset(@ptrCast(L)) != 0;
+    }
     return L.ci == L.base_ci and L.base == L.top and L.curr_status == @intFromEnum(lua.Status.Ok);
 }
 
 pub fn newstate(f: lua.Alloc, ud: ?*anyopaque) Errorset.Table!*lua_State {
+    if (comptime !build_config.use_zig_backend) {
+        return @ptrCast(@alignCast(c.lua_newstate(@ptrCast(@alignCast(f)), ud) orelse return error.OutOfMemory));
+    }
     const l = f(ud, null, 0, @sizeOf(LG)) orelse return error.OutOfMemory;
     const L: *lua_State = @ptrCast(@alignCast(l));
     const g: *global_State = &(@as(*LG, @ptrCast(@alignCast(L)))).g;
