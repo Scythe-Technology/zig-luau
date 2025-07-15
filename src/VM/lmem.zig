@@ -204,6 +204,13 @@ inline fn sizeclass(sz: usize) i8 {
     return if (sz -% 1 < kMaxSmallSizeUsed) kSizeClassConfig.classForSize[sz] else -1;
 }
 
+inline fn debugpageset(set: *?*lua_Page) ?*?*lua_Page {
+    switch (comptime builtin.mode) {
+        .ReleaseFast, .ReleaseSmall => return null, // ReleaseFast and ReleaseSmall defines NDEBUG
+        else => return set, // ReleaseSafe and Debug does not define NDEBUG
+    }
+}
+
 // metadata for a block is stored in the first pointer of the block
 inline fn metadata(block: *anyopaque) *?*anyopaque {
     return @as(*?*anyopaque, @ptrCast(@alignCast(block)));
@@ -446,7 +453,7 @@ fn freeblock(L: *lua.State, sizeClass: u8, iblock: *anyopaque) void {
 
     // if it's the last block in the page, we don't need the page
     if (page.busyBlocks == 0)
-        freeclasspage(L, &g.freepages, &g.allpages, page, sizeClass);
+        freeclasspage(L, &g.freepages, debugpageset(&g.allpages), page, sizeClass);
 }
 
 fn freegcoblock(L: *lua.State, sizeClass: u8, block: *anyopaque, page: *lua_Page) void {
@@ -477,7 +484,7 @@ fn freegcoblock(L: *lua.State, sizeClass: u8, block: *anyopaque, page: *lua_Page
 
     // if it's the last block in the page, we don't need the page
     if (page.busyBlocks == 0)
-        freeclasspage(L, &g.freegcopages, &g.allgcopages, page, sizeClass);
+        freeclasspage(L, &g.freegcopages, debugpageset(&g.allgcopages), page, sizeClass);
 }
 
 pub fn Mnew_(L: *lua.State, nsize: usize, memcat: u8) Error!*anyopaque {
@@ -671,8 +678,8 @@ pub fn Mvisitpage(
 
     Mgetpagewalkinfo(page, &start, &end, &busyBlocks, &blockSize);
 
-    var pos: *u8 = @ptrCast(start);
-    while (pos != @as(*u8, @ptrCast(end))) : (pos = @ptrFromInt(@intFromPtr(pos) + @as(u32, @intCast(blockSize)))) {
+    var pos: [*]u8 = start;
+    while (pos != end) : (pos += @as(u32, @intCast(blockSize))) {
         const gco: *lstate.GCObject = @ptrCast(@alignCast(pos));
 
         // skip memory blocks that are already freed
