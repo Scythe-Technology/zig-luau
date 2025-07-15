@@ -121,7 +121,7 @@ test "standard library loading" {
     {
         var lua = try luau.init(&testing.allocator);
         defer lua.deinit();
-        lua.Lopenlibs();
+        try lua.Lopenlibs();
     }
 
     // open all standard libraries with individual functions
@@ -923,7 +923,7 @@ test "objectLen" {
 test "compile and run bytecode" {
     var lua = try luau.init(&testing.allocator);
     defer lua.deinit();
-    lua.Lopenlibs();
+    try lua.Lopenlibs();
 
     // Load bytecode
     const src = "return 133";
@@ -1463,7 +1463,7 @@ test "Metamethods" {
     var lua = try luau.init(&testing.allocator);
     defer lua.deinit();
 
-    lua.Lopenlibs();
+    try lua.Lopenlibs();
 
     _ = try lua.Lnewmetatable("MyMetatable");
 
@@ -1522,7 +1522,7 @@ test "getfieldObject" {
     var lua = try luau.init(&testing.allocator);
     defer lua.deinit();
 
-    lua.Lopenlibs();
+    try lua.Lopenlibs();
 
     try lua.newtable();
     try lua.Zsetfield(-1, "test", true);
