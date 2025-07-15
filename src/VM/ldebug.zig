@@ -1,6 +1,8 @@
 const c = @import("c");
 const std = @import("std");
 
+const build_config = @import("config");
+
 const lua = @import("lua.zig");
 const ltm = @import("ltm.zig");
 const lstate = @import("lstate.zig");
@@ -96,6 +98,9 @@ pub fn Gisnative(L: *lua.State, level: usize) bool {
 }
 
 pub fn singlestep(L: *lua.State, enabled: bool) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_singlestep(@ptrCast(L), if (enabled) 1 else 0);
+    }
     L.singlestep_on = enabled;
 }
 
