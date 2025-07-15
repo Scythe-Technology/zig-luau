@@ -244,7 +244,7 @@ pub fn Lregister(L: *lua.State, libname: ?[:0]const u8, funcs: []const Reg) Erro
     }
 }
 
-pub inline fn Lfindtable(L: *lua.State, idx: i32, fname: [:0]const u8, szhint: usize) ?[]const u8 {
+pub inline fn Lfindtable(L: *lua.State, idx: i32, fname: [:0]const u8, szhint: usize) !?[]const u8 {
     const p = c.luaL_findtable(@ptrCast(L), idx, fname, @truncate(@as(isize, @intCast(szhint))));
     if (p != null)
         return std.mem.span(p)
