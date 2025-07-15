@@ -166,9 +166,9 @@ pub const TValue = extern struct {
         return obj.ttisnil() or (obj.ttisboolean() and !obj.bvalue());
     }
 
-    pub inline fn lightuserdatatag(obj: *const TValue) c_int {
+    pub inline fn lightuserdatatag(obj: *const TValue) u8 {
         std.debug.assert(obj.ttislightuserdata());
-        return obj.extra[0];
+        return @intCast(obj.extra[0]);
     }
 
     pub inline fn checkliveness(obj: *const TValue, g: *const lstate.global_State) void {
@@ -575,12 +575,12 @@ pub const TKey = extern struct {
         return o.ttype() >= @intFromEnum(lua.Type.String);
     }
 
-    pub inline fn next(this: *TKey) i28 {
-        return this.pi.next;
+    pub inline fn setnilvalue(obj: *TKey) void {
+        obj.pi.tt = @intFromEnum(lua.Type.Nil);
     }
 
-    pub inline fn setnext(this: *TKey, num: i28) void {
-        this.pi.next = num;
+    pub inline fn next(this: *TKey) i28 {
+        return this.pi.next;
     }
 };
 
@@ -629,7 +629,7 @@ pub inline fn setnodekey(L: *lstate.lua_State, node: *LuaNode, obj: *const TValu
     obj.checkliveness(L.global);
 }
 
-pub inline fn getnodekey(L: *lstate.lua_State, obj: *TValue, node: *LuaNode) void {
+pub inline fn getnodekey(L: *lstate.lua_State, obj: *TValue, node: *const LuaNode) void {
     obj.value = node.key.value;
     @memcpy(obj.extra[0..lua.config.EXTRA_SIZE], node.key.extra[0..lua.config.EXTRA_SIZE]);
     obj.tt = @intCast(node.key.pi.tt);

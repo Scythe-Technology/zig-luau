@@ -60,9 +60,8 @@ pub fn Shash(str: []const u8) u32 {
 
     // original Lua 5.1 hash for compatibility (exact match when len<32)
     var i: usize = len;
-    while (i > 0) : (i -= 1) {
+    while (i > 0) : (i -= 1)
         h ^= (h << 5) + (h >> 2) + str[i - 1];
-    }
 
     return h;
 }

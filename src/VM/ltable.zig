@@ -243,8 +243,8 @@ fn setnodevector(L: *lua.State, t: *LuaTable, newsize: usize) Error!void {
         t.node = try lmem.Mnewarray(L, LuaNode, size, t.header.memcat);
         for (0..size) |i| {
             const n: *LuaNode = @ptrCast(t.gnode(i));
-            n.key.setnext(0);
-            n.gkey().pi.tt = @intFromEnum(lua.Type.Nil);
+            n.key.pi.next = 0;
+            n.gkey().setnilvalue();
             n.gval().setnilvalue();
         }
     }
@@ -324,6 +324,12 @@ fn adjustasize(t: *LuaTable, size: usize, ek: ?*const TValue) usize {
     while (adjusted_size + 1 == ekindex or (tbound and !Hgetnum(t, @intCast(adjusted_size + 1)).ttisnil()))
         adjusted_size += 1;
     return adjusted_size;
+}
+
+pub fn Hresizearray(L: *lua.State, t: *LuaTable, nasize: usize) Error!void {
+    const nsize = if (@as(*LuaNode, @ptrCast(t.node)) == dummynode) 0 else lobject.sizenode(t);
+    const asize = adjustasize(t, nasize, null);
+    try resize(L, t, asize, nsize);
 }
 
 pub fn Hresizehash(L: *lua.State, t: *LuaTable, nhsize: usize) Error!void {
@@ -439,20 +445,20 @@ fn newkey(L: *lua.State, t: *LuaTable, key: *const TValue) Error!*TValue {
             // yes; move colliding node into free position
             while (othern.add_num(othern.gnext()) != mp)
                 othern = othern.add_num(othern.gnext()); // find previous
-            othern.key.setnext(@intCast(n.sub(othern))); // redo the chain with `n' in place of `mp'
+            othern.key.pi.next = @truncate(n.sub(othern)); // redo the chain with `n' in place of `mp'
             n.* = mp.*; // copy colliding node into free pos. (mp->next also goes)
             if (mp.gnext() != 0) {
-                n.key.setnext(n.gnext() + @as(i28, @truncate(@as(isize, @intCast(mp.sub(n)))))); // correct 'next'
-                mp.key.setnext(0); // now 'mp' is free
+                n.key.pi.next += @truncate(mp.sub(n)); // correct 'next'
+                mp.key.pi.next = 0; // now 'mp' is free
             }
             mp.gval().setnilvalue();
         } else { // colliding node is in its own main position
             // new node will go into free position
             if (mp.gnext() != 0)
-                n.key.setnext(@intCast((mp.add_num(mp.gnext())).sub(n))) // chain new position
+                n.key.pi.next = @truncate((mp.add_num(mp.gnext())).sub(n)) // chain new position
             else
                 std.debug.assert(n.gnext() == 0);
-            mp.key.setnext(@truncate(@as(isize, @intCast(n.sub(mp)))));
+            mp.key.pi.next = @truncate(n.sub(mp));
             mp = n;
         }
     }
@@ -662,7 +668,7 @@ pub fn Hclear(tt: *LuaTable) void {
             const n = tt.gnode(i);
             n[0].gkey().setttype(.Nil);
             n[0].gval().setnilvalue();
-            n[0].key.setnext(0);
+            n[0].key.pi.next = 0;
         }
     }
 
