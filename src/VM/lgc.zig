@@ -267,11 +267,11 @@ fn traversetable(g: *lstate.global_State, h: *lobject.LuaTable) bool {
     if (!weakvalue) {
         i = @intCast(h.sizearray);
         while (i > 0) : (i -= 1)
-            markvalue(g, &h.array.?[i]);
+            markvalue(g, &h.array.?[i - 1]);
     }
     i = lobject.sizenode(h);
     while (i > 0) : (i -= 1) {
-        const n = h.gnode(i);
+        const n = h.gnode(i - 1);
         std.debug.assert(n[0].gkey().ttype() != @intFromEnum(lua.Type.Deadkey) or n[0].gval().ttisnil());
         if (n[0].gval().ttisnil())
             removeentry(@ptrCast(n)) // remove empty entries
@@ -459,14 +459,14 @@ fn cleartable(L: *lua.State, il: *lstate.GCObject) Errorset.Table!usize {
 
         var i: usize = @intCast(h.sizearray);
         while (i > 0) : (i -= 1) {
-            const o = &h.array.?[i];
+            const o = &h.array.?[i - 1];
             if (iscleared(o)) // value was collected?
                 o.setnilvalue(); // remove value
         }
         i = lobject.sizenode(h);
         var activevalues: usize = 0;
         while (i > 0) : (i -= 1) {
-            const n = h.gnode(i);
+            const n = h.gnode(i - 1);
 
             // non-empty entry?
             if (!n[0].gval().ttisnil()) {
