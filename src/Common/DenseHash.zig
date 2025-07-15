@@ -5,6 +5,10 @@ const cpp_std = @import("../cpp_std.zig");
 extern fn zig_new_any(size: usize) callconv(.c) *anyopaque;
 extern fn zig_delete_any(*anyopaque) callconv(.c) void;
 
+pub fn DenseHashPointer(key: *const anyopaque) usize {
+    return (@intFromPtr(key) >> 4) ^ (@intFromPtr(key) >> 9);
+}
+
 pub const detail = struct {
     pub fn DenseHashTable(
         comptime Key: type,
@@ -13,8 +17,23 @@ pub const detail = struct {
         comptime ItemInterface: type,
         comptime Hasher: type,
     ) type {
+        const hash = if (@hasDecl(Hasher, "hash")) Hasher.hash else struct {
+            pub fn hash(e: Key) usize {
+                if (comptime @typeInfo(Key) == .pointer) {
+                    return DenseHashPointer(@ptrCast(@alignCast(e)));
+                } else {
+                    @compileError("Hasher must implement 'hash' function");
+                }
+            }
+        }.hash;
+
+        const eq = if (@hasDecl(ItemInterface, "eq")) ItemInterface.eq else struct {
+            pub fn eq(a: Key, b: Key) bool {
+                return a == b;
+            }
+        }.eq;
+
         _ = MutableItem;
-        _ = Hasher;
         return extern struct {
             data: ?[*]Item = null,
             capacity: usize = 0,
@@ -42,6 +61,38 @@ pub const detail = struct {
                 };
             }
 
+            pub fn find(self: *This, key: Key) ?*const Item {
+                if (self.count == 0)
+                    return null;
+                if (eq(key, self.empty_key))
+                    return null;
+
+                const hashmod = self.capacity - 1;
+                var bucket = hash(key) & hashmod;
+                for (0..hashmod) |probe| {
+                    const probe_item = &self.data.?[bucket];
+
+                    // Element exists
+                    if (eq(ItemInterface.getKey(probe_item), key))
+                        return probe_item;
+
+                    // Element does not exist
+                    if (eq(ItemInterface.getKey(probe_item), self.empty_key))
+                        return null;
+
+                    // Hash collision, quadratic probing
+                    bucket = (bucket + probe + 1) & hashmod;
+                }
+
+                // Hash table is full - this should not happen
+                std.debug.assert(false);
+                return null;
+            }
+
+            pub fn size(self: This) usize {
+                return self.count;
+            }
+
             pub fn deinit(self: *This) void {
                 if (self.data) |data| {
                     ItemInterface.destroy(data, self.capacity);
@@ -58,12 +109,12 @@ pub const detail = struct {
 
 pub fn ItemInterfaceSet(comptime Key: type) type {
     return struct {
-        pub fn getKey(item: *const Key) *const Key {
-            return item;
+        pub fn getKey(item: *const Key) Key {
+            return item.*;
         }
 
-        pub fn setKey(item: *Key, key: *const Key) void {
-            item.* = key.*;
+        pub fn setKey(item: *Key, key: Key) void {
+            item.* = key;
         }
 
         pub fn fill(data: [*]Key, count: usize, key: Key) void {
@@ -82,12 +133,12 @@ pub fn ItemInterfaceSet(comptime Key: type) type {
 
 pub fn ItemInterfaceMap(comptime Key: type, comptime Value: type) type {
     return struct {
-        pub fn getKey(item: *const cpp_std.Pair(Key, Value)) *const Key {
+        pub fn getKey(item: *const cpp_std.Pair(Key, Value)) Key {
             return item.first;
         }
 
-        pub fn setKey(item: *cpp_std.Pair(Key, Value), key: *const Key) void {
-            item.first = key.*;
+        pub fn setKey(item: *cpp_std.Pair(Key, Value), key: Key) void {
+            item.first = key;
         }
 
         pub fn fill(data: [*]cpp_std.Pair(Key, Value), count: usize, key: Key) void {
