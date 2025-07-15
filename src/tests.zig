@@ -535,7 +535,7 @@ test "threads" {
     var lua = try luau.init(&testing.allocator);
     defer lua.deinit();
 
-    var new_thread = lua.newthread();
+    var new_thread = try lua.newthread();
 
     try expectEqual(1, lua.gettop());
     try expectEqual(0, new_thread.gettop());
@@ -550,7 +550,7 @@ test "threads" {
     try expectEqual(2, new_thread.gettop());
     try expectEqual(1, lua.gettop());
 
-    var new_thread2 = lua.newthread();
+    var new_thread2 = try lua.newthread();
 
     try expectEqual(2, lua.gettop());
     try expectEqual(0, new_thread2.gettop());
@@ -664,7 +664,7 @@ test "yielding no continuation" {
     var lua = try luau.init(&testing.allocator);
     defer lua.deinit();
 
-    const thread = lua.newthread();
+    const thread = try lua.newthread();
     const func = struct {
         fn inner(l: *State) !i32 {
             l.pushinteger(1);
