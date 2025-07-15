@@ -224,11 +224,11 @@ pub fn Lcallmeta(L: *lua.State, obj: i32, event: [:0]const u8) bool {
 
 pub fn Lregister(L: *lua.State, libname: ?[:0]const u8, funcs: []const Reg) Errorset.Table!void {
     if (libname) |name| {
-        _ = Lfindtable(L, lua.REGISTRYINDEX, "_LOADED", 1);
+        _ = try Lfindtable(L, lua.REGISTRYINDEX, "_LOADED", 1);
         _ = try L.getfield(-1, name);
         if (!L.istable(-1)) {
             L.pop(1);
-            if (Lfindtable(L, lua.GLOBALSINDEX, name, funcs.len)) |_|
+            if (try Lfindtable(L, lua.GLOBALSINDEX, name, funcs.len)) |_|
                 try LerrorL(L, "name conflict for module '{s}'", .{name});
             L.pushvalue(-1);
             try L.setfield(-3, name);
