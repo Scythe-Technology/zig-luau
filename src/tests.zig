@@ -1765,3 +1765,13 @@ test "Thread Data" {
     try lua.Zpushfunction(zigFn, "zigFn");
     try expectEqual(.Ok, lua.pcall(0, 0, 0));
 }
+
+test "Alloc pressure" {
+    var lua = try luau.init(&testing.allocator);
+    defer lua.deinit();
+
+    inline for (0..20) |_| {
+        try lua.createtable(0, 100);
+    }
+    lua.pop(20);
+}

@@ -618,7 +618,10 @@ pub fn Mrealloc_(L: *lua.State, block: ?*anyopaque, osize: usize, nsize: usize, 
 
     std.debug.assert((nsize == 0) == (result == null));
     g.totalbytes = (g.totalbytes - osize) + nsize;
-    g.memcatbytes[memcat] += nsize - osize;
+    if (nsize < osize)
+        g.memcatbytes[memcat] -= osize - nsize
+    else
+        g.memcatbytes[memcat] += nsize - osize;
 
     if (g.cb.onallocate) |onallocate| {
         @branchHint(.unlikely);

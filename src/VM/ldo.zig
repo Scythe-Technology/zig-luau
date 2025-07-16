@@ -89,7 +89,8 @@ pub fn Dreallocstack(L: *lua.State, newsize: usize, fornewci: bool) Errorset.Mem
     std.debug.assert(L.stack_last - L.stack == L.stacksize - lstate.EXTRA_STACK);
     L.stack = try lmem.Mreallocarray(L, lobject.TValue, L.stack, @intCast(L.stacksize), realsize, L.header.memcat);
     const newstack = L.stack;
-    for (@intCast(L.stacksize)..realsize) |i|
+    var i: usize = @intCast(L.stacksize);
+    while (i < realsize) : (i += 1)
         newstack[i].setnilvalue();
     L.stacksize = @intCast(realsize);
     L.stack_last = newstack[newsize..];

@@ -110,11 +110,9 @@ pub inline fn makewhite(g: *lstate.global_State, x: *lstate.GCObject) void {
 }
 
 pub inline fn white2gray(x: *lstate.GCObject) void {
-    std.debug.assert(isblack(x));
     x.gch.header.marked &= ~(bitmask(WHITE0BIT) | bitmask(WHITE1BIT));
 }
 pub inline fn black2gray(x: *lstate.GCObject) void {
-    std.debug.assert(isblack(x));
     x.gch.header.marked &= ~(bitmask(BLACKBIT));
 }
 
@@ -122,7 +120,7 @@ pub inline fn stringmark(s: *lobject.TString) void {
     s.header.marked &= ~(bitmask(WHITE0BIT) | bitmask(WHITE1BIT));
 }
 
-pub inline fn markvalue(g: *lstate.global_State, o: *lobject.TValue) void {
+pub inline fn markvalue(g: *lstate.global_State, o: anytype) void {
     std.debug.assert(!o.iscollectable() or o.ttype() == o.value.gc.?.gch.header.tt);
     if (o.iscollectable() and iswhite(o.gcvalue()))
         reallymarkobject(g, o.gcvalue());
@@ -278,9 +276,9 @@ fn traversetable(g: *lstate.global_State, h: *lobject.LuaTable) bool {
         else {
             std.debug.assert(!n[0].gkey().ttisnil());
             if (!weakkey)
-                markvalue(g, @ptrCast(@alignCast(n[0].gkey())));
+                markvalue(g, n[0].gkey());
             if (!weakvalue)
-                markvalue(g, @ptrCast(@alignCast(n[0].gval())));
+                markvalue(g, n[0].gval());
         }
     }
     return weakkey or weakvalue;
@@ -318,7 +316,7 @@ fn traverseclosure(g: *lstate.global_State, cl: *lobject.Closure) void {
         std.debug.assert(cl.nupvalues == cl.d.l.p.nups);
         markobject(g, @ptrCast(@alignCast(cl.d.l.p)));
         for (0..cl.nupvalues) |i| // mark its upvalues
-            markvalue(g, @ptrCast(&cl.d.l.upreferences()[i]));
+            markvalue(g, &cl.d.l.upreferences()[i]);
     }
 }
 
@@ -326,8 +324,9 @@ fn traversestack(g: *lstate.global_State, L: *lua.State) void {
     markobject(g, @ptrCast(@alignCast(L.gt)));
     if (L.namecall) |nc|
         stringmark(nc);
-    for (L.stack[0 .. L.stack - L.top]) |*o|
-        markvalue(g, o);
+    var o: [*]lobject.TValue = L.stack;
+    while (@intFromPtr(o) < @intFromPtr(L.top)) : (o += 1)
+        markvalue(g, @as(*lobject.TValue, @ptrCast(@alignCast(o))));
     var uv: ?*lobject.UpVal = L.openupval;
     while (uv) |u| : (uv = u.u.open.threadnext) {
         std.debug.assert(u.upisopen());
@@ -560,7 +559,7 @@ fn markroot(L: *lua.State) void {
     markobject(g, @ptrCast(@alignCast(g.mainthread)));
     // make global table be traversed before main stack
     markobject(g, @ptrCast(@alignCast(g.mainthread.gt)));
-    markvalue(g, @ptrCast(L.registry()));
+    markvalue(g, L.registry());
     markmt(g);
     g.gcstate = GCSpropagate;
 }

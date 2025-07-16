@@ -1275,7 +1275,7 @@ pub fn newuserdatataggedwithmetatable(L: *lua.State, comptime T: type, tag: u8) 
 
     u.metatable = h;
 
-    L.top.setuvalue(L, u);
+    L.top[0].setuvalue(L, u);
     api_incr_top(L);
     return @ptrCast(@alignCast(&u.data));
 }
@@ -1469,8 +1469,8 @@ pub fn setuserdatametatable(L: *lua.State, tag: u8) void {
     }
     api_check(L, tag < lua.config.UTAG_LIMIT);
     api_check(L, L.global.udatamt[tag] == null); // reassignment not supported
-    api_check(L, L.top[1].ttistable());
     const n = L.top - 1;
+    api_check(L, n[0].ttistable());
     L.global.udatamt[tag] = n[0].hvalue();
     L.top = n;
 }
