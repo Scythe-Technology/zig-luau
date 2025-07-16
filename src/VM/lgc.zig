@@ -448,7 +448,7 @@ pub inline fn iscleared(o: *lobject.TValue) bool {
 }
 
 /// clear collected entries from weaktables
-fn cleartable(L: *lua.State, il: *lstate.GCObject) Errorset.Table!usize {
+fn cleartable(L: *lua.State, il: ?*lstate.GCObject) Errorset.Table!usize {
     var work: usize = 0;
     var ol: ?*lstate.GCObject = il;
     while (ol) |l| {
@@ -639,7 +639,7 @@ fn atomic(L: *lua.State) Errorset.Table!usize {
     // TODO: LUAI_GCMETRICS
 
     // remove collected objects from weak tables
-    work += try cleartable(L, g.weak.?);
+    work += try cleartable(L, g.weak);
     g.weak = null;
 
     // TODO: LUAI_GCMETRICS
