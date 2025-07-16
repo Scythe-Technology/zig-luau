@@ -567,8 +567,8 @@ fn markroot(L: *lua.State) void {
 fn remarkupvals(g: *lstate.global_State) usize {
     var work: usize = 0;
 
-    var uv: ?*lobject.UpVal = g.mainthread.openupval;
-    while (uv != &g.uvhead) : (uv = uv.?.u.open.threadnext) {
+    var uv: ?*lobject.UpVal = g.uvhead.u.open.next;
+    while (uv != &g.uvhead) : (uv = uv.?.u.open.next) {
         const u = uv.?;
         work += @sizeOf(lobject.UpVal);
 
