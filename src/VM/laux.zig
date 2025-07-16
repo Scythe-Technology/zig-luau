@@ -108,7 +108,7 @@ pub fn Lnewmetatable(L: *lua.State, tname: [:0]const u8) !bool {
     return true;
 }
 
-pub inline fn Lgetmetatable(L: *lua.State, tname: [:0]const u8) lua.Type {
+pub inline fn Lgetmetatable(L: *lua.State, tname: [:0]const u8) !lua.Type {
     return L.getfield(lua.REGISTRYINDEX, tname);
 }
 
