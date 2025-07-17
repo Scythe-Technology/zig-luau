@@ -1920,7 +1920,7 @@ test "String (S)" {
 
         _ = try T.pcall(0, 0, 0).check();
     }
-    {
+    if (EXCEPTIONS_ENABLED) {
         const T = try lua.newthread();
 
         errdefer std.debug.print("error: {s}\n", .{T.tostring(-1).?});
