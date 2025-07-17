@@ -26,19 +26,19 @@ pub inline fn Dcheckstackfornewci(L: *lua.State, n: usize) Errorset.Memory!void 
     if (@intFromPtr(L.stack_last) - @intFromPtr(L.top) < n * @sizeOf(lobject.TValue))
         try Dreallocstack(L, getgrownstacksize(L, n), true)
     else
-        try Dreallocstack(L, L.stacksize - lstate.EXTRA_STACK, true);
+        try Dreallocstack(L, @as(u32, @intCast(L.stacksize - lstate.EXTRA_STACK)), true);
 }
 
 pub inline fn Dcheckstack(L: *lua.State, n: usize) Errorset.Memory!void {
     if (@intFromPtr(L.stack_last) - @intFromPtr(L.top) < n * @sizeOf(lobject.TValue))
         try Dgrowstack(L, n)
     else
-        try Dreallocstack(L, @as(u32, @intCast(L.stacksize)) - lstate.EXTRA_STACK, false);
+        try Dreallocstack(L, @as(u32, @intCast(L.stacksize - lstate.EXTRA_STACK)), false);
 }
 
 pub inline fn incr_top(L: *lua.State) Errorset.Memory!void {
     try Dcheckstack(L, 1);
-    L.top = L.top[1..];
+    L.top += 1;
 }
 
 pub inline fn expandstacklimit(L: *lua.State, p: *lobject.TValue) void {
@@ -48,20 +48,18 @@ pub inline fn expandstacklimit(L: *lua.State, p: *lobject.TValue) void {
 }
 
 fn correctstack(L: *lua.State, oldstack: [*]lobject.TValue) void {
-    const oldstack_0 = @intFromPtr(oldstack);
-    const newstack_0 = @intFromPtr(L.stack);
-    L.top = @ptrFromInt((@intFromPtr(L.top) - oldstack_0) + newstack_0);
+    L.top = L.stack + (L.top - oldstack);
     var up: ?*lobject.UpVal = L.openupval;
     while (up) |uv| : (up = uv.u.open.threadnext)
-        uv.v = @ptrFromInt((@intFromPtr(uv.v) - oldstack_0) + newstack_0);
-    var ci = L.base_ci;
+        uv.v = @ptrCast(L.stack + (@as([*]lobject.TValue, @ptrCast(uv.v)) - oldstack));
+    var ci = L.base_ci.?;
     const top_bound = @intFromPtr(L.ci);
-    while (@intFromPtr(ci) <= top_bound) : (ci = ci.?[1..]) {
-        ci.?[0].top = @ptrFromInt((@intFromPtr(ci.?[0].top) - oldstack_0) + newstack_0);
-        ci.?[0].base = @ptrFromInt((@intFromPtr(ci.?[0].base) - oldstack_0) + newstack_0);
-        ci.?[0].func = @ptrFromInt((@intFromPtr(ci.?[0].func) - oldstack_0) + newstack_0);
+    while (@intFromPtr(ci) <= top_bound) : (ci += 1) {
+        ci[0].top = L.stack + (ci[0].top - oldstack);
+        ci[0].base = L.stack + (ci[0].base - oldstack);
+        ci[0].func = L.stack + (ci[0].func - oldstack);
     }
-    L.base = @ptrFromInt((@intFromPtr(L.base) - oldstack_0) + newstack_0);
+    L.base = L.stack + (L.base - oldstack);
 }
 
 pub fn Dreallocstack(L: *lua.State, newsize: usize, fornewci: bool) Errorset.Memory!void {
@@ -93,16 +91,16 @@ pub fn Dreallocstack(L: *lua.State, newsize: usize, fornewci: bool) Errorset.Mem
     while (i < realsize) : (i += 1)
         newstack[i].setnilvalue();
     L.stacksize = @intCast(realsize);
-    L.stack_last = newstack[newsize..];
+    L.stack_last = newstack + newsize;
     correctstack(L, oldstack);
 }
 
 pub fn DreallocCI(L: *lua.State, newsize: usize) Errorset.Memory!void {
     const oldci = L.base_ci;
-    L.base_ci = @ptrCast(@alignCast(try lmem.Mreallocarray(L, lstate.CallInfo, @ptrCast(@alignCast(L.base_ci.?)), @intCast(L.size_ci), newsize, L.header.memcat)));
+    L.base_ci = try lmem.Mreallocarray(L, lstate.CallInfo, L.base_ci, @intCast(L.size_ci), newsize, L.header.memcat);
     L.size_ci = @intCast(newsize);
     L.ci = @ptrFromInt((@intFromPtr(L.ci) - @intFromPtr(oldci)) + @intFromPtr(L.base_ci));
-    L.end_ci = L.base_ci.?[newsize - 1 ..];
+    L.end_ci = L.base_ci.? + newsize - 1;
 }
 
 pub fn Dgrowstack(L: *lua.State, n: usize) Errorset.Memory!void {

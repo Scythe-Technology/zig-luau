@@ -28,32 +28,28 @@ pub inline fn Sfix(s: *lobject.TString) void {
 }
 
 pub fn Shash(str: []const u8) u32 {
-    @setRuntimeSafety(false);
     // Note that this hashing algorithm is replicated in BytecodeBuilder.cpp, BytecodeBuilder::getStringHash
     var src = str;
     var len: usize = str.len;
 
     var a: u32 = 0;
     var b: u32 = 0;
-    var h: u32 = @intCast(len);
+    var h: u32 = @truncate(len);
 
     // hash prefix in 12b chunks (using aligned reads) with ARX based hash (LuaJIT v2.1, lookup3)
     // note that we stop at length<32 to maintain compatibility with Lua 5.1
     while (len >= 32) : (len -= 12) {
-        var block: [12]u8 = undefined;
-        @memcpy(&block, src[0..12]);
-
-        a += std.mem.readInt(u32, block[0..4], builtin.cpu.arch.endian());
-        b += std.mem.readInt(u32, block[4..8], builtin.cpu.arch.endian());
-        h += std.mem.readInt(u32, block[8..12], builtin.cpu.arch.endian());
+        a +%= std.mem.readInt(u32, src[0..4], builtin.cpu.arch.endian());
+        b +%= std.mem.readInt(u32, src[4..8], builtin.cpu.arch.endian());
+        h +%= std.mem.readInt(u32, src[8..12], builtin.cpu.arch.endian());
 
         // mix
         a ^= h;
-        a -= ((h >> 14) | (h << (32 - 14)));
+        a -%= ((h >> 14) | (h << (32 - 14)));
         b ^= a;
-        b -= ((a >> 11) | (a << (32 - 11)));
+        b -%= ((a >> 11) | (a << (32 - 11)));
         h ^= b;
-        h -= ((b >> 25) | (b << (32 - 25)));
+        h -%= ((b >> 25) | (b << (32 - 25)));
 
         src = src[12..];
     }
@@ -61,7 +57,7 @@ pub fn Shash(str: []const u8) u32 {
     // original Lua 5.1 hash for compatibility (exact match when len<32)
     var i: usize = len;
     while (i > 0) : (i -= 1)
-        h ^= (h << 5) + (h >> 2) + str[i - 1];
+        h ^= (h << 5) +% (h >> 2) +% src[i - 1];
 
     return h;
 }
@@ -208,5 +204,5 @@ pub fn Sfree(L: *lua.State, ts: *lobject.TString, page: *lmem.lua_Page) void {
     else
         std.debug.assert(ts.next == null); // orphaned string buffer
 
-    lmem.Mfreegco(L, @ptrCast(@alignCast(ts)), sizestring(ts.len), ts.header.memcat, page);
+    lmem.Mfreegco(L, ts.obj2gco(), sizestring(ts.len), ts.header.memcat, page);
 }

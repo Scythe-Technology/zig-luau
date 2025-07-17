@@ -582,7 +582,7 @@ pub fn Mfreegco_(L: *lua.State, block: ?*lstate.GCObject, osize: usize, memcat: 
 }
 pub inline fn Mfreegco(L: *lua.State, p: *lstate.GCObject, size: usize, memcat: u8, page: *lua_Page) void {
     std.debug.assert(p.gch.header.tt >= @intFromEnum(lua.Type.String));
-    Mfreegco_(L, @ptrCast(@alignCast(p)), size, memcat, page);
+    Mfreegco_(L, p, size, memcat, page);
 }
 
 pub fn Mrealloc_(L: *lua.State, block: ?*anyopaque, osize: usize, nsize: usize, memcat: u8) Error!?*anyopaque {

@@ -398,7 +398,7 @@ pub fn Hfree(L: *lua.State, t: *LuaTable, page: *lmem.lua_Page) void {
         lmem.Mfreearray(L, LuaNode, t.node, lobject.sizenode(t), t.header.memcat);
     if (t.array) |arr|
         lmem.Mfreearray(L, TValue, arr, @intCast(t.sizearray), t.header.memcat);
-    lmem.Mfreegco(L, @ptrCast(@alignCast(t)), @sizeOf(LuaTable), t.header.memcat, page);
+    lmem.Mfreegco(L, t.obj2gco(), @sizeOf(LuaTable), t.header.memcat, page);
 }
 
 fn getfreepos(t: *LuaTable) ?*LuaNode {

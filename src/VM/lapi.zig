@@ -213,7 +213,7 @@ pub fn settop(L: *lua.State, idx: i32) void {
         L.top = t;
     } else {
         api_check(L, -(idx + 1) <= L.top - L.base);
-        L.top = L.top - @as(usize, @intCast(-(idx + 1))); // `subtract' index (index is negative)
+        L.top -= @as(usize, @intCast(-(idx + 1))); // `subtract' index (index is negative)
     }
 }
 pub inline fn pop(L: *lua.State, n: i32) void {
@@ -779,7 +779,7 @@ pub fn pushcclosurek(
         cl.d.c.upvalues()[nu].setobj(L, @ptrCast(L.top + nu));
     }
     L.top[0].setclvalue(L, cl);
-    std.debug.assert(lgc.iswhite(@ptrCast(@alignCast(cl))));
+    std.debug.assert(lgc.iswhite(cl.obj2gco()));
     api_incr_top(L);
 }
 pub inline fn pushcfunction(L: *lua.State, f: lua.CFunction, debugname: [:0]const u8) Errorset.Table!void {
@@ -1268,7 +1268,7 @@ pub fn newuserdatataggedwithmetatable(L: *lua.State, comptime T: type, tag: u8) 
     const u = try ludata.Unewudata(L, @sizeOf(T), tag);
 
     // currently, we always allocate unmarked objects, so forward barrier can be skipped
-    std.debug.assert(!lgc.isblack(@ptrCast(@alignCast(u))));
+    std.debug.assert(!lgc.isblack(u.obj2gco()));
 
     const h = L.global.udatamt[tag];
     api_check(L, h != null);
@@ -1337,7 +1337,7 @@ fn aux_upvalue(fi: *lobject.TValue, n: u32, val: **lobject.TValue) ?[:0]const u8
 
 pub fn getupvalue(L: *lua.State, funcindex: i32, n: u32) ?[:0]const u8 {
     if (comptime !build_config.use_zig_backend) {
-        const name = c.lua_getupvalue(@ptrCast(L), funcindex, n);
+        const name = c.lua_getupvalue(@ptrCast(L), funcindex, @intCast(n));
         if (name != null)
             return std.mem.span(name);
         return null;
@@ -1353,7 +1353,7 @@ pub fn getupvalue(L: *lua.State, funcindex: i32, n: u32) ?[:0]const u8 {
 
 pub fn setupvalue(L: *lua.State, funcidx: i32, n: u32) ?[:0]const u8 {
     if (comptime !build_config.use_zig_backend) {
-        const name = c.lua_setupvalue(@ptrCast(L), funcidx, n);
+        const name = c.lua_setupvalue(@ptrCast(L), funcidx, @intCast(n));
         if (name != null)
             return std.mem.span(name);
         return null;

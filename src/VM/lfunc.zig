@@ -9,10 +9,10 @@ const lcommon = @import("lcommon.zig");
 const lobject = @import("lobject.zig");
 
 pub inline fn sizeCclosure(n: u8) usize {
-    return @offsetOf(lobject.Closure, "d") + @offsetOf(lobject.Closure.ValueUnion.C, "upvals") + (@sizeOf(lobject.TValue) * n);
+    return @offsetOf(lobject.Closure, "d") + @offsetOf(lobject.Closure.ValueUnion.C, "upvals") + (@sizeOf(lobject.TValue) * @as(usize, @intCast(n)));
 }
 pub inline fn sizeLclosure(n: u8) usize {
-    return @offsetOf(lobject.Closure, "d") + @offsetOf(lobject.Closure.ValueUnion.L, "uprefs") + (@sizeOf(lobject.TValue) * n);
+    return @offsetOf(lobject.Closure, "d") + @offsetOf(lobject.Closure.ValueUnion.L, "uprefs") + (@sizeOf(lobject.TValue) * @as(usize, @intCast(n)));
 }
 
 pub fn Fnewproto(L: *lua.State) !*lobject.Proto {
@@ -91,7 +91,7 @@ pub fn FnewCclosure(L: *lua.State, nelems: u8, e: *lobject.LuaTable) !*lobject.C
 }
 
 pub fn Ffreeupval(L: *lua.State, uv: *lobject.UpVal, page: *lmem.lua_Page) void {
-    lmem.Mfreegco(L, @ptrCast(@alignCast(uv)), @sizeOf(lobject.UpVal), uv.header.memcat, page); // free upvalue
+    lmem.Mfreegco(L, uv.obj2gco(), @sizeOf(lobject.UpVal), uv.header.memcat, page); // free upvalue
 }
 
 pub fn Fclose(L: *lua.State, level: *lobject.TValue) void {
@@ -100,7 +100,7 @@ pub fn Fclose(L: *lua.State, level: *lobject.TValue) void {
     const lvl_num = @intFromPtr(level);
     while (uv != null and @intFromPtr(uv.?.v) >= lvl_num) : (uv = L.openupval) {
         const u = uv.?;
-        const o: *lstate.GCObject = @ptrCast(@alignCast(u));
+        const o: *lstate.GCObject = u.obj2gco();
         std.debug.assert(!lgc.isblack(o) and u.upisopen());
         std.debug.assert(!lgc.isdead(g, o));
 
@@ -142,10 +142,10 @@ pub fn Ffreeproto(L: *lua.State, f: *lobject.Proto, page: *lmem.lua_Page) void {
     if (f.typeinfo) |ti|
         lmem.Mfreearray(L, u8, ti, @intCast(f.sizetypeinfo), f.header.memcat);
 
-    lmem.Mfreegco(L, @ptrCast(@alignCast(f)), @sizeOf(lobject.Proto), f.header.memcat, page);
+    lmem.Mfreegco(L, f.obj2gco(), @sizeOf(lobject.Proto), f.header.memcat, page);
 }
 
 pub fn Ffreeclosure(L: *lua.State, c: *lobject.Closure, page: *lmem.lua_Page) void {
     const size = if (c.isC != 0) sizeCclosure(c.nupvalues) else sizeLclosure(c.nupvalues);
-    lmem.Mfreegco(L, @ptrCast(@alignCast(c)), size, c.header.memcat, page);
+    lmem.Mfreegco(L, c.obj2gco(), size, c.header.memcat, page);
 }
