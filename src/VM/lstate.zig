@@ -724,7 +724,7 @@ fn stack_init(L1: *lua.State, L: *lua_State) Errorset.Memory!void {
     L1.base_ci = try lmem.Mnewarray(L, CallInfo, BASIC_CI_SIZE, L1.header.memcat);
     L1.ci = L1.base_ci.?;
     L1.size_ci = BASIC_CI_SIZE;
-    L1.end_ci = L1.base_ci.?[@intCast(L1.size_ci - 1)..];
+    L1.end_ci = L1.base_ci.? + @as(usize, @intCast(L1.size_ci - 1));
     // initialize stack array
     L1.stack = try lmem.Mnewarray(L, lobject.TValue, BASIC_STACK_SIZE + EXTRA_STACK, L1.header.memcat);
     L1.stacksize = BASIC_STACK_SIZE + EXTRA_STACK;
@@ -735,11 +735,11 @@ fn stack_init(L1: *lua.State, L: *lua_State) Errorset.Memory!void {
     L1.stack_last = stack[@intCast(L1.stacksize - EXTRA_STACK)..];
     // initialize first ci
     L1.ci.?[0].func = L1.top;
-    L1.top = L1.top[1..];
+    L1.top += 1;
     L1.top[0].setnilvalue(); // `function' entry for this `ci'
     L1.base = L1.top;
     L1.ci.?[0].base = L1.top;
-    L1.ci.?[0].top = L1.top[@intCast(lua.config.MINSTACK)..];
+    L1.ci.?[0].top = L1.top + @as(usize, @intCast(lua.config.MINSTACK));
 }
 
 fn freestack(L: *lua_State, L1: *lua.State) void {

@@ -45,5 +45,5 @@ pub fn Ufreeudata(L: *lua.State, u: *lobject.Udata, page: *lmem.lua_Page) void {
             d(@ptrCast(@alignCast(&u.data)));
     }
 
-    lmem.Mfreegco(L, @ptrCast(@alignCast(u)), sizeudata(@intCast(u.len)), u.header.memcat, page);
+    lmem.Mfreegco(L, u.obj2gco(), sizeudata(@intCast(u.len)), u.header.memcat, page);
 }

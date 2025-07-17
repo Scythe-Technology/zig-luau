@@ -85,6 +85,11 @@ pub const TValue = extern struct {
         return obj.ttype() == @intFromEnum(lua.Type.UpVal);
     }
 
+    pub inline fn obj2gco(obj: *TValue) *lstate.GCObject {
+        std.debug.assert(obj.iscollectable());
+        return @ptrCast(@alignCast(obj));
+    }
+
     pub inline fn gcvalue(obj: *const TValue) *lstate.GCObject {
         std.debug.assert(obj.iscollectable());
         return obj.value.gc.?;
@@ -259,6 +264,10 @@ pub const TString = extern struct {
     /// string data is allocated right after the header
     data: [1]u8,
 
+    pub inline fn obj2gco(obj: *TString) *lstate.GCObject {
+        return @ptrCast(@alignCast(obj));
+    }
+
     pub inline fn gdata(s: *TString) [*]u8 {
         return @ptrCast(@alignCast(&s.data));
     }
@@ -282,6 +291,10 @@ pub const Udata = extern struct {
     metatable: ?*LuaTable,
 
     data: [1]u8 align(8),
+
+    pub inline fn obj2gco(obj: *Udata) *lstate.GCObject {
+        return @ptrCast(@alignCast(obj));
+    }
 };
 
 pub const Buffer = extern struct {
@@ -290,6 +303,10 @@ pub const Buffer = extern struct {
     len: c_uint,
 
     data: [1]u8 align(8),
+
+    pub inline fn obj2gco(obj: *Buffer) *lstate.GCObject {
+        return @ptrCast(@alignCast(obj));
+    }
 };
 
 ///
@@ -341,6 +358,10 @@ pub const Proto = extern struct {
     linedefined: c_int,
     bytecodeid: c_int,
     sizetypeinfo: c_int,
+
+    pub inline fn obj2gco(obj: *Proto) *lstate.GCObject {
+        return @ptrCast(@alignCast(obj));
+    }
 };
 
 pub const LocVar = extern struct {
@@ -378,6 +399,10 @@ pub const UpVal = extern struct {
             threadnext: ?*UpVal,
         },
     },
+
+    pub inline fn obj2gco(obj: *UpVal) *lstate.GCObject {
+        return @ptrCast(@alignCast(obj));
+    }
 
     pub inline fn upisopen(up: *const UpVal) bool {
         return up.v != &up.u.value;
@@ -424,6 +449,10 @@ pub const Closure = extern struct {
             }
         };
     };
+
+    pub inline fn obj2gco(obj: *Closure) *lstate.GCObject {
+        return @ptrCast(@alignCast(obj));
+    }
 };
 
 pub const TKey = extern struct {
@@ -638,6 +667,10 @@ pub const LuaTable = extern struct {
     array: ?[*]TValue, // array part
     node: [*]LuaNode,
     gclist: ?*lstate.GCObject,
+
+    pub inline fn obj2gco(obj: *LuaTable) *lstate.GCObject {
+        return @ptrCast(@alignCast(obj));
+    }
 
     pub inline fn gnode(t: *const LuaTable, i: usize) [*]LuaNode {
         return t.node + i;

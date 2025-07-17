@@ -1766,12 +1766,184 @@ test "Thread Data" {
     try expectEqual(.Ok, lua.pcall(0, 0, 0));
 }
 
-test "Alloc pressure" {
+test "Alloc (P)" {
     var lua = try luau.init(&testing.allocator);
     defer lua.deinit();
 
     inline for (0..20) |_| {
         try lua.createtable(0, 100);
     }
+
     lua.pop(20);
+}
+
+test "Alloc Ref (P)" {
+    var lua = try luau.init(&testing.allocator);
+    defer lua.deinit();
+
+    const noopFn = struct {
+        fn inner(_: *State) callconv(.c) i32 {
+            return 0;
+        }
+    }.inner;
+
+    inline for (0..15) |_| {
+        try lua.createtable(0, 100);
+        try lua.pushcclosure(noopFn, "test", 0);
+        try lua.rawsetfield(-2, "test");
+    }
+
+    lua.pop(15);
+
+    inline for (0..15) |_| {
+        try lua.createtable(0, 100);
+        inline for (0..5) |_|
+            try lua.createtable(0, 100);
+        try lua.pushcclosure(noopFn, "test", 5);
+        try lua.rawsetfield(-2, "test");
+    }
+
+    lua.pop(15);
+
+    {
+        const T = try lua.newthread();
+
+        const src =
+            \\local a = foo();
+            \\local dead = (function()
+            \\    foo()
+            \\end);
+            \\foo()
+            \\dead = nil;
+            \\for _ = 0, 10 do
+            \\    (function()
+            \\        foo(a)
+            \\    end)()
+            \\end
+            \\a = 1
+        ;
+        const bc = try luau.compile(testing.allocator, src, .{
+            .debugLevel = 0,
+            .optimizationLevel = 1,
+        });
+        defer testing.allocator.free(bc);
+
+        try T.Zsetglobalfn("foo", struct {
+            fn inner(L: *State) !i32 {
+                inline for (0..15) |_| {
+                    try L.createtable(0, 40);
+                }
+                return 1;
+            }
+        }.inner);
+
+        try T.load("module", bc, 0);
+
+        T.call(0, 0);
+    }
+    lua.pop(1);
+    {
+        const T = try lua.newthread();
+
+        const src =
+            \\local a = foo();
+            \\local dead = (function()
+            \\    foo()
+            \\end);
+            \\foo()
+            \\dead = nil;
+            \\for _ = 0, 10 do
+            \\    (function()
+            \\        foo(a)
+            \\    end)()
+            \\end
+            \\a = 1
+        ;
+        const bc = try luau.compile(testing.allocator, src, .{
+            .debugLevel = 0,
+            .optimizationLevel = 1,
+        });
+        defer testing.allocator.free(bc);
+
+        try T.Zsetglobalfn("foo", struct {
+            fn inner(L: *State) !i32 {
+                inline for (0..15) |_| {
+                    try L.createtable(0, 40);
+                }
+                return 1;
+            }
+        }.inner);
+
+        try T.load("module", bc, 0);
+
+        T.call(0, 0);
+    }
+    lua.pop(1);
+
+    inline for (0..15) |_| {
+        try lua.createtable(0, 100);
+        try lua.pushcclosure(noopFn, "test", 0);
+        try lua.rawsetfield(-2, "test");
+    }
+
+    lua.pop(15);
+}
+
+test "String (S)" {
+    var lua = try luau.init(&testing.allocator);
+    defer lua.deinit();
+
+    lua.openbase();
+
+    {
+        const T = try lua.newthread();
+
+        errdefer std.debug.print("error: {s}\n", .{T.tostring(-1).?});
+
+        const src =
+            \\assert(foo() == `Hello, world`)
+        ;
+        const bc = try luau.compile(testing.allocator, src, .{
+            .debugLevel = 0,
+            .optimizationLevel = 1,
+        });
+        defer testing.allocator.free(bc);
+
+        try T.Zsetglobalfn("foo", struct {
+            fn inner(L: *State) !i32 {
+                try L.pushlstring("Hello, world");
+                return 1;
+            }
+        }.inner);
+
+        try T.load("module", bc, 0);
+
+        _ = try T.pcall(0, 0, 0).check();
+    }
+    {
+        const T = try lua.newthread();
+
+        errdefer std.debug.print("error: {s}\n", .{T.tostring(-1).?});
+
+        const src =
+            \\local ok, res = pcall(foo)
+            \\assert(res == `foo bar baz, a long string, luau`)
+            \\assert(not ok)
+        ;
+        const bc = try luau.compile(testing.allocator, src, .{
+            .debugLevel = 1,
+            .optimizationLevel = 2,
+        });
+        defer testing.allocator.free(bc);
+
+        try T.Zsetglobalfn("foo", struct {
+            fn inner(L: *State) !i32 {
+                return L.Zerror("foo bar baz, a long string, luau");
+            }
+        }.inner);
+
+        try T.load("module", bc, 0);
+
+        _ = try T.pcall(0, 0, 0).check();
+    }
 }

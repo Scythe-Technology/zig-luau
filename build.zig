@@ -35,6 +35,9 @@ pub fn build(b: *Build) !void {
     const use_4_vector = b.option(bool, "use_4_vector", "Build Luau to use 4-vectors instead of the default 3-vector.") orelse false;
     const wasm_env_name = b.option([]const u8, "wasm_env", "The environment to import symbols from when building for WebAssembly.") orelse "env";
 
+    const hard_stack_tests = b.option(bool, "hard_stack_tests", "Enable hard stack tests") orelse false;
+    const hard_mem_tests = b.option(u8, "hard_mem_tests", "Enable hard memory tests") orelse 0;
+
     const no_llvm = b.option(bool, "no_llvm", "Build without llvm (tests only + best with zig backend)") orelse false;
     const no_bin = b.option(bool, "no_bin", "Build without binary artifacts") orelse false;
 
@@ -42,6 +45,8 @@ pub fn build(b: *Build) !void {
     const config = b.addOptions();
     config.addOption(bool, "use_4_vector", use_4_vector);
     config.addOption(bool, "use_zig_backend", use_zig_backend);
+    config.addOption(u8, "hard_mem_tests", hard_mem_tests);
+    config.addOption(bool, "hard_stack_tests", hard_stack_tests);
     config.addOption(std.SemanticVersion, "luau_version", version);
 
     config.addOption(bool, "buildAst", build_Ast);
@@ -69,6 +74,10 @@ pub fn build(b: *Build) !void {
     try FLAGS.append("-DLUA_API=extern\"C\"");
     try FLAGS.append("-DLUACODE_API=extern\"C\"");
     try FLAGS.append("-DLUACODEGEN_API=extern\"C\"");
+    if (hard_mem_tests > 0)
+        try FLAGS.append(b.fmt("-DHARDMEMTESTS={d}", .{hard_mem_tests}));
+    if (hard_stack_tests)
+        try FLAGS.append("-DHARDSTACKTESTS");
     if (use_4_vector)
         try FLAGS.append("-DLUA_VECTOR_SIZE=4");
     if (target.result.cpu.arch.isWasm()) {

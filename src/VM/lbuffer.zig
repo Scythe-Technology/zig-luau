@@ -29,5 +29,5 @@ pub fn Bnewbuffer(L: *lua.State, s: usize) Errorset.Memory!*lobject.Buffer {
 }
 
 pub fn Bfreebuffer(L: *lua.State, b: *lobject.Buffer, page: *lmem.lua_Page) void {
-    lmem.Mfreegco(L, @ptrCast(@alignCast(b)), sizebuffer(b.len), b.header.memcat, page);
+    lmem.Mfreegco(L, b.obj2gco(), sizebuffer(b.len), b.header.memcat, page);
 }

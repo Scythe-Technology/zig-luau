@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const build_config = @import("config");
+
 const ltm = @import("ltm.zig");
 const lmem = @import("lmem.zig");
 const lperf = @import("lperf.zig");
@@ -17,6 +19,109 @@ const lstate = @import("lstate.zig");
 const lobject = @import("lobject.zig");
 
 const Errorset = @import("errorset.zig");
+
+//
+// Luau uses an incremental non-generational non-moving mark&sweep garbage collector.
+//
+// The collector runs in three stages: mark, atomic and sweep. Mark and sweep are incremental and try to do a limited amount
+// of work every GC step; atomic is ran once per the GC cycle and is indivisible. In either case, the work happens during GC
+// steps that are "scheduled" by the GC pacing algorithm - the steps happen either from explicit calls to lua_gc, or after
+// the mutator (aka application) allocates some amount of memory, which is known as "GC assist". In either case, GC steps
+// can't happen concurrently with other access to VM state.
+//
+// Current GC stage is stored in global_State::gcstate, and has two additional stages for pause and second-phase mark, explained below.
+//
+// GC pacer is an algorithm that tries to ensure that GC can always catch up to the application allocating garbage, but do this
+// with minimal amount of effort. To configure the pacer Luau provides control over three variables: GC goal, defined as the
+// target heap size during atomic phase in relation to live heap size (e.g. 200% goal means the heap's worst case size is double
+// the total size of alive objects), step size (how many kilobytes should the application allocate for GC step to trigger), and
+// GC multiplier (how much should the GC try to mark relative to how much the application allocated). It's critical that step
+// multiplier is significantly above 1, as this is what allows the GC to catch up to the application's allocation rate, and
+// GC goal and GC multiplier are linked in subtle ways, described in lua.h comments for LUA_GCSETGOAL.
+//
+// During mark, GC tries to identify all reachable objects and mark them as reachable, while keeping unreachable objects unmarked.
+// During sweep, GC tries to sweep all objects that were not reachable at the end of mark. The atomic phase is needed to ensure
+// that all pending marking has completed and all objects that are still marked as unreachable are, in fact, unreachable.
+//
+// Notably, during mark GC doesn't free any objects, and so the heap size constantly grows; during sweep, GC doesn't do any marking
+// work, so it can't immediately free objects that became unreachable after sweeping started.
+//
+// Every collectable object has one of three colors at any given point in time: white, gray or black. This coloring scheme
+// is necessary to implement incremental marking: white objects have not been marked and may be unreachable, black objects
+// have been marked and will not be marked again if they stay black, and gray objects have been marked but may contain unmarked
+// references.
+//
+// Objects are allocated as white; however, during sweep, we need to differentiate between objects that remained white in the mark
+// phase (these are not reachable and can be freed) and objects that were allocated after the mark phase ended. Because of this, the
+// colors are encoded using three bits inside GCheader::marked: white0, white1 and black (so technically we use a four-color scheme:
+// any object can be white0, white1, gray or black). All bits are exclusive, and gray objects have all three bits unset. This allows
+// us to have the "current" white bit, which is flipped during atomic stage - during sweeping, objects that have the white color from
+// the previous mark may be deleted, and all other objects may or may not be reachable, and will be changed to the current white color,
+// so that the next mark can start coloring objects from scratch again.
+//
+// Crucially, the coloring scheme comes with what's known as a tri-color invariant: a black object may never point to a white object.
+//
+// At the end of atomic stage, the expectation is that there are no gray objects anymore, which means all objects are either black
+// (reachable) or white (unreachable = dead). Tri-color invariant is maintained throughout mark and atomic phase. To uphold this
+// invariant, every modification of an object needs to check if the object is black and the new referent is white; if so, we
+// need to either mark the referent, making it non-white (known as a forward barrier), or mark the object as gray and queue it
+// for additional marking (known as a backward barrier).
+//
+// Luau uses both types of barriers. Forward barriers advance GC progress, since they don't create new outstanding work for GC,
+// but they may be expensive when an object is modified many times in succession. Backward barriers are cheaper, as they defer
+// most of the work until "later", but they require queueing the object for a rescan which isn't always possible. Table writes usually
+// use backward barriers (but switch to forward barriers during second-phase mark), whereas upvalue writes and setmetatable use forward
+// barriers.
+//
+// Since marking is incremental, it needs a way to track progress, which is implemented as a gray set: at any point, objects that
+// are gray need to mark their white references, objects that are black have no pending work, and objects that are white have not yet
+// been reached. Once the gray set is empty, the work completes; as such, incremental marking is as simple as removing an object from
+// the gray set, and turning it to black (which requires turning all its white references to gray). The gray set is implemented as
+// an intrusive singly linked list, using `gclist` field in multiple objects (functions, tables, threads and protos). When an object
+// doesn't have gclist field, the marking of that object needs to be "immediate", changing the colors of all references in one go.
+//
+// When a black object is modified, it needs to become gray again. Objects like this are placed on a separate `grayagain` list by a
+// barrier - this is important because it allows us to have a mark stage that terminates when the gray set is empty even if the mutator
+// is constantly changing existing objects to gray. After mark stage finishes traversing `gray` list, we copy `grayagain` list to `gray`
+// once and incrementally mark it again. During this phase of marking, we may get more objects marked as `grayagain`, so after we finish
+// emptying out the `gray` list the second time, we finish the mark stage and do final marking of `grayagain` during atomic phase.
+// GC works correctly without this second-phase mark (called GCSpropagateagain), but it reduces the time spent during atomic phase.
+//
+// Sweeping is also incremental, but instead of working at a granularity of an object, it works at a granularity of a page: all GC
+// objects are allocated in special pages (see lmem.cpp for details), and sweeper traverses all objects in one page in one incremental
+// step, freeing objects that aren't reachable (old white), and recoloring all other objects with the new white to prepare them for next
+// mark. During sweeping we don't need to maintain the GC invariant, because our goal is to paint all objects with current white -
+// however, some barriers will still trigger (because some reachable objects are still black as sweeping didn't get to them yet), and
+// some barriers will proactively mark black objects as white to avoid extra barriers from triggering excessively.
+//
+// Most references that GC deals with are strong, and as such they fit neatly into the incremental marking scheme. Some, however, are
+// weak - notably, tables can be marked as having weak keys/values (using __mode metafield). During incremental marking, we don't know
+// for certain if a given object is alive - if it's marked as black, it definitely was reachable during marking, but if it's marked as
+// white, we don't know if it's actually unreachable. Because of this, we need to defer weak table handling to the atomic phase; after
+// all objects are marked, we traverse all weak tables (that are linked into special weak table lists using `gclist` during marking),
+// and remove all entries that have white keys or values. If keys or values are strong, they are marked normally.
+//
+// The simplified scheme described above isn't fully accurate because of threads, upvalues and strings.
+//
+// Strings are semantically black (they are initially white, and when the mark stage reaches a string, it changes its color and never
+// touches the object again), but they are technically marked as gray - the black bit is never set on a string object. This behavior
+// is inherited from Lua 5.1 GC, but doesn't have a clear rationale - effectively, strings are marked as gray but are never part of
+// a gray list.
+//
+// Threads are hard to deal with because for them to fit into the white-gray-black scheme, writes to thread stacks need to have barriers
+// that turn the thread from black (already scanned) to gray - but this is very expensive because stack writes are very common. To
+// get around this problem, threads have an "active" state which means that a thread is actively executing code. When GC reaches an active
+// thread, it keeps it as gray, and rescans it during atomic phase. When a thread is inactive, GC instead paints the thread black. All
+// API calls that can write to thread stacks outside of execution (which implies active) uses a thread barrier that checks if the thread is
+// black, and if it is it marks it as gray and puts it on a gray list to be rescanned during atomic phase.
+//
+// Upvalues are special objects that can be closed, in which case they contain the value (acting as a reference cell) and can be dealt
+// with using the regular algorithm, or open, in which case they refer to a stack slot in some other thread. These are difficult to deal
+// with because the stack writes are not monitored. Because of this open upvalues are treated in a somewhat special way: they are never marked
+// as black (doing so would violate the GC invariant), and they are kept in a special global list (global_State::uvhead) which is traversed
+// during atomic phase. This is needed because an open upvalue might point to a stack location in a dead thread that never marked the stack
+// slot - upvalues like this are identified since they don't have `markedopen` bit set during thread traversal and closed in `clearupvals`.
+//
 
 //
 // Default settings for GC tunables (settable via lua_gc)
@@ -140,12 +245,15 @@ pub inline fn CneedsGC(L: *const lua.State) bool {
 }
 
 pub inline fn CcheckGC(L: *lua.State) Errorset.Table!void {
-    try ldo.Dreallocstack(L, @intCast(L.stacksize - lstate.EXTRA_STACK), false);
+    if (comptime build_config.hard_stack_tests)
+        try ldo.Dreallocstack(L, @intCast(L.stacksize - lstate.EXTRA_STACK), false);
     if (CneedsGC(L)) {
-        lgcdebug.Cvalidate(L);
+        if (comptime build_config.hard_mem_tests >= 1)
+            lgcdebug.Cvalidate(L);
         _ = try Cstep(L, true);
     } else {
-        lgcdebug.Cvalidate(L);
+        if (comptime build_config.hard_mem_tests >= 2)
+            lgcdebug.Cvalidate(L);
     }
 }
 
@@ -156,7 +264,7 @@ pub inline fn Cbarrier(L: *lua.State, p: *lstate.GCObject, v: *const lobject.TVa
 }
 
 pub inline fn Cbarriert(L: *lua.State, t: *lobject.LuaTable, v: *const lobject.TValue) void {
-    if (v.iscollectable() and isblack(@ptrCast(@alignCast(t))) and iswhite(v.gcvalue())) {
+    if (v.iscollectable() and isblack(t.obj2gco()) and iswhite(v.gcvalue())) {
         Cbarriertable(L, t, v.gcvalue());
     }
 }
@@ -256,7 +364,7 @@ fn traversetable(g: *lstate.global_State, h: *lobject.LuaTable) bool {
         weakvalue = (std.mem.indexOfScalar(u8, modev, 'v') != null);
         if (weakkey or weakvalue) { // is really weak?
             h.gclist = g.weak; // must be cleared after GC, ...
-            g.weak = @ptrCast(@alignCast(h)); // ... so put in the appropriate list
+            g.weak = h.obj2gco(); // ... so put in the appropriate list
         }
     }
 
@@ -269,16 +377,16 @@ fn traversetable(g: *lstate.global_State, h: *lobject.LuaTable) bool {
     }
     i = lobject.sizenode(h);
     while (i > 0) : (i -= 1) {
-        const n = h.gnode(i - 1);
-        std.debug.assert(n[0].gkey().ttype() != @intFromEnum(lua.Type.Deadkey) or n[0].gval().ttisnil());
-        if (n[0].gval().ttisnil())
+        const n: *lobject.LuaNode = @ptrCast(h.gnode(i - 1));
+        std.debug.assert(n.gkey().ttype() != @intFromEnum(lua.Type.Deadkey) or n.gval().ttisnil());
+        if (n.gval().ttisnil())
             removeentry(@ptrCast(n)) // remove empty entries
         else {
-            std.debug.assert(!n[0].gkey().ttisnil());
+            std.debug.assert(!n.gkey().ttisnil());
             if (!weakkey)
-                markvalue(g, n[0].gkey());
+                markvalue(g, n.gkey());
             if (!weakvalue)
-                markvalue(g, n[0].gval());
+                markvalue(g, n.gval());
         }
     }
     return weakkey or weakvalue;
@@ -310,13 +418,13 @@ fn traverseproto(g: *lstate.global_State, f: *lobject.Proto) void {
 fn traverseclosure(g: *lstate.global_State, cl: *lobject.Closure) void {
     markobject(g, @ptrCast(@alignCast(cl.env)));
     if (cl.isC != 0) {
-        for (0..cl.nupvalues) |i| // mark its upvalues
-            markvalue(g, &cl.d.c.upvalues()[i]);
+        for (cl.d.c.upvalues()[0..cl.nupvalues]) |*upval| // mark its upvalues
+            markvalue(g, upval);
     } else {
         std.debug.assert(cl.nupvalues == cl.d.l.p.nups);
         markobject(g, @ptrCast(@alignCast(cl.d.l.p)));
-        for (0..cl.nupvalues) |i| // mark its upvalues
-            markvalue(g, &cl.d.l.upreferences()[i]);
+        for (cl.d.l.upreferences()[0..cl.nupvalues]) |*upref| // mark its upvalues
+            markvalue(g, upref);
     }
 }
 
@@ -324,9 +432,8 @@ fn traversestack(g: *lstate.global_State, L: *lua.State) void {
     markobject(g, @ptrCast(@alignCast(L.gt)));
     if (L.namecall) |nc|
         stringmark(nc);
-    var o: [*]lobject.TValue = L.stack;
-    while (@intFromPtr(o) < @intFromPtr(L.top)) : (o += 1)
-        markvalue(g, @as(*lobject.TValue, @ptrCast(@alignCast(o))));
+    for (L.stack[0..(L.top - L.stack)]) |*o|
+        markvalue(g, o);
     var uv: ?*lobject.UpVal = L.openupval;
     while (uv) |u| : (uv = u.u.open.threadnext) {
         std.debug.assert(u.upisopen());
@@ -336,19 +443,18 @@ fn traversestack(g: *lstate.global_State, L: *lua.State) void {
 }
 
 fn clearstack(L: *lua.State) void {
-    const stack_end = &L.stack[@intCast(L.stacksize)];
-    for (L.stack[0 .. L.stack - stack_end]) |*o| // clear not-marked stack slice
+    const stack_end = L.stack + @as(usize, @intCast(L.stacksize));
+    for (L.top[0..(stack_end - L.top)]) |*o| // clear not-marked stack slice
         o.setnilvalue();
 }
 
 fn shrinkstack(L: *lua.State) Errorset.Memory!void {
     // compute used stack - note that we can't use th->top if we're in the middle of vararg call
     var lim = L.top;
-    var ci = L.base_ci;
-    while (@intFromPtr(ci) <= @intFromPtr(L.ci)) : (ci = ci.?[1..]) {
-        std.debug.assert(@intFromPtr(ci.?[0].top) <= @intFromPtr(L.stack_last));
-        if (@intFromPtr(lim) < @intFromPtr(ci.?[0].top))
-            lim = ci.?[0].top;
+    for (L.base_ci.?[0 .. (L.ci.? - L.base_ci.?) + 1]) |*ci| { // iterate through callinfo
+        std.debug.assert(@intFromPtr(ci.top) <= @intFromPtr(L.stack_last));
+        if (@intFromPtr(lim) < @intFromPtr(ci.top))
+            lim = ci.top;
     }
 
     // shrink stack and callinfo arrays if we aren't using most of the space
@@ -359,11 +465,13 @@ fn shrinkstack(L: *lua.State) Errorset.Memory!void {
 
     if (3 * ci_used < L.size_ci and 2 * lstate.BASIC_CI_SIZE < L.size_ci)
         try ldo.DreallocCI(L, @divTrunc(@as(usize, @intCast(L.size_ci)), 2)); // still big enough...
-    try ldo.DreallocCI(L, ci_used + 1);
+    if (comptime build_config.hard_stack_tests)
+        try ldo.DreallocCI(L, ci_used + 1);
 
     if (3 * s_used < L.stacksize and 2 * (lstate.BASIC_STACK_SIZE + lstate.EXTRA_STACK) < L.stacksize)
         try ldo.Dreallocstack(L, @divTrunc(@as(usize, @intCast(L.stacksize)), 2), false); // still big enough...
-    try ldo.Dreallocstack(L, s_used, false);
+    if (comptime build_config.hard_stack_tests)
+        try ldo.Dreallocstack(L, s_used, false);
 }
 
 fn propagatemark(g: *lstate.global_State) Errorset.Memory!usize {
@@ -435,6 +543,12 @@ fn propagateall(g: *lstate.global_State) Errorset.Memory!usize {
     return work;
 }
 
+///
+/// The next function tells whether a key or value can be cleared from
+/// a weak table. Non-collectable objects are never removed from weak
+/// tables. Strings behave as `values', so are never removed too. for
+/// other objects: if really collected, cannot keep them.
+///
 fn isobjcleared(o: *lstate.GCObject) bool {
     if (o.gch.ttype() == @intFromEnum(lua.Type.String)) {
         stringmark(&o.ts); // strings are `values', so are never weak
@@ -443,7 +557,7 @@ fn isobjcleared(o: *lstate.GCObject) bool {
     return iswhite(o);
 }
 
-pub inline fn iscleared(o: *lobject.TValue) bool {
+pub inline fn iscleared(o: anytype) bool {
     return o.iscollectable() and isobjcleared(o.gcvalue());
 }
 
@@ -465,14 +579,14 @@ fn cleartable(L: *lua.State, il: ?*lstate.GCObject) Errorset.Table!usize {
         i = lobject.sizenode(h);
         var activevalues: usize = 0;
         while (i > 0) : (i -= 1) {
-            const n = h.gnode(i - 1);
+            const n: *lobject.LuaNode = @ptrCast(h.gnode(i - 1));
 
             // non-empty entry?
-            if (!n[0].gval().ttisnil()) {
+            if (!n.gval().ttisnil()) {
                 // can we clear key or value?
-                if (iscleared(@ptrCast(@alignCast(n[0].gkey()))) or iscleared(n[0].gval())) {
-                    n[0].gval().setnilvalue(); // remove value ...
-                    removeentry(@ptrCast(n)); // remove entry from table
+                if (iscleared(n.gkey()) or iscleared(n.gval())) {
+                    n.gval().setnilvalue(); // remove value ...
+                    removeentry(n); // remove entry from table
                 } else {
                     activevalues += 1;
                 }
@@ -567,17 +681,16 @@ fn markroot(L: *lua.State) void {
 fn remarkupvals(g: *lstate.global_State) usize {
     var work: usize = 0;
 
-    var uv: ?*lobject.UpVal = g.uvhead.u.open.next;
-    while (uv != &g.uvhead) : (uv = uv.?.u.open.next) {
-        const u = uv.?;
+    var uv: *lobject.UpVal = g.uvhead.u.open.next orelse return 0;
+    while (uv != &g.uvhead) : (uv = uv.u.open.next.?) {
         work += @sizeOf(lobject.UpVal);
 
-        std.debug.assert(u.upisopen());
-        std.debug.assert(u.u.open.next.?.u.open.prev == u and u.u.open.prev.?.u.open.next == u);
-        std.debug.assert(!isblack(@ptrCast(@alignCast(u)))); // open upvalues are never black
+        std.debug.assert(uv.upisopen());
+        std.debug.assert(uv.u.open.next.?.u.open.prev == uv and uv.u.open.prev.?.u.open.next == uv);
+        std.debug.assert(!isblack(uv.obj2gco())); // open upvalues are never black
 
-        if (isgray(@ptrCast(@alignCast(u))))
-            markvalue(g, u.v);
+        if (isgray(uv.obj2gco()))
+            markvalue(g, uv.v);
     }
 
     return work;
@@ -588,24 +701,26 @@ fn clearupvals(L: *lua.State) usize {
 
     var work: usize = 0;
 
-    var uv: ?*lobject.UpVal = g.uvhead.u.open.next;
+    var count: usize = 0;
+    var uv: *lobject.UpVal = g.uvhead.u.open.next orelse return 0;
     while (uv != &g.uvhead) {
+        defer count += 1;
         work += @sizeOf(lobject.UpVal);
 
-        std.debug.assert(uv.?.upisopen());
-        std.debug.assert(uv.?.u.open.next.?.u.open.prev == uv and uv.?.u.open.prev.?.u.open.next == uv);
-        std.debug.assert(!isblack(@ptrCast(@alignCast(uv.?)))); // open upvalues are never black
-        std.debug.assert(iswhite(@ptrCast(@alignCast(uv.?))) or !uv.?.v.iscollectable() or !iswhite(@ptrCast(@alignCast(uv.?.v)))); // open upvalues are always white
+        std.debug.assert(uv.upisopen());
+        std.debug.assert(uv.u.open.next.?.u.open.prev == uv and uv.u.open.prev.?.u.open.next == uv);
+        std.debug.assert(!isblack(uv.obj2gco())); // open upvalues are never black
+        std.debug.assert(iswhite(uv.obj2gco()) or !uv.v.iscollectable() or !iswhite(uv.v.gcvalue()));
 
-        if (uv.?.markedopen != 0) {
+        if (uv.markedopen != 0) {
             // upvalue is still open (belongs to alive thread)
-            std.debug.assert(isgray(@ptrCast(@alignCast(uv.?))));
-            uv.?.markedopen = 0; // for next cycle
-            uv = uv.?.u.open.next;
+            std.debug.assert(isgray(uv.obj2gco()));
+            uv.markedopen = 0; // for next cycle
+            uv = uv.u.open.next.?;
         } else {
             // upvalue is either dead, or alive but the thread is dead; unlink and close
-            const next = uv.?.u.open.next;
-            lfunc.Fcloseupval(L, uv.?, iswhite(@ptrCast(@alignCast(uv.?))));
+            const next = uv.u.open.next.?;
+            lfunc.Fcloseupval(L, uv, iswhite(uv.obj2gco()));
             uv = next;
         }
     }
@@ -634,6 +749,13 @@ fn atomic(L: *lua.State) Errorset.Table!usize {
     std.debug.assert(!iswhite(@ptrCast(@alignCast(g.mainthread))));
     markobject(g, @ptrCast(@alignCast(L))); // mark running thread
     markmt(g); // mark basic metatables (again)
+    work += try propagateall(g);
+
+    // TODO: LUAI_GCMETRICS
+
+    // remark gray again
+    g.gray = g.grayagain;
+    g.grayagain = null;
     work += try propagateall(g);
 
     // TODO: LUAI_GCMETRICS
@@ -704,7 +826,6 @@ fn sweepgcopage(L: *lua.State, page: *lmem.lua_Page) usize {
 fn gcstep(L: *lua.State, limit: usize) Errorset.Table!usize {
     var cost: usize = 0;
     const g = L.global;
-
     switch (g.gcstate) {
         GCSpause => {
             markroot(L); // start a new collection
@@ -773,7 +894,7 @@ fn gcstep(L: *lua.State, limit: usize) Errorset.Table!usize {
 fn getheaptriggererroroffset(g: *lstate.global_State) i64 {
     // adjust for error using Proportional-Integral controller
     // https://en.wikipedia.org/wiki/PID_controller
-    const errorKb = @as(i32, @intCast((g.gcstats.atomicstarttotalsizebytes - g.gcstats.heapgoalsizebytes) / 1024));
+    const errorKb: i32 = @divTrunc((@as(i32, @intCast(g.gcstats.atomicstarttotalsizebytes)) - @as(i32, @intCast(g.gcstats.heapgoalsizebytes))), 1024);
 
     // we use sliding window for the error integral to avoid error sum 'windup' when the desired target cannot be reached
     const triggertermcount: i32 = @divTrunc(@sizeOf(@TypeOf(g.gcstats.triggerterms)), @sizeOf(@TypeOf(g.gcstats.triggerterms[0])));
@@ -816,7 +937,7 @@ fn getheaptrigger(g: *lstate.global_State, heapgoal: usize) usize {
 
     const expectedgrowth = @as(i64, @intFromFloat(markduration * allocationrate));
     const offset = getheaptriggererroroffset(g);
-    const heaptrigger: i64 = @intCast(heapgoal - @as(usize, @intCast(expectedgrowth + offset)));
+    const heaptrigger: i64 = @as(i64, @intCast(heapgoal)) - @as(i64, @intCast(expectedgrowth + offset));
 
     // clamp the trigger between memory use at the end of the cycle and the heap goal
     return if (heaptrigger < g.totalbytes) g.totalbytes else if (heaptrigger > heapgoal) heapgoal else @intCast(heaptrigger);
@@ -883,7 +1004,7 @@ pub fn Cbarrierf(L: *lua.State, o: *lstate.GCObject, v: *lstate.GCObject) void {
 
 pub fn Cbarriertable(L: *lua.State, t: *lobject.LuaTable, v: *lstate.GCObject) void {
     const g = L.global;
-    const o: *lstate.GCObject = @ptrCast(@alignCast(t));
+    const o = t.obj2gco();
 
     // in the second propagation stage, table assignment barrier works as a forward barrier
     if (g.gcstate == GCSpropagateagain) {
@@ -911,7 +1032,7 @@ pub fn Cbarrierback(L: *lua.State, o: *lstate.GCObject, gclist: *?*lstate.GCObje
 
 pub fn Cupvalclosed(L: *lua.State, uv: *lobject.UpVal) void {
     const g = L.global;
-    const o: *lstate.GCObject = @ptrCast(@alignCast(uv));
+    const o: *lstate.GCObject = uv.obj2gco();
 
     std.debug.assert(!uv.upisopen()); // upvalue was closed but needs GC state fixup
 

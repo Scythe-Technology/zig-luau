@@ -2,6 +2,7 @@ const std = @import("std");
 
 const lgc = @import("lgc.zig");
 const lua = @import("lua.zig");
+const lmem = @import("lmem.zig");
 const lstate = @import("lstate.zig");
 const lobject = @import("lobject.zig");
 
@@ -26,91 +27,90 @@ fn validatetable(g: *const lstate.global_State, h: *lobject.LuaTable) void {
     std.debug.assert(h.bound.lastfree <= sizenode);
 
     if (h.metatable) |mt|
-        validateobjref(g, @ptrCast(@alignCast(h)), @ptrCast(@alignCast(mt)));
+        validateobjref(g, h.obj2gco(), mt.obj2gco());
 
     for (0..@intCast(h.sizearray)) |i|
-        validateref(g, @ptrCast(@alignCast(h)), &h.array.?[i]);
+        validateref(g, h.obj2gco(), &h.array.?[i]);
 
     for (0..sizenode) |i| {
         const n = &h.node[i];
 
         std.debug.assert(n.gkey().ttype() != @intFromEnum(lua.Type.Deadkey) or n.gval().ttisnil());
-        std.debug.assert(i + @as(usize, @intCast(n.gnext())) >= 0 and i + @as(usize, @intCast(n.gnext())) < sizenode);
+        std.debug.assert(@as(isize, @intCast(i)) + n.gnext() >= 0 and @as(isize, @intCast(i)) + n.gnext() < sizenode);
 
         if (!n.gval().ttisnil()) {
             var k: lobject.TValue = undefined;
             k.tt = n.gkey().ttype();
             k.value = n.gkey().value;
 
-            validateref(g, @ptrCast(@alignCast(h)), &k);
-            validateref(g, @ptrCast(@alignCast(h)), n.gval());
+            validateref(g, h.obj2gco(), &k);
+            validateref(g, h.obj2gco(), n.gval());
         }
     }
 }
 
 fn validateclosure(g: *const lstate.global_State, cl: *lobject.Closure) void {
-    validateobjref(g, @ptrCast(cl), @ptrCast(@alignCast(cl.env)));
+    validateobjref(g, cl.obj2gco(), cl.env.obj2gco());
 
     if (cl.isC != 0) {
-        for (0..cl.nupvalues) |i|
-            validateobjref(g, @ptrCast(cl), @ptrCast(&cl.d.c.upvalues()[i]));
+        for (cl.d.c.upvalues()[0..cl.nupvalues]) |*upval|
+            validateref(g, cl.obj2gco(), upval);
     } else {
         std.debug.assert(cl.nupvalues == cl.d.l.p.nups);
 
-        validateobjref(g, @ptrCast(cl), @ptrCast(@alignCast(cl.d.l.p)));
+        validateobjref(g, cl.obj2gco(), cl.d.l.p.obj2gco());
 
-        for (0..cl.nupvalues) |i|
-            validateobjref(g, @ptrCast(cl), @ptrCast(&cl.d.l.upreferences()[i]));
+        for (cl.d.l.upreferences()[0..cl.nupvalues]) |*upref|
+            validateref(g, cl.obj2gco(), upref);
     }
 }
 
 fn validatestack(g: *const lstate.global_State, l: *lua.State) void {
-    validateobjref(g, @ptrCast(@alignCast(l)), @ptrCast(@alignCast(l.gt.?)));
+    validateobjref(g, @ptrCast(@alignCast(l)), l.gt.?.obj2gco());
 
-    for (0..l.ci.?[0].sub(@ptrCast(l.base_ci.?))) |i| {
-        const ci = &l.base_ci.?[i];
+    for (l.base_ci.?[0 .. (l.ci.? - l.base_ci.?) + 1]) |*ci| {
         std.debug.assert(@intFromPtr(l.stack) <= @intFromPtr(ci.base));
         std.debug.assert(@intFromPtr(ci.func) <= @intFromPtr(ci.base) and @intFromPtr(ci.base) <= @intFromPtr(ci.top));
         std.debug.assert(@intFromPtr(ci.top) <= @intFromPtr(l.stack_last));
     }
 
     // note: stack refs can violate gc invariant so we only check for liveness
-    for (0..l.top - l.stack) |i|
-        l.stack[i].checkliveness(g);
+    for (l.stack[0..(l.top - l.stack)]) |*o|
+        o.checkliveness(g);
 
     if (l.namecall) |nc|
-        validateobjref(g, @ptrCast(@alignCast(l)), @ptrCast(@alignCast(nc)));
+        validateobjref(g, @ptrCast(@alignCast(l)), nc.obj2gco());
 
     var upval: ?*lobject.UpVal = l.openupval;
     while (upval) |uv| : (upval = uv.u.open.threadnext) {
         std.debug.assert(uv.header.tt == @intFromEnum(lua.Type.UpVal));
         std.debug.assert(uv.upisopen());
         std.debug.assert(uv.u.open.next.?.u.open.prev == uv and uv.u.open.prev.?.u.open.next == uv);
-        std.debug.assert(!lgc.isblack(@ptrCast(uv)));
+        std.debug.assert(!lgc.isblack(uv.obj2gco()));
     }
 }
 
 fn validateproto(g: *const lstate.global_State, f: *lobject.Proto) void {
     if (f.source) |src|
-        validateobjref(g, @ptrCast(@alignCast(f)), @ptrCast(@alignCast(src)));
+        validateobjref(g, f.obj2gco(), src.obj2gco());
 
     if (f.debugname) |name|
-        validateobjref(g, @ptrCast(@alignCast(f)), @ptrCast(@alignCast(name)));
+        validateobjref(g, f.obj2gco(), name.obj2gco());
 
     for (0..@intCast(f.sizek)) |i|
-        validateref(g, @ptrCast(@alignCast(f)), @ptrCast(@alignCast(&f.k.?[i])));
+        validateref(g, f.obj2gco(), &f.k.?[i]);
 
     for (0..@intCast(f.sizeupvalues)) |i|
         if (f.upvalues.?[i]) |uv|
-            validateobjref(g, @ptrCast(@alignCast(f)), @ptrCast(@alignCast(uv)));
+            validateobjref(g, f.obj2gco(), uv.obj2gco());
 
     for (0..@intCast(f.sizep)) |i|
         if (f.p.?[i]) |proto|
-            validateobjref(g, @ptrCast(@alignCast(f)), @ptrCast(@alignCast(proto)));
+            validateobjref(g, f.obj2gco(), proto.obj2gco());
 
     for (0..@intCast(f.sizelocvars)) |i|
         if (f.locvars.?[i].varname) |varname|
-            validateobjref(g, @ptrCast(@alignCast(f)), @ptrCast(@alignCast(varname)));
+            validateobjref(g, f.obj2gco(), varname.obj2gco());
 }
 
 fn validateobj(g: *const lstate.global_State, o: *lstate.GCObject) void {
@@ -123,11 +123,8 @@ fn validateobj(g: *const lstate.global_State, o: *lstate.GCObject) void {
         @intFromEnum(lua.Type.String), @intFromEnum(lua.Type.Buffer) => {},
         @intFromEnum(lua.Type.Table) => validatetable(g, o.toh()),
         @intFromEnum(lua.Type.Function) => validateclosure(g, o.tocl()),
-        @intFromEnum(lua.Type.Userdata) => {
-            if (o.tou().metatable) |mt| {
-                validateobjref(g, o, @ptrCast(@alignCast(mt)));
-            }
-        },
+        @intFromEnum(lua.Type.Userdata) => if (o.tou().metatable) |mt|
+            validateobjref(g, o, mt.obj2gco()),
         @intFromEnum(lua.Type.Thread) => validatestack(g, o.toth()),
         @intFromEnum(lua.Type.Proto) => validateproto(g, o.top()),
         @intFromEnum(lua.Type.UpVal) => validateref(g, o, o.touv().v),
@@ -146,14 +143,13 @@ fn validategraylist(g: *const lstate.global_State, obj: ?*lstate.GCObject) void 
             @intFromEnum(lua.Type.Table) => so = o.toh().gclist,
             @intFromEnum(lua.Type.Function) => so = o.tocl().gclist,
             @intFromEnum(lua.Type.Thread) => so = o.toth().gclist,
-            @intFromEnum(lua.Type.Proto) => so = o.toth().gclist,
+            @intFromEnum(lua.Type.Proto) => so = o.top().gclist,
             else => unreachable,
         }
     }
 }
 
-fn validategco(context: ?*anyopaque, _: ?*anyopaque, gco: *lstate.GCObject) bool {
-    const L: *lua.State = @ptrCast(@alignCast(context.?));
+fn validategco(L: *lua.State, _: ?*lmem.lua_Page, gco: *lstate.GCObject) bool {
     const g = L.global;
 
     validateobj(g, gco);
@@ -168,7 +164,7 @@ pub fn Cvalidate(L: *lua.State) void {
 
     for (0..lua.Type.T_COUNT) |i|
         if (g.mt[i]) |mt|
-            std.debug.assert(!lgc.isdead(g, @ptrCast(@alignCast(mt))));
+            std.debug.assert(!lgc.isdead(g, mt.obj2gco()));
 
     validategraylist(g, g.weak);
     validategraylist(g, g.gray);
@@ -176,14 +172,13 @@ pub fn Cvalidate(L: *lua.State) void {
 
     _ = validategco(@ptrCast(L), null, @ptrCast(@alignCast(g.mainthread)));
 
-    // TODO: implement luaM_visitgco
-    // luaM_visitgco(L, L, validategco);
+    lmem.Mvisitgco(L, *lua.State, L, validategco);
 
     var upval: ?*lobject.UpVal = g.uvhead.u.open.next.?;
     while (upval != &g.uvhead) : (upval = upval.?.u.open.next) {
         std.debug.assert(upval.?.header.tt == @intFromEnum(lua.Type.UpVal));
         std.debug.assert(upval.?.upisopen());
         std.debug.assert(upval.?.u.open.next.?.u.open.prev == upval and upval.?.u.open.prev.?.u.open.next == upval);
-        std.debug.assert(!lgc.isblack(@ptrCast(upval.?)));
+        std.debug.assert(!lgc.isblack(upval.?.obj2gco()));
     }
 }
