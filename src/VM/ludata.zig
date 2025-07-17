@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const lua = @import("lua.zig");
 
@@ -38,9 +39,13 @@ pub fn Ufreeudata(L: *lua.State, u: *lobject.Udata, page: *lmem.lua_Page) void {
         if (L.global.udatagc[u.tag]) |dtor|
             dtor(L, @ptrCast(@alignCast(&u.data)));
     } else if (u.tag == UTAG_IDTOR) {
-        const InlineDtor = *const fn (data: *anyopaque) callconv(.c) void;
+        const InlineDtor = *const fn (data: ?*anyopaque) callconv(.c) void;
         var dtor: ?InlineDtor = null;
-        dtor = @ptrFromInt(@intFromPtr(&u.data) + @as(u32, @intCast(u.len)) - @sizeOf(InlineDtor));
+        dtor = @ptrFromInt(std.mem.readVarInt(
+            usize,
+            (@as([*]u8, @ptrCast(&u.data)) + @as(u32, @intCast(u.len)) - @sizeOf(InlineDtor))[0..@sizeOf(InlineDtor)],
+            builtin.cpu.arch.endian(),
+        ));
         if (dtor) |d|
             d(@ptrCast(@alignCast(&u.data)));
     }
