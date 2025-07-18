@@ -857,6 +857,9 @@ pub fn rawgetfield(L: *lua.State, idx: i32, k: []const u8) lua.Type {
     api_incr_top(L);
     return ttype;
 }
+pub inline fn rawgetglobal(L: *lua.State, k: []const u8) lua.Type {
+    return rawgetfield(L, lua.GLOBALSINDEX, k);
+}
 
 /// get value from table value at `idx`
 /// * pushes value to stack
@@ -885,6 +888,12 @@ pub fn rawgeti(L: *lua.State, idx: i32, n: i32) lua.Type {
     L.top[0].setobj(L, ltable.Hgetnum(t.hvalue(), n));
     api_incr_top(L);
     return (L.top - 1)[0].typeOf();
+}
+pub inline fn getref(L: *State, idx: i32) lua.Type {
+    if (comptime !build_config.use_zig_backend) {
+        return @enumFromInt(c.lua_getref(L, idx));
+    }
+    return rawgeti(L, lua.GLOBALSINDEX, idx);
 }
 
 /// create a new table and push it to the stack
@@ -1017,6 +1026,9 @@ pub fn rawsetfield(L: *lua.State, idx: i32, k: []const u8) Errorset.Table!void {
     (try ltable.Hsetstr(L, t.hvalue(), try lstring.Snew(L, k))).setobj(L, @ptrCast(L.top - 1));
     lgc.Cbarriert(L, t.hvalue(), @ptrCast(L.top - 1));
     L.top -= 1;
+}
+pub inline fn rawsetglobal(L: *lua.State, k: []const u8) !void {
+    return rawsetfield(L, lua.GLOBALSINDEX, k);
 }
 
 /// set table value at `idx` with value:**top** and key:**top-1**
