@@ -18,6 +18,7 @@ pub const Analysis = if (build_config.buildAnalysis) struct {
 
 pub const Ast = if (build_config.buildAst) struct {
     pub const Ast = @import("Ast/Ast.zig");
+    pub const Cst = @import("Ast/Cst.zig");
     pub const Allocator = @import("Ast/Allocator.zig");
     pub const Lexer = @import("Ast/Lexer.zig");
     pub const Parser = @import("Ast/Parser.zig");
