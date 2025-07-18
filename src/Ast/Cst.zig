@@ -11,8 +11,8 @@ pub const Node = extern struct {
     classIndex: Kind,
 
     pub const Kind = enum(i32) {
+        unknown,
         expr_constant_number,
-        expr_constant_string,
         expr_call,
         expr_index_expr,
         expr_function,
@@ -44,9 +44,11 @@ pub const Node = extern struct {
         type_singleton_string,
         type_pack_explicit,
         type_pack_generic,
+        expr_constant_string, // out of order
 
         pub fn Type(comptime self: Kind) type {
             return switch (self) {
+                .unknown => Node,
                 .expr_constant_number => ExprConstantNumber,
                 .expr_constant_string => ExprConstantString,
                 .expr_call => ExprCall,
