@@ -598,7 +598,7 @@ pub fn Mrealloc_(L: *lua.State, block: ?*anyopaque, osize: usize, nsize: usize, 
         result = if (nclass >= 0)
             try newblock(L, @intCast(nclass))
         else
-            (g.frealloc.?)(g.ud, null, 0, nsize) orelse if (nsize > 0) return Error.OutOfMemory else undefined;
+            (g.frealloc.?)(g.ud, null, 0, nsize) orelse if (nsize > 0) return Error.OutOfMemory else null;
 
         if (osize > 0 and nsize > 0) {
             const tsize = @min(osize, nsize);
@@ -613,7 +613,7 @@ pub fn Mrealloc_(L: *lua.State, block: ?*anyopaque, osize: usize, nsize: usize, 
         else
             _ = (g.frealloc.?)(g.ud, block, osize, 0);
     } else {
-        result = (g.frealloc.?)(g.ud, block, osize, nsize) orelse return Error.OutOfMemory;
+        result = (g.frealloc.?)(g.ud, block, osize, nsize) orelse if (nsize > 0) return Error.OutOfMemory else null;
     }
 
     std.debug.assert((nsize == 0) == (result == null));
@@ -640,8 +640,8 @@ pub inline fn Mnewarray(L: *lua.State, comptime T: type, n: usize, memcat: u8) E
 pub inline fn Mfreearray(L: *lua.State, comptime T: type, b: ?[*]T, n: usize, memcat: u8) void {
     Mfree_(L, @ptrCast(@alignCast(b)), n * @sizeOf(T), memcat);
 }
-pub inline fn Mreallocarray(L: *lua.State, comptime T: type, v: ?[*]T, oldn: usize, n: usize, memcat: u8) Error![*]T {
-    return @ptrCast(@alignCast((try Mrealloc_(L, @ptrCast(@alignCast(v)), oldn * @sizeOf(T), try Marraysize_(n, @sizeOf(T)), memcat)).?));
+pub inline fn Mreallocarray(L: *lua.State, comptime T: type, v: ?[*]T, oldn: usize, n: usize, memcat: u8) Error!?[*]T {
+    return @ptrCast(@alignCast((try Mrealloc_(L, @ptrCast(@alignCast(v)), oldn * @sizeOf(T), try Marraysize_(n, @sizeOf(T)), memcat))));
 }
 
 pub fn Mgetpagewalkinfo(page: *lua_Page, start: *[*]u8, end: *[*]u8, busyBlocks: *c_int, blockSize: *c_int) void {
