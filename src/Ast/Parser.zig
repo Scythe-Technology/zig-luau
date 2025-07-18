@@ -9,28 +9,28 @@ const Location = @import("Location.zig").Location;
 const Allocator = @import("Allocator.zig");
 const DenseHash = @import("../Common/DenseHash.zig");
 
-const ParseError = cpp_std.Exception(extern struct {
+pub const ParseError = cpp_std.Exception(extern struct {
     location: Location,
     message: cpp_std.String,
 });
 
-const ParseErrors = cpp_std.Exception(extern struct {
+pub const ParseErrors = cpp_std.Exception(extern struct {
     errors: cpp_std.Vector(ParseError),
     message: cpp_std.String,
 });
 
-const HotComment = extern struct {
+pub const HotComment = extern struct {
     header: bool,
     location: Location,
     content: cpp_std.String,
 };
 
-const Comment = extern struct {
+pub const Comment = extern struct {
     type: Lexer.Lexeme.Type, // Comment, BlockComment, or BrokenComment
     location: Location,
 };
 
-const ParseOptions = extern struct {
+pub const ParseOptions = extern struct {
     allowDeclarationSyntax: bool = false,
     captureComments: bool = false,
     parseFragment: cpp_std.Optional(FragmentParseResumeSettings) = .nullopt,

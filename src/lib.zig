@@ -94,12 +94,15 @@ pub const VM = if (build_config.buildVM) struct {
     }
 } else void;
 
+pub const cpp_std = @import("cpp_std.zig");
+
 test {
     _ = Analysis;
     _ = Ast;
     _ = Common;
     _ = Compiler;
     _ = VM;
+    _ = cpp_std;
 }
 
 //
