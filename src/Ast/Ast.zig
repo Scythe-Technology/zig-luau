@@ -638,7 +638,7 @@ pub const ExprFunction = extern struct {
     attributes: Array(*Attr),
     generics: Array(*GenericType),
     genericPacks: Array(*GenericTypePack),
-    self: *Local,
+    self: ?*Local,
     args: Array(*Local),
     returnAnnotation: ?*TypePack,
     vararg: bool = false,
@@ -814,6 +814,7 @@ pub const ExprBinary = extern struct {
                 .CompareGe => ">=",
                 .And => "and",
                 .Or => "or",
+                .__Count => unreachable,
             };
         }
     };
