@@ -111,6 +111,7 @@ pub fn build(b: *Build) !void {
         if (build_CodeGen) libCodeGen else null,
         if (build_Compiler) libCompiler else null,
         if (build_VM) libVM else null,
+        .{ .type = .normal },
     );
     if (!no_bin)
         b.installArtifact(lib);
@@ -123,6 +124,27 @@ pub fn build(b: *Build) !void {
     try buildAndLinkModule(b, target, luau_dep, luauModule, config, c_module, lib, use_4_vector);
 
     // Tests
+    const test_lib = try buildLuau(
+        b,
+        target,
+        luau_dep,
+        optimize,
+        version,
+        compile_flags,
+        if (build_Ast) libAst else null,
+        if (build_Analysis) libAnalysis else null,
+        if (build_CodeGen) libCodeGen else null,
+        if (build_Compiler) libCompiler else null,
+        if (build_VM) libVM else null,
+        .{ .type = .@"test" },
+    );
+
+    const luauTestModule = b.addModule("luau", .{
+        .root_source_file = b.path("src/lib.zig"),
+    });
+
+    try buildAndLinkModule(b, target, luau_dep, luauTestModule, config, c_module, test_lib, use_4_vector);
+
     const lib_tests = b.addTest(.{
         .name = if (use_zig_backend) "zig-lib-tests" else "lib-tests",
         .root_source_file = b.path("src/lib.zig"),
@@ -131,7 +153,7 @@ pub fn build(b: *Build) !void {
         .use_llvm = !no_llvm,
     });
 
-    try buildAndLinkModule(b, target, luau_dep, lib_tests.root_module, config, c_module, lib, use_4_vector);
+    try buildAndLinkModule(b, target, luau_dep, lib_tests.root_module, config, c_module, test_lib, use_4_vector);
 
     // Tests
     const tests = b.addTest(.{
@@ -141,7 +163,7 @@ pub fn build(b: *Build) !void {
         .optimize = optimize,
         .use_llvm = !no_llvm,
     });
-    tests.root_module.addImport("luau", luauModule);
+    tests.root_module.addImport("luau", luauTestModule);
 
     const run_lib_tests = b.addRunArtifact(lib_tests);
     const run_tests = b.addRunArtifact(tests);
@@ -599,6 +621,7 @@ fn buildLuau(
     libCodeGen: ?*Step.Compile,
     libCompiler: ?*Step.Compile,
     libVM: ?*Step.Compile,
+    Mode: struct { type: enum { @"test", normal } = .normal },
 ) !*Step.Compile {
     const lib = b.addStaticLibrary(.{
         .name = "luau",
@@ -615,7 +638,12 @@ fn buildLuau(
 
     if (libAst) |mod| {
         lib.linkLibrary(mod);
-        lib.addCSourceFiles(.{ .flags = flags, .root = b.path("src/Ast/"), .files = &.{
+        lib.addCSourceFiles(.{ .flags = flags, .root = b.path("src/Ast/"), .files = if (Mode.type == .@"test") &.{
+            "Allocator.cpp",
+            "Lexer.cpp",
+            "Parser.cpp",
+            "Class.cpp",
+        } else &.{
             "Allocator.cpp",
             "Lexer.cpp",
             "Parser.cpp",

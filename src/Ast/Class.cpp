@@ -1,0 +1,100 @@
+#include <bridge.h>
+
+#include "Luau/Ast.h"
+#include "Luau/Cst.h"
+
+using namespace Luau;
+
+// AST
+ZIG_EXPORT const unsigned char AstAttrIndex = AstRtti<AstAttr>::value;
+ZIG_EXPORT const unsigned char AstGenericTypeIndex = AstRtti<AstGenericType>::value;
+ZIG_EXPORT const unsigned char AstGenericTypePackIndex = AstRtti<AstGenericTypePack>::value;
+ZIG_EXPORT const unsigned char AstExprGroupIndex = AstRtti<AstExprGroup>::value;
+ZIG_EXPORT const unsigned char AstExprConstantNilIndex = AstRtti<AstExprConstantNil>::value;
+ZIG_EXPORT const unsigned char AstExprConstantBoolIndex = AstRtti<AstExprConstantBool>::value;
+ZIG_EXPORT const unsigned char AstExprConstantNumberIndex = AstRtti<AstExprConstantNumber>::value;
+ZIG_EXPORT const unsigned char AstExprConstantStringIndex = AstRtti<AstExprConstantString>::value;
+ZIG_EXPORT const unsigned char AstExprLocalIndex = AstRtti<AstExprLocal>::value;
+ZIG_EXPORT const unsigned char AstExprGlobalIndex = AstRtti<AstExprGlobal>::value;
+ZIG_EXPORT const unsigned char AstExprVarargsIndex = AstRtti<AstExprVarargs>::value;
+ZIG_EXPORT const unsigned char AstExprCallIndex = AstRtti<AstExprCall>::value;
+ZIG_EXPORT const unsigned char AstExprIndexNameIndex = AstRtti<AstExprIndexName>::value;
+ZIG_EXPORT const unsigned char AstExprIndexExprIndex = AstRtti<AstExprIndexExpr>::value;
+ZIG_EXPORT const unsigned char AstExprFunctionIndex = AstRtti<AstExprFunction>::value;
+ZIG_EXPORT const unsigned char AstExprTableIndex = AstRtti<AstExprTable>::value;
+ZIG_EXPORT const unsigned char AstExprUnaryIndex = AstRtti<AstExprUnary>::value;
+ZIG_EXPORT const unsigned char AstExprBinaryIndex = AstRtti<AstExprBinary>::value;
+ZIG_EXPORT const unsigned char AstExprTypeAssertionIndex = AstRtti<AstExprTypeAssertion>::value;
+ZIG_EXPORT const unsigned char AstExprIfElseIndex = AstRtti<AstExprIfElse>::value;
+ZIG_EXPORT const unsigned char AstExprInterpStringIndex = AstRtti<AstExprInterpString>::value;
+ZIG_EXPORT const unsigned char AstStatBlockIndex = AstRtti<AstStatBlock>::value;
+ZIG_EXPORT const unsigned char AstStatIfIndex = AstRtti<AstStatIf>::value;
+ZIG_EXPORT const unsigned char AstStatWhileIndex = AstRtti<AstStatWhile>::value;
+ZIG_EXPORT const unsigned char AstStatRepeatIndex = AstRtti<AstStatRepeat>::value;
+ZIG_EXPORT const unsigned char AstStatBreakIndex = AstRtti<AstStatBreak>::value;
+ZIG_EXPORT const unsigned char AstStatContinueIndex = AstRtti<AstStatContinue>::value;
+ZIG_EXPORT const unsigned char AstStatReturnIndex = AstRtti<AstStatReturn>::value;
+ZIG_EXPORT const unsigned char AstStatExprIndex = AstRtti<AstStatExpr>::value;
+ZIG_EXPORT const unsigned char AstStatLocalIndex = AstRtti<AstStatLocal>::value;
+ZIG_EXPORT const unsigned char AstStatForIndex = AstRtti<AstStatFor>::value;
+ZIG_EXPORT const unsigned char AstStatForInIndex = AstRtti<AstStatForIn>::value;
+ZIG_EXPORT const unsigned char AstStatAssignIndex = AstRtti<AstStatAssign>::value;
+ZIG_EXPORT const unsigned char AstStatCompoundAssignIndex = AstRtti<AstStatCompoundAssign>::value;
+ZIG_EXPORT const unsigned char AstStatFunctionIndex = AstRtti<AstStatFunction>::value;
+ZIG_EXPORT const unsigned char AstStatLocalFunctionIndex = AstRtti<AstStatLocalFunction>::value;
+ZIG_EXPORT const unsigned char AstStatTypeAliasIndex = AstRtti<AstStatTypeAlias>::value;
+ZIG_EXPORT const unsigned char AstStatTypeFunctionIndex = AstRtti<AstStatTypeFunction>::value;
+ZIG_EXPORT const unsigned char AstStatDeclareFunctionIndex = AstRtti<AstStatDeclareFunction>::value;
+ZIG_EXPORT const unsigned char AstStatDeclareGlobalIndex = AstRtti<AstStatDeclareGlobal>::value;
+ZIG_EXPORT const unsigned char AstStatDeclareExternTypeIndex = AstRtti<AstStatDeclareExternType>::value;
+ZIG_EXPORT const unsigned char AstTypeReferenceIndex = AstRtti<AstTypeReference>::value;
+ZIG_EXPORT const unsigned char AstTypeTableIndex = AstRtti<AstTypeTable>::value;
+ZIG_EXPORT const unsigned char AstTypeFunctionIndex = AstRtti<AstTypeFunction>::value;
+ZIG_EXPORT const unsigned char AstTypeTypeofIndex = AstRtti<AstTypeTypeof>::value;
+ZIG_EXPORT const unsigned char AstTypeOptionalIndex = AstRtti<AstTypeOptional>::value;
+ZIG_EXPORT const unsigned char AstTypeUnionIndex = AstRtti<AstTypeUnion>::value;
+ZIG_EXPORT const unsigned char AstTypeIntersectionIndex = AstRtti<AstTypeIntersection>::value;
+ZIG_EXPORT const unsigned char AstExprErrorIndex = AstRtti<AstExprError>::value;
+ZIG_EXPORT const unsigned char AstStatErrorIndex = AstRtti<AstStatError>::value;
+ZIG_EXPORT const unsigned char AstTypeErrorIndex = AstRtti<AstTypeError>::value;
+ZIG_EXPORT const unsigned char AstTypeSingletonBoolIndex = AstRtti<AstTypeSingletonBool>::value;
+ZIG_EXPORT const unsigned char AstTypeSingletonStringIndex = AstRtti<AstTypeSingletonString>::value;
+ZIG_EXPORT const unsigned char AstTypeGroupIndex = AstRtti<AstTypeGroup>::value;
+ZIG_EXPORT const unsigned char AstTypePackExplicitIndex = AstRtti<AstTypePackExplicit>::value;
+ZIG_EXPORT const unsigned char AstTypePackVariadicIndex = AstRtti<AstTypePackVariadic>::value;
+ZIG_EXPORT const unsigned char AstTypePackGenericIndex = AstRtti<AstTypePackGeneric>::value;
+
+// CST
+ZIG_EXPORT const unsigned char CstExprConstantNumberIndex = CstRtti<CstExprConstantNumber>::value;
+ZIG_EXPORT const unsigned char CstExprConstantStringIndex = CstRtti<CstExprConstantString>::value;
+ZIG_EXPORT const unsigned char CstExprCallIndex = CstRtti<CstExprCall>::value;
+ZIG_EXPORT const unsigned char CstExprIndexExprIndex = CstRtti<CstExprIndexExpr>::value;
+ZIG_EXPORT const unsigned char CstExprFunctionIndex = CstRtti<CstExprFunction>::value;
+ZIG_EXPORT const unsigned char CstExprTableIndex = CstRtti<CstExprTable>::value;
+ZIG_EXPORT const unsigned char CstExprOpIndex = CstRtti<CstExprOp>::value;
+ZIG_EXPORT const unsigned char CstExprTypeAssertionIndex = CstRtti<CstExprTypeAssertion>::value;
+ZIG_EXPORT const unsigned char CstExprIfElseIndex = CstRtti<CstExprIfElse>::value;
+ZIG_EXPORT const unsigned char CstExprInterpStringIndex = CstRtti<CstExprInterpString>::value;
+ZIG_EXPORT const unsigned char CstStatDoIndex = CstRtti<CstStatDo>::value;
+ZIG_EXPORT const unsigned char CstStatRepeatIndex = CstRtti<CstStatRepeat>::value;
+ZIG_EXPORT const unsigned char CstStatReturnIndex = CstRtti<CstStatReturn>::value;
+ZIG_EXPORT const unsigned char CstStatLocalIndex = CstRtti<CstStatLocal>::value;
+ZIG_EXPORT const unsigned char CstStatForIndex = CstRtti<CstStatFor>::value;
+ZIG_EXPORT const unsigned char CstStatForInIndex = CstRtti<CstStatForIn>::value;
+ZIG_EXPORT const unsigned char CstStatAssignIndex = CstRtti<CstStatAssign>::value;
+ZIG_EXPORT const unsigned char CstStatCompoundAssignIndex = CstRtti<CstStatCompoundAssign>::value;
+ZIG_EXPORT const unsigned char CstStatFunctionIndex = CstRtti<CstStatFunction>::value;
+ZIG_EXPORT const unsigned char CstStatLocalFunctionIndex = CstRtti<CstStatLocalFunction>::value;
+ZIG_EXPORT const unsigned char CstGenericTypeIndex = CstRtti<CstGenericType>::value;
+ZIG_EXPORT const unsigned char CstGenericTypePackIndex = CstRtti<CstGenericTypePack>::value;
+ZIG_EXPORT const unsigned char CstStatTypeAliasIndex = CstRtti<CstStatTypeAlias>::value;
+ZIG_EXPORT const unsigned char CstStatTypeFunctionIndex = CstRtti<CstStatTypeFunction>::value;
+ZIG_EXPORT const unsigned char CstTypeReferenceIndex = CstRtti<CstTypeReference>::value;
+ZIG_EXPORT const unsigned char CstTypeTableIndex = CstRtti<CstTypeTable>::value;
+ZIG_EXPORT const unsigned char CstTypeFunctionIndex = CstRtti<CstTypeFunction>::value;
+ZIG_EXPORT const unsigned char CstTypeTypeofIndex = CstRtti<CstTypeTypeof>::value;
+ZIG_EXPORT const unsigned char CstTypeUnionIndex = CstRtti<CstTypeUnion>::value;
+ZIG_EXPORT const unsigned char CstTypeIntersectionIndex = CstRtti<CstTypeIntersection>::value;
+ZIG_EXPORT const unsigned char CstTypeSingletonStringIndex = CstRtti<CstTypeSingletonString>::value;
+ZIG_EXPORT const unsigned char CstTypePackExplicitIndex = CstRtti<CstTypePackExplicit>::value;
+ZIG_EXPORT const unsigned char CstTypePackGenericIndex = CstRtti<CstTypePackGeneric>::value;

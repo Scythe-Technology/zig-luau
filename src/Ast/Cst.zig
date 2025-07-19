@@ -441,6 +441,78 @@ test Node {
     }
 }
 
+test "Index" {
+    const Indexes = struct {
+        extern "c" const CstExprConstantNumberIndex: u8;
+        extern "c" const CstExprConstantStringIndex: u8;
+        extern "c" const CstExprCallIndex: u8;
+        extern "c" const CstExprIndexExprIndex: u8;
+        extern "c" const CstExprFunctionIndex: u8;
+        extern "c" const CstExprTableIndex: u8;
+        extern "c" const CstExprOpIndex: u8;
+        extern "c" const CstExprTypeAssertionIndex: u8;
+        extern "c" const CstExprIfElseIndex: u8;
+        extern "c" const CstExprInterpStringIndex: u8;
+        extern "c" const CstStatDoIndex: u8;
+        extern "c" const CstStatRepeatIndex: u8;
+        extern "c" const CstStatReturnIndex: u8;
+        extern "c" const CstStatLocalIndex: u8;
+        extern "c" const CstStatForIndex: u8;
+        extern "c" const CstStatForInIndex: u8;
+        extern "c" const CstStatAssignIndex: u8;
+        extern "c" const CstStatCompoundAssignIndex: u8;
+        extern "c" const CstStatFunctionIndex: u8;
+        extern "c" const CstStatLocalFunctionIndex: u8;
+        extern "c" const CstGenericTypeIndex: u8;
+        extern "c" const CstGenericTypePackIndex: u8;
+        extern "c" const CstStatTypeAliasIndex: u8;
+        extern "c" const CstStatTypeFunctionIndex: u8;
+        extern "c" const CstTypeReferenceIndex: u8;
+        extern "c" const CstTypeTableIndex: u8;
+        extern "c" const CstTypeFunctionIndex: u8;
+        extern "c" const CstTypeTypeofIndex: u8;
+        extern "c" const CstTypeUnionIndex: u8;
+        extern "c" const CstTypeIntersectionIndex: u8;
+        extern "c" const CstTypeSingletonStringIndex: u8;
+        extern "c" const CstTypePackExplicitIndex: u8;
+        extern "c" const CstTypePackGenericIndex: u8;
+    };
+
+    try std.testing.expect(Indexes.CstExprConstantNumberIndex == @intFromEnum(Node.Kind.expr_constant_number));
+    try std.testing.expect(Indexes.CstExprConstantStringIndex == @intFromEnum(Node.Kind.expr_constant_string));
+    try std.testing.expect(Indexes.CstExprCallIndex == @intFromEnum(Node.Kind.expr_call));
+    try std.testing.expect(Indexes.CstExprIndexExprIndex == @intFromEnum(Node.Kind.expr_index_expr));
+    try std.testing.expect(Indexes.CstExprFunctionIndex == @intFromEnum(Node.Kind.expr_function));
+    try std.testing.expect(Indexes.CstExprTableIndex == @intFromEnum(Node.Kind.expr_table));
+    try std.testing.expect(Indexes.CstExprOpIndex == @intFromEnum(Node.Kind.expr_op));
+    try std.testing.expect(Indexes.CstExprTypeAssertionIndex == @intFromEnum(Node.Kind.expr_type_assertion));
+    try std.testing.expect(Indexes.CstExprIfElseIndex == @intFromEnum(Node.Kind.expr_if_else));
+    try std.testing.expect(Indexes.CstExprInterpStringIndex == @intFromEnum(Node.Kind.expr_interp_string));
+    try std.testing.expect(Indexes.CstStatDoIndex == @intFromEnum(Node.Kind.stat_do));
+    try std.testing.expect(Indexes.CstStatRepeatIndex == @intFromEnum(Node.Kind.stat_repeat));
+    try std.testing.expect(Indexes.CstStatReturnIndex == @intFromEnum(Node.Kind.stat_return));
+    try std.testing.expect(Indexes.CstStatLocalIndex == @intFromEnum(Node.Kind.stat_local));
+    try std.testing.expect(Indexes.CstStatForIndex == @intFromEnum(Node.Kind.stat_for));
+    try std.testing.expect(Indexes.CstStatForInIndex == @intFromEnum(Node.Kind.stat_for_in));
+    try std.testing.expect(Indexes.CstStatAssignIndex == @intFromEnum(Node.Kind.stat_assign));
+    try std.testing.expect(Indexes.CstStatCompoundAssignIndex == @intFromEnum(Node.Kind.stat_compound_assign));
+    try std.testing.expect(Indexes.CstStatFunctionIndex == @intFromEnum(Node.Kind.stat_function));
+    try std.testing.expect(Indexes.CstStatLocalFunctionIndex == @intFromEnum(Node.Kind.stat_local_function));
+    try std.testing.expect(Indexes.CstGenericTypeIndex == @intFromEnum(Node.Kind.generic_type));
+    try std.testing.expect(Indexes.CstGenericTypePackIndex == @intFromEnum(Node.Kind.generic_type_pack));
+    try std.testing.expect(Indexes.CstStatTypeAliasIndex == @intFromEnum(Node.Kind.stat_type_alias));
+    try std.testing.expect(Indexes.CstStatTypeFunctionIndex == @intFromEnum(Node.Kind.stat_type_function));
+    try std.testing.expect(Indexes.CstTypeReferenceIndex == @intFromEnum(Node.Kind.type_reference));
+    try std.testing.expect(Indexes.CstTypeTableIndex == @intFromEnum(Node.Kind.type_table));
+    try std.testing.expect(Indexes.CstTypeFunctionIndex == @intFromEnum(Node.Kind.type_function));
+    try std.testing.expect(Indexes.CstTypeTypeofIndex == @intFromEnum(Node.Kind.type_typeof));
+    try std.testing.expect(Indexes.CstTypeUnionIndex == @intFromEnum(Node.Kind.type_union));
+    try std.testing.expect(Indexes.CstTypeIntersectionIndex == @intFromEnum(Node.Kind.type_intersection));
+    try std.testing.expect(Indexes.CstTypeSingletonStringIndex == @intFromEnum(Node.Kind.type_singleton_string));
+    try std.testing.expect(Indexes.CstTypePackExplicitIndex == @intFromEnum(Node.Kind.type_pack_explicit));
+    try std.testing.expect(Indexes.CstTypePackGenericIndex == @intFromEnum(Node.Kind.type_pack_generic));
+}
+
 // sources:
 // https://github.com/luau-lang/luau/blob/6ff0650a8d4ba90df9826492b68c88911e39b1c1/Ast/include/Luau/Cst.h
 // https://github.com/luau-lang/luau/blob/6ff0650a8d4ba90df9826492b68c88911e39b1c1/Ast/src/Cst.cpp

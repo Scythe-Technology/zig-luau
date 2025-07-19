@@ -76,7 +76,7 @@ pub const ParseResult = extern struct {
 };
 
 pub const ParseExprResult = extern struct {
-    expr: *Ast.StatExpr,
+    expr: *Ast.Expr,
     lines: usize = 0,
 
     hotcomments: cpp_std.Vector(HotComment),
