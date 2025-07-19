@@ -2142,6 +2142,126 @@ test Node {
     }
 }
 
+test "Index" {
+    const Indexes = struct {
+        extern "c" const AstAttrIndex: u8;
+        extern "c" const AstGenericTypeIndex: u8;
+        extern "c" const AstGenericTypePackIndex: u8;
+        extern "c" const AstExprGroupIndex: u8;
+        extern "c" const AstExprConstantNilIndex: u8;
+        extern "c" const AstExprConstantBoolIndex: u8;
+        extern "c" const AstExprConstantNumberIndex: u8;
+        extern "c" const AstExprConstantStringIndex: u8;
+        extern "c" const AstExprLocalIndex: u8;
+        extern "c" const AstExprGlobalIndex: u8;
+        extern "c" const AstExprVarargsIndex: u8;
+        extern "c" const AstExprCallIndex: u8;
+        extern "c" const AstExprIndexNameIndex: u8;
+        extern "c" const AstExprIndexExprIndex: u8;
+        extern "c" const AstExprFunctionIndex: u8;
+        extern "c" const AstExprTableIndex: u8;
+        extern "c" const AstExprUnaryIndex: u8;
+        extern "c" const AstExprBinaryIndex: u8;
+        extern "c" const AstExprTypeAssertionIndex: u8;
+        extern "c" const AstExprIfElseIndex: u8;
+        extern "c" const AstExprInterpStringIndex: u8;
+        extern "c" const AstStatBlockIndex: u8;
+        extern "c" const AstStatIfIndex: u8;
+        extern "c" const AstStatWhileIndex: u8;
+        extern "c" const AstStatRepeatIndex: u8;
+        extern "c" const AstStatBreakIndex: u8;
+        extern "c" const AstStatContinueIndex: u8;
+        extern "c" const AstStatReturnIndex: u8;
+        extern "c" const AstStatExprIndex: u8;
+        extern "c" const AstStatLocalIndex: u8;
+        extern "c" const AstStatForIndex: u8;
+        extern "c" const AstStatForInIndex: u8;
+        extern "c" const AstStatAssignIndex: u8;
+        extern "c" const AstStatCompoundAssignIndex: u8;
+        extern "c" const AstStatFunctionIndex: u8;
+        extern "c" const AstStatLocalFunctionIndex: u8;
+        extern "c" const AstStatTypeAliasIndex: u8;
+        extern "c" const AstStatTypeFunctionIndex: u8;
+        extern "c" const AstStatDeclareFunctionIndex: u8;
+        extern "c" const AstStatDeclareGlobalIndex: u8;
+        extern "c" const AstStatDeclareExternTypeIndex: u8;
+        extern "c" const AstTypeReferenceIndex: u8;
+        extern "c" const AstTypeTableIndex: u8;
+        extern "c" const AstTypeFunctionIndex: u8;
+        extern "c" const AstTypeTypeofIndex: u8;
+        extern "c" const AstTypeOptionalIndex: u8;
+        extern "c" const AstTypeUnionIndex: u8;
+        extern "c" const AstTypeIntersectionIndex: u8;
+        extern "c" const AstExprErrorIndex: u8;
+        extern "c" const AstStatErrorIndex: u8;
+        extern "c" const AstTypeErrorIndex: u8;
+        extern "c" const AstTypeSingletonBoolIndex: u8;
+        extern "c" const AstTypeSingletonStringIndex: u8;
+        extern "c" const AstTypeGroupIndex: u8;
+        extern "c" const AstTypePackExplicitIndex: u8;
+        extern "c" const AstTypePackVariadicIndex: u8;
+        extern "c" const AstTypePackGenericIndex: u8;
+    };
+
+    try std.testing.expect(Indexes.AstAttrIndex == @intFromEnum(Node.Kind.attr));
+    try std.testing.expect(Indexes.AstGenericTypeIndex == @intFromEnum(Node.Kind.generic_type));
+    try std.testing.expect(Indexes.AstGenericTypePackIndex == @intFromEnum(Node.Kind.generic_type_pack));
+    try std.testing.expect(Indexes.AstExprGroupIndex == @intFromEnum(Node.Kind.expr_group));
+    try std.testing.expect(Indexes.AstExprConstantNilIndex == @intFromEnum(Node.Kind.expr_constant_nil));
+    try std.testing.expect(Indexes.AstExprConstantBoolIndex == @intFromEnum(Node.Kind.expr_constant_bool));
+    try std.testing.expect(Indexes.AstExprConstantNumberIndex == @intFromEnum(Node.Kind.expr_constant_number));
+    try std.testing.expect(Indexes.AstExprConstantStringIndex == @intFromEnum(Node.Kind.expr_constant_string));
+    try std.testing.expect(Indexes.AstExprLocalIndex == @intFromEnum(Node.Kind.expr_local));
+    try std.testing.expect(Indexes.AstExprGlobalIndex == @intFromEnum(Node.Kind.expr_global));
+    try std.testing.expect(Indexes.AstExprVarargsIndex == @intFromEnum(Node.Kind.expr_varargs));
+    try std.testing.expect(Indexes.AstExprCallIndex == @intFromEnum(Node.Kind.expr_call));
+    try std.testing.expect(Indexes.AstExprIndexNameIndex == @intFromEnum(Node.Kind.expr_index_name));
+    try std.testing.expect(Indexes.AstExprIndexExprIndex == @intFromEnum(Node.Kind.expr_index_expr));
+    try std.testing.expect(Indexes.AstExprFunctionIndex == @intFromEnum(Node.Kind.expr_function));
+    try std.testing.expect(Indexes.AstExprTableIndex == @intFromEnum(Node.Kind.expr_table));
+    try std.testing.expect(Indexes.AstExprUnaryIndex == @intFromEnum(Node.Kind.expr_unary));
+    try std.testing.expect(Indexes.AstExprBinaryIndex == @intFromEnum(Node.Kind.expr_binary));
+    try std.testing.expect(Indexes.AstExprTypeAssertionIndex == @intFromEnum(Node.Kind.expr_type_assertion));
+    try std.testing.expect(Indexes.AstExprIfElseIndex == @intFromEnum(Node.Kind.expr_if_else));
+    try std.testing.expect(Indexes.AstExprInterpStringIndex == @intFromEnum(Node.Kind.expr_interp_string));
+    try std.testing.expect(Indexes.AstStatBlockIndex == @intFromEnum(Node.Kind.stat_block));
+    try std.testing.expect(Indexes.AstStatIfIndex == @intFromEnum(Node.Kind.stat_if));
+    try std.testing.expect(Indexes.AstStatWhileIndex == @intFromEnum(Node.Kind.stat_while));
+    try std.testing.expect(Indexes.AstStatRepeatIndex == @intFromEnum(Node.Kind.stat_repeat));
+    try std.testing.expect(Indexes.AstStatBreakIndex == @intFromEnum(Node.Kind.stat_break));
+    try std.testing.expect(Indexes.AstStatContinueIndex == @intFromEnum(Node.Kind.stat_continue));
+    try std.testing.expect(Indexes.AstStatReturnIndex == @intFromEnum(Node.Kind.stat_return));
+    try std.testing.expect(Indexes.AstStatExprIndex == @intFromEnum(Node.Kind.stat_expr));
+    try std.testing.expect(Indexes.AstStatLocalIndex == @intFromEnum(Node.Kind.stat_local));
+    try std.testing.expect(Indexes.AstStatForIndex == @intFromEnum(Node.Kind.stat_for));
+    try std.testing.expect(Indexes.AstStatForInIndex == @intFromEnum(Node.Kind.stat_for_in));
+    try std.testing.expect(Indexes.AstStatAssignIndex == @intFromEnum(Node.Kind.stat_assign));
+    try std.testing.expect(Indexes.AstStatCompoundAssignIndex == @intFromEnum(Node.Kind.stat_compound_assign));
+    try std.testing.expect(Indexes.AstStatFunctionIndex == @intFromEnum(Node.Kind.stat_function));
+    try std.testing.expect(Indexes.AstStatLocalFunctionIndex == @intFromEnum(Node.Kind.stat_local_function));
+    try std.testing.expect(Indexes.AstStatTypeAliasIndex == @intFromEnum(Node.Kind.stat_type_alias));
+    try std.testing.expect(Indexes.AstStatTypeFunctionIndex == @intFromEnum(Node.Kind.stat_type_function));
+    try std.testing.expect(Indexes.AstStatDeclareFunctionIndex == @intFromEnum(Node.Kind.stat_declare_function));
+    try std.testing.expect(Indexes.AstStatDeclareGlobalIndex == @intFromEnum(Node.Kind.stat_declare_global));
+    try std.testing.expect(Indexes.AstStatDeclareExternTypeIndex == @intFromEnum(Node.Kind.stat_declare_extern_type));
+    try std.testing.expect(Indexes.AstTypeReferenceIndex == @intFromEnum(Node.Kind.type_reference));
+    try std.testing.expect(Indexes.AstTypeTableIndex == @intFromEnum(Node.Kind.type_table));
+    try std.testing.expect(Indexes.AstTypeFunctionIndex == @intFromEnum(Node.Kind.type_function));
+    try std.testing.expect(Indexes.AstTypeTypeofIndex == @intFromEnum(Node.Kind.type_typeof));
+    try std.testing.expect(Indexes.AstTypeOptionalIndex == @intFromEnum(Node.Kind.type_optional));
+    try std.testing.expect(Indexes.AstTypeUnionIndex == @intFromEnum(Node.Kind.type_union));
+    try std.testing.expect(Indexes.AstTypeIntersectionIndex == @intFromEnum(Node.Kind.type_intersection));
+    try std.testing.expect(Indexes.AstExprErrorIndex == @intFromEnum(Node.Kind.expr_error));
+    try std.testing.expect(Indexes.AstStatErrorIndex == @intFromEnum(Node.Kind.stat_error));
+    try std.testing.expect(Indexes.AstTypeErrorIndex == @intFromEnum(Node.Kind.type_error));
+    try std.testing.expect(Indexes.AstTypeSingletonBoolIndex == @intFromEnum(Node.Kind.type_singleton_bool));
+    try std.testing.expect(Indexes.AstTypeSingletonStringIndex == @intFromEnum(Node.Kind.type_singleton_string));
+    try std.testing.expect(Indexes.AstTypeGroupIndex == @intFromEnum(Node.Kind.type_group));
+    try std.testing.expect(Indexes.AstTypePackExplicitIndex == @intFromEnum(Node.Kind.type_pack_explicit));
+    try std.testing.expect(Indexes.AstTypePackVariadicIndex == @intFromEnum(Node.Kind.type_pack_variadic));
+    try std.testing.expect(Indexes.AstTypePackGenericIndex == @intFromEnum(Node.Kind.type_pack_generic));
+}
+
 // sources:
 // https://github.com/luau-lang/luau/blob/6ff0650a8d4ba90df9826492b68c88911e39b1c1/Ast/include/Luau/Ast.h
 // https://github.com/luau-lang/luau/blob/6ff0650a8d4ba90df9826492b68c88911e39b1c1/Ast/src/Ast.cpp
