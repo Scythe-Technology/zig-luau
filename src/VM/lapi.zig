@@ -337,9 +337,6 @@ pub fn typeOf(L: *lua.State, idx: i32) lua.Type {
 }
 
 pub fn typename(t: lua.Type) [:0]const u8 {
-    if (comptime !build_config.use_zig_backend) {
-        return std.mem.span(c.lua_typename(undefined, @intFromEnum(t)));
-    }
     return if (t == .None) "no value" else ltm.typenames[@intCast(@intFromEnum(t))];
 }
 
@@ -1452,7 +1449,7 @@ pub fn setuserdatatag(L: *lua.State, idx: i32, tag: u8) void {
 }
 
 pub fn setuserdatadtor(L: *lua.State, comptime T: type, tag: u8, comptime dtorfn: ?*const fn (L: *lua.State, ptr: *T) void) void {
-    const dtor = if (dtorfn) |dtor| struct {
+    const dtor: ?*const fn (L: *lua.State, ptr: ?*anyopaque) callconv(.c) void = if (dtorfn) |dtor| struct {
         fn inner(state: *lua.State, ptr: ?*anyopaque) callconv(.c) void {
             @call(.always_inline, dtor, .{
                 state,
