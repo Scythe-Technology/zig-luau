@@ -781,6 +781,10 @@ test "size match" {
         extern "c" const TKey_size: u8;
         extern "c" const LuaNode_size: u8;
         extern "c" const LuaTable_size: u8;
+
+        extern "c" const TString_data_offset: u8;
+        extern "c" const Udata_data_offset: u8;
+        extern "c" const LuauBuffer_data_offset: u8;
     };
 
     try std.testing.expect(Sizes.GCObject_size == @sizeOf(lstate.GCObject));
@@ -797,4 +801,8 @@ test "size match" {
     try std.testing.expect(Sizes.TKey_size == @sizeOf(TKey));
     try std.testing.expect(Sizes.LuaNode_size == @sizeOf(LuaNode));
     try std.testing.expect(Sizes.LuaTable_size == @sizeOf(LuaTable));
+
+    try std.testing.expect(Sizes.TString_data_offset == @offsetOf(TString, "data"));
+    try std.testing.expect(Sizes.Udata_data_offset == @offsetOf(Udata, "data"));
+    try std.testing.expect(Sizes.LuauBuffer_data_offset == @offsetOf(Buffer, "data"));
 }
