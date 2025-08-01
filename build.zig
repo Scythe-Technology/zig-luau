@@ -672,6 +672,10 @@ fn buildLuau(
     }
     if (libVM) |mod| {
         lib.linkLibrary(mod);
+        if (Mode.type == .@"test") {
+            lib.addCSourceFile(.{ .file = b.path("src/VM/acc.cpp"), .flags = flags });
+            lib.addIncludePath(dependency.path("VM/src"));
+        }
         linkIncludePath(lib, mod);
     }
 
