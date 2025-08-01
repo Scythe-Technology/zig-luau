@@ -764,3 +764,37 @@ pub inline fn Opushfstring(L: *lua.State, comptime fmt: []const u8, args: anytyp
 // pub fn Ochunkid(out: []u8, comptime source: []const u8) []u8 {
 //     c.luaO
 // }
+
+test "size match" {
+    const Sizes = struct {
+        extern "c" const GCObject_size: u8;
+        extern "c" const GCheader_size: u8;
+        extern "c" const Value_size: u8;
+        extern "c" const TValue_size: u8;
+        extern "c" const TString_size: u8;
+        extern "c" const Udata_size: u8;
+        extern "c" const LuauBuffer_size: u8;
+        extern "c" const Proto_size: u8;
+        extern "c" const LocVar_size: u8;
+        extern "c" const UpVal_size: u8;
+        extern "c" const Closure_size: u8;
+        extern "c" const TKey_size: u8;
+        extern "c" const LuaNode_size: u8;
+        extern "c" const LuaTable_size: u8;
+    };
+
+    try std.testing.expect(Sizes.GCObject_size == @sizeOf(lstate.GCObject));
+    try std.testing.expect(Sizes.GCheader_size == @sizeOf(GCheader));
+    try std.testing.expect(Sizes.Value_size == @sizeOf(Value));
+    try std.testing.expect(Sizes.TValue_size == @sizeOf(TValue));
+    try std.testing.expect(Sizes.TString_size == @sizeOf(TString));
+    try std.testing.expect(Sizes.Udata_size == @sizeOf(Udata));
+    try std.testing.expect(Sizes.LuauBuffer_size == @sizeOf(Buffer));
+    try std.testing.expect(Sizes.Proto_size == @sizeOf(Proto));
+    try std.testing.expect(Sizes.LocVar_size == @sizeOf(LocVar));
+    try std.testing.expect(Sizes.UpVal_size == @sizeOf(UpVal));
+    try std.testing.expect(Sizes.Closure_size == @sizeOf(Closure));
+    try std.testing.expect(Sizes.TKey_size == @sizeOf(TKey));
+    try std.testing.expect(Sizes.LuaNode_size == @sizeOf(LuaNode));
+    try std.testing.expect(Sizes.LuaTable_size == @sizeOf(LuaTable));
+}
