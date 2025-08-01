@@ -345,7 +345,7 @@ fn newblock(L: *lua.State, sizeClass: u8) Error!*anyopaque {
     const g = L.global;
     const page = g.freepages[sizeClass] orelse blk: {
         // slow path: no page in the freelist, allocate a new one
-        break :blk try newclasspage(L, &g.freepages, &g.allpages, sizeClass, true);
+        break :blk try newclasspage(L, &g.freepages, debugpageset(&g.allpages), sizeClass, true);
     };
 
     std.debug.assert(page.prev == null);
@@ -484,7 +484,7 @@ fn freegcoblock(L: *lua.State, sizeClass: u8, block: *anyopaque, page: *lua_Page
 
     // if it's the last block in the page, we don't need the page
     if (page.busyBlocks == 0)
-        freeclasspage(L, &g.freegcopages, debugpageset(&g.allgcopages), page, sizeClass);
+        freeclasspage(L, &g.freegcopages, &g.allgcopages, page, sizeClass);
 }
 
 pub fn Mnew_(L: *lua.State, nsize: usize, memcat: u8) Error!*anyopaque {
