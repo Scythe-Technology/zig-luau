@@ -17,3 +17,8 @@ ZIG_EXPORT const unsigned char Closure_size = sizeof(Closure);
 ZIG_EXPORT const unsigned char TKey_size = sizeof(TKey);
 ZIG_EXPORT const unsigned char LuaNode_size = sizeof(LuaNode);
 ZIG_EXPORT const unsigned char LuaTable_size = sizeof(LuaTable);
+
+
+ZIG_EXPORT const unsigned char TString_data_offset = offsetof(TString, data);
+ZIG_EXPORT const unsigned char Udata_data_offset = offsetof(Udata, data);
+ZIG_EXPORT const unsigned char LuauBuffer_data_offset = offsetof(LuauBuffer, data);

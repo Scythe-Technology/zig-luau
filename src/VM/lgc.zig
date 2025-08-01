@@ -567,7 +567,6 @@ fn cleartable(L: *lua.State, il: ?*lstate.GCObject) Errorset.Table!usize {
     var ol: ?*lstate.GCObject = il;
     while (ol) |l| {
         const h = l.toh();
-
         work += @sizeOf(lobject.LuaTable) + (@sizeOf(lobject.TValue) * @as(u32, @intCast(h.sizearray))) + (@sizeOf(lobject.LuaNode) * lobject.sizenode(h));
 
         var i: usize = @intCast(h.sizearray);
