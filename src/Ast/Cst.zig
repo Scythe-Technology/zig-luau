@@ -442,6 +442,8 @@ test Node {
 }
 
 test "Index" {
+    if (@import("builtin").cpu.arch.isWasm())
+        return error.SkipZigTest;
     const Indexes = struct {
         extern "c" const CstExprConstantNumberIndex: u8;
         extern "c" const CstExprConstantStringIndex: u8;
