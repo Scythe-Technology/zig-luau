@@ -795,8 +795,8 @@ fn sweepgcopage(L: *lua.State, page: *lmem.lua_Page) usize {
 
     const newwhite = Cwhite(g);
 
-    var pos: *u8 = @ptrCast(start);
-    while (pos != @as(*u8, @ptrCast(end))) : (pos = @ptrFromInt(@intFromPtr(pos) + @as(usize, @intCast(blockSize)))) {
+    var pos: [*]u8 = start;
+    while (pos != end) : (pos += @as(usize, @intCast(blockSize))) {
         const gco: *lstate.GCObject = @ptrCast(@alignCast(pos));
 
         // skip memory blocks that are already freed
@@ -815,7 +815,7 @@ fn sweepgcopage(L: *lua.State, page: *lmem.lua_Page) usize {
             // if the last block was removed, page would be removed as well
             busyBlocks -= 1;
             if (busyBlocks == 0)
-                return (@intFromPtr(pos) - @intFromPtr(start)) + @divTrunc(@intFromPtr(end) - @intFromPtr(start), @as(usize, @intCast(blockSize)));
+                return @divTrunc(@intFromPtr(end) - @intFromPtr(start), @as(usize, @intCast(blockSize))) + 1;
         }
     }
 
