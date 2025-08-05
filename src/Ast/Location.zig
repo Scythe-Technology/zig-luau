@@ -6,6 +6,22 @@ pub const Location = extern struct {
         return self.begin.eq(other.begin) and self.end.eq(other.end);
     }
 
+    pub fn encloses(self: Location, other: Location) bool {
+        return self.begin.lessThanOrEq(other.begin) and self.end.greaterThanOrEq(other.end);
+    }
+
+    pub fn overlaps(self: Location, other: Location) bool {
+        return (self.begin.lessThanOrEq(other.begin) and self.end.greaterThanOrEq(other.begin)) or (self.begin.lessThanOrEq(other.end) and self.end.greaterThanOrEq(other.end)) or (other.begin.greaterThanOrEq(self.begin) and other.end.lessThanOrEq(self.end));
+    }
+
+    pub fn contains(self: Location, position: Position) bool {
+        return self.begin.lessThanOrEq(position) and position.lessThan(self.end);
+    }
+
+    pub fn containsClosed(self: Location, position: Position) bool {
+        return self.begin.lessThanOrEq(position) and position.lessThanOrEq(self.end);
+    }
+
     pub const Position = extern struct {
         line: c_uint,
         column: c_uint,
