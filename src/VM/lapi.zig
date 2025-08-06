@@ -890,7 +890,7 @@ pub inline fn getref(L: *State, idx: i32) lua.Type {
     if (comptime !build_config.use_zig_backend) {
         return @enumFromInt(c.lua_getref(L, idx));
     }
-    return rawgeti(L, lua.GLOBALSINDEX, idx);
+    return rawgeti(L, lua.REGISTRYINDEX, idx);
 }
 
 /// create a new table and push it to the stack
