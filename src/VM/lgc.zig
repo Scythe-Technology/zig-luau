@@ -931,7 +931,7 @@ fn getheaptrigger(g: *lstate.global_State, heapgoal: usize) usize {
     if (allocationduration < durationthreshold)
         return heapgoal;
 
-    const allocationrate = @as(f64, @floatFromInt(g.gcstats.atomicstarttotalsizebytes - g.gcstats.endtotalsizebytes)) / allocationduration;
+    const allocationrate = @as(f64, @floatFromInt(g.gcstats.atomicstarttotalsizebytes -% g.gcstats.endtotalsizebytes)) / allocationduration;
     const markduration = g.gcstats.atomicstarttimestamp - g.gcstats.starttimestamp;
 
     const expectedgrowth = @as(i64, @intFromFloat(markduration * allocationrate));
