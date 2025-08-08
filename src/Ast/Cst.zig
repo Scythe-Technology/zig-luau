@@ -471,6 +471,9 @@ test "Index" {
         extern "c" const CstStatTypeFunctionIndex: u8;
         extern "c" const CstTypeReferenceIndex: u8;
         extern "c" const CstTypeTableIndex: u8;
+        extern "c" const CstTypeTableItemKindIndexer: u8;
+        extern "c" const CstTypeTableItemKindProperty: u8;
+        extern "c" const CstTypeTableItemKindStringProperty: u8;
         extern "c" const CstTypeFunctionIndex: u8;
         extern "c" const CstTypeTypeofIndex: u8;
         extern "c" const CstTypeUnionIndex: u8;
@@ -481,11 +484,11 @@ test "Index" {
     };
 
     try std.testing.expect(Indexes.CstExprConstantNumberIndex == @intFromEnum(Node.Kind.expr_constant_number));
-    
+
     // TODO: invalid index, got 1 instead of another value that is not equal `CstExprConstantNumberIndex` or any other cst index
     // luau/c++ compiler bug
     // try std.testing.expect(Indexes.CstExprConstantStringIndex == @intFromEnum(Node.Kind.expr_constant_string));
-    
+
     try std.testing.expect(Indexes.CstExprCallIndex == @intFromEnum(Node.Kind.expr_call));
     try std.testing.expect(Indexes.CstExprIndexExprIndex == @intFromEnum(Node.Kind.expr_index_expr));
     try std.testing.expect(Indexes.CstExprFunctionIndex == @intFromEnum(Node.Kind.expr_function));
@@ -510,6 +513,9 @@ test "Index" {
     try std.testing.expect(Indexes.CstStatTypeFunctionIndex == @intFromEnum(Node.Kind.stat_type_function));
     try std.testing.expect(Indexes.CstTypeReferenceIndex == @intFromEnum(Node.Kind.type_reference));
     try std.testing.expect(Indexes.CstTypeTableIndex == @intFromEnum(Node.Kind.type_table));
+    try std.testing.expect(Indexes.CstTypeTableItemKindIndexer == @intFromEnum(TypeTable.Item.Kind.indexer));
+    try std.testing.expect(Indexes.CstTypeTableItemKindProperty == @intFromEnum(TypeTable.Item.Kind.property));
+    try std.testing.expect(Indexes.CstTypeTableItemKindStringProperty == @intFromEnum(TypeTable.Item.Kind.string_property));
     try std.testing.expect(Indexes.CstTypeFunctionIndex == @intFromEnum(Node.Kind.type_function));
     try std.testing.expect(Indexes.CstTypeTypeofIndex == @intFromEnum(Node.Kind.type_typeof));
     try std.testing.expect(Indexes.CstTypeUnionIndex == @intFromEnum(Node.Kind.type_union));
