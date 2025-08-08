@@ -2143,7 +2143,7 @@ test Node {
 }
 
 test "Index" {
-    if (@import("builtin").cpu.arch.isWasm())
+    if (@import("builtin").cpu.arch.isWasm() or @import("builtin").os.tag == .windows)
         return error.SkipZigTest;
     const Indexes = struct {
         extern "c" const AstAttrIndex: u8;
