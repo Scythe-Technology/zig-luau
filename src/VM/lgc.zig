@@ -922,6 +922,7 @@ fn getheaptriggererroroffset(g: *lstate.global_State) i64 {
 }
 
 fn getheaptrigger(g: *lstate.global_State, heapgoal: usize) usize {
+    @setRuntimeSafety(false);
     // adjust threshold based on a guess of how many bytes will be allocated between the cycle start and sweep phase
     // our goal is to begin the sweep when used memory has reached the heap goal
     const durationthreshold = 1e-3;
