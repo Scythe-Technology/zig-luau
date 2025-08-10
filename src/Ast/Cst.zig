@@ -152,7 +152,7 @@ pub const ExprTable = extern struct {
 
     items: Ast.Array(Item),
 
-    pub const Item = struct {
+    pub const Item = extern struct {
         /// '[', only if Kind == General
         indexerOpenPosition: cpp_std.Optional(Location.Position),
         /// ']', only if Kind == General
@@ -313,7 +313,7 @@ pub const TypeTable = extern struct {
     items: Ast.Array(Item),
     isArray: bool,
 
-    pub const Item = struct {
+    pub const Item = extern struct {
         kind: Kind,
         indexerOpenPosition: cpp_std.Optional(Location.Position), // '[', only if Kind != Property
         indexerClosePosition: cpp_std.Optional(Location.Position), // ']' only if Kind != Property
