@@ -152,6 +152,11 @@ pub const ExprTable = extern struct {
 
     items: Ast.Array(Item),
 
+    pub const Separator = enum(u32) {
+        comma,
+        semicolon,
+    };
+
     pub const Item = extern struct {
         /// '[', only if Kind == General
         indexerOpenPosition: cpp_std.Optional(Location.Position),
@@ -163,11 +168,6 @@ pub const ExprTable = extern struct {
         separator: cpp_std.Optional(Separator),
         /// may be missing for last Item
         separatorPosition: cpp_std.Optional(Location.Position),
-
-        pub const Separator = enum(u32) {
-            comma,
-            semicolon,
-        };
     };
 };
 
@@ -315,10 +315,10 @@ pub const TypeTable = extern struct {
 
     pub const Item = extern struct {
         kind: Kind,
-        indexerOpenPosition: cpp_std.Optional(Location.Position), // '[', only if Kind != Property
-        indexerClosePosition: cpp_std.Optional(Location.Position), // ']' only if Kind != Property
+        indexerOpenPosition: Location.Position, // '[', only if Kind != Property
+        indexerClosePosition: Location.Position, // ']' only if Kind != Property
         colonPosition: Location.Position,
-        separator: cpp_std.Optional(ExprTable.Item.Separator), // may be missing for last Item
+        separator: cpp_std.Optional(ExprTable.Separator), // may be missing for last Item
         separatorPosition: cpp_std.Optional(Location.Position),
 
         stringInfo: ?*ExprConstantString, // only if Kind == StringProperty
