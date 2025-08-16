@@ -270,6 +270,7 @@ pub const Attr = extern struct {
     location: Location,
 
     type: Attr.Type,
+    args: Array(*Expr),
 
     pub const Type = enum(c_int) {
         Checked = 0,
