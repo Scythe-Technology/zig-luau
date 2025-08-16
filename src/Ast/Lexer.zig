@@ -47,6 +47,7 @@ pub const Lexeme = struct {
         BlockComment,
 
         Attribute,
+        AttributeOpen,
 
         BrokenString,
         BrokenComment,
