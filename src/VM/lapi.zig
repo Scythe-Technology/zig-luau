@@ -859,7 +859,8 @@ pub inline fn rawgetglobal(L: *lua.State, k: []const u8) lua.Type {
 }
 
 /// get value from table value at `idx`
-/// * pushes value to stack
+/// * gets value from index at `top`
+/// * stores value at `top`
 /// * expects value at `idx` to be *table*
 pub fn rawget(L: *lua.State, idx: i32) lua.Type {
     if (comptime !build_config.use_zig_backend) {
@@ -887,9 +888,6 @@ pub fn rawgeti(L: *lua.State, idx: i32, n: i32) lua.Type {
     return (L.top - 1)[0].typeOf();
 }
 pub inline fn getref(L: *State, idx: i32) lua.Type {
-    if (comptime !build_config.use_zig_backend) {
-        return @enumFromInt(c.lua_getref(L, idx));
-    }
     return rawgeti(L, lua.REGISTRYINDEX, idx);
 }
 
