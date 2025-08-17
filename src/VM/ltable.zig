@@ -406,7 +406,7 @@ fn getfreepos(t: *LuaTable) ?*LuaNode {
         t.bound.lastfree -= 1;
 
         const n: *LuaNode = @ptrCast(t.gnode(@intCast(t.bound.lastfree)));
-        if (n.gval().ttisnil())
+        if (n.gkey().ttisnil())
             return n;
     }
     return null; // could not find a free place
