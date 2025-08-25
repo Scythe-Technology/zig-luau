@@ -68,24 +68,24 @@ pub fn build(b: *Build) !void {
 
     const c_module = headers.createModule();
 
-    var FLAGS = std.ArrayList([]const u8).init(b.allocator);
+    var FLAGS: std.ArrayList([]const u8) = .empty;
 
-    try FLAGS.append("-DLUA_USE_LONGJMP=" ++ if (!target.result.cpu.arch.isWasm()) "1" else "0");
-    try FLAGS.append("-DLUA_API=extern\"C\"");
-    try FLAGS.append("-DLUACODE_API=extern\"C\"");
-    try FLAGS.append("-DLUACODEGEN_API=extern\"C\"");
+    try FLAGS.append(b.allocator, "-DLUA_USE_LONGJMP=" ++ if (!target.result.cpu.arch.isWasm()) "1" else "0");
+    try FLAGS.append(b.allocator, "-DLUA_API=extern\"C\"");
+    try FLAGS.append(b.allocator, "-DLUACODE_API=extern\"C\"");
+    try FLAGS.append(b.allocator, "-DLUACODEGEN_API=extern\"C\"");
     if (hard_mem_tests > 0)
-        try FLAGS.append(b.fmt("-DHARDMEMTESTS={d}", .{hard_mem_tests}));
+        try FLAGS.append(b.allocator, b.fmt("-DHARDMEMTESTS={d}", .{hard_mem_tests}));
     if (hard_stack_tests)
-        try FLAGS.append("-DHARDSTACKTESTS");
+        try FLAGS.append(b.allocator, "-DHARDSTACKTESTS");
     if (use_4_vector)
-        try FLAGS.append("-DLUA_VECTOR_SIZE=4");
+        try FLAGS.append(b.allocator, "-DLUA_VECTOR_SIZE=4");
     if (target.result.cpu.arch.isWasm()) {
         if (target.result.os.tag == .emscripten)
-            try FLAGS.append("-fexceptions");
+            try FLAGS.append(b.allocator, "-fexceptions");
         // else
         // try FLAGS.append("-fwasm-exceptions");
-        try FLAGS.append(b.fmt("-DLUAU_WASM_ENV_NAME=\"{s}\"", .{wasm_env_name}));
+        try FLAGS.append(b.allocator, b.fmt("-DLUAU_WASM_ENV_NAME=\"{s}\"", .{wasm_env_name}));
     }
 
     const compile_flags = FLAGS.items;
@@ -147,9 +147,11 @@ pub fn build(b: *Build) !void {
 
     const lib_tests = b.addTest(.{
         .name = if (use_zig_backend) "zig-lib-tests" else "lib-tests",
-        .root_source_file = b.path("src/lib.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/lib.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
         .use_llvm = !no_llvm,
     });
 
@@ -158,9 +160,11 @@ pub fn build(b: *Build) !void {
     // Tests
     const tests = b.addTest(.{
         .name = if (use_zig_backend) "zig-tests" else "tests",
-        .root_source_file = b.path("src/tests.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
         .use_llvm = !no_llvm,
     });
     tests.root_module.addImport("luau", luauTestModule);
@@ -186,9 +190,11 @@ pub fn build(b: *Build) !void {
     for (examples) |example| {
         const exe = b.addExecutable(.{
             .name = example[0],
-            .root_source_file = b.path(example[1]),
-            .target = target,
-            .optimize = optimize,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path(example[1]),
+                .target = target,
+                .optimize = optimize,
+            }),
         });
         exe.root_module.addImport("luau", luauModule);
 
@@ -205,11 +211,13 @@ pub fn build(b: *Build) !void {
         run_step.dependOn(&run_cmd.step);
     }
 
-    const docs = b.addStaticLibrary(.{
+    const docs = b.addLibrary(.{
         .name = "luau",
-        .root_source_file = b.path("src/lib.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/lib.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     docs.root_module.addOptions("config", config);
     docs.root_module.addImport("luau", luauModule);
@@ -288,12 +296,15 @@ fn buildCommon(
     optimize: std.builtin.OptimizeMode,
     version: std.SemanticVersion,
 ) *Step.Compile {
-    const lib = b.addStaticLibrary(.{
+    const lib = b.addLibrary(.{
         .name = "Common",
-        .target = target,
-        .optimize = optimize,
-        .version = version,
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }),
     });
+    lib.version = version;
 
     for (LUAU_Common_HEADERS_DIRS) |dir|
         lib.addIncludePath(dependency.path(dir));
@@ -310,12 +321,15 @@ fn buildAst(
     flags: []const []const u8,
     libCommon: *Step.Compile,
 ) *Step.Compile {
-    const lib = b.addStaticLibrary(.{
+    const lib = b.addLibrary(.{
         .name = "Ast",
-        .target = target,
-        .optimize = optimize,
-        .version = version,
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }),
     });
+    lib.version = version;
 
     linkIncludePath(lib, libCommon);
 
@@ -342,12 +356,15 @@ fn buildCompiler(
     flags: []const []const u8,
     libAst: *Step.Compile,
 ) *Step.Compile {
-    const lib = b.addStaticLibrary(.{
+    const lib = b.addLibrary(.{
         .name = "Compiler",
-        .target = target,
-        .optimize = optimize,
-        .version = version,
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }),
     });
+    lib.version = version;
 
     linkIncludePath(lib, libAst);
     lib.linkLibrary(libAst);
@@ -375,12 +392,15 @@ fn buildConfig(
     flags: []const []const u8,
     libAst: *Step.Compile,
 ) *Step.Compile {
-    const lib = b.addStaticLibrary(.{
+    const lib = b.addLibrary(.{
         .name = "Config",
-        .target = target,
-        .optimize = optimize,
-        .version = version,
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }),
     });
+    lib.version = version;
 
     linkIncludePath(lib, libAst);
     lib.linkLibrary(libAst);
@@ -412,12 +432,15 @@ fn buildAnalysis(
     libCompiler: *Step.Compile,
     libVM: *Step.Compile,
 ) !*Step.Compile {
-    const lib = b.addStaticLibrary(.{
+    const lib = b.addLibrary(.{
         .name = "Analysis",
-        .target = target,
-        .optimize = optimize,
-        .version = version,
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }),
     });
+    lib.version = version;
 
     linkIncludePath(lib, libAst);
     linkIncludePath(lib, libEqSat);
@@ -454,12 +477,15 @@ fn buildEqSat(
     flags: []const []const u8,
     libCommon: *Step.Compile,
 ) *Step.Compile {
-    const lib = b.addStaticLibrary(.{
+    const lib = b.addLibrary(.{
         .name = "EqSat",
-        .target = target,
-        .optimize = optimize,
-        .version = version,
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }),
     });
+    lib.version = version;
 
     linkIncludePath(lib, libCommon);
 
@@ -486,12 +512,15 @@ fn buildCodeGen(
     flags: []const []const u8,
     libVM: *Step.Compile,
 ) *Step.Compile {
-    const lib = b.addStaticLibrary(.{
+    const lib = b.addLibrary(.{
         .name = "CodeGen",
-        .target = target,
-        .optimize = optimize,
-        .version = version,
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }),
     });
+    lib.version = version;
 
     linkIncludePath(lib, libVM);
     lib.linkLibrary(libVM);
@@ -519,12 +548,16 @@ fn buildVM(
     flags: []const []const u8,
     libCommon: *Step.Compile,
 ) *Step.Compile {
-    const lib = b.addStaticLibrary(.{
+    const lib = b.addLibrary(.{
         .name = "VM",
-        .target = target,
-        .optimize = optimize,
-        .version = version,
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }),
     });
+
+    lib.version = version;
 
     linkIncludePath(lib, libCommon);
 
@@ -623,12 +656,15 @@ fn buildLuau(
     libVM: ?*Step.Compile,
     Mode: struct { type: enum { @"test", normal } = .normal },
 ) !*Step.Compile {
-    const lib = b.addStaticLibrary(.{
+    const lib = b.addLibrary(.{
         .name = "luau",
-        .target = target,
-        .optimize = optimize,
-        .version = version,
+        .linkage = .static,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }),
     });
+    lib.version = version;
 
     lib.addIncludePath(b.path("src"));
 

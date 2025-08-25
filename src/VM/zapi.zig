@@ -40,14 +40,14 @@ pub fn ZigToCFn(comptime fnType: std.builtin.Type.Fn, comptime f: anytype) lua.C
             if (fnType.return_type != i32)
                 @compileError("Unsupported Fn Return type, must be i32");
             return struct {
-                fn inner(s: *lua.State) callconv(.C) c_int {
+                fn inner(s: *lua.State) callconv(.c) c_int {
                     return @call(.always_inline, f, .{s});
                 }
             }.inner;
         },
         .void => {
             return struct {
-                fn inner(s: *lua.State) callconv(.C) c_int {
+                fn inner(s: *lua.State) callconv(.c) c_int {
                     @call(.always_inline, f, .{s});
                     return 0;
                 }
@@ -59,7 +59,7 @@ pub fn ZigToCFn(comptime fnType: std.builtin.Type.Fn, comptime f: anytype) lua.C
                     if (error_union.payload != i32)
                         @compileError("Unsupported Fn Return type, must be i32");
                     return struct {
-                        fn inner(s: *lua.State) callconv(.C) c_int {
+                        fn inner(s: *lua.State) callconv(.c) c_int {
                             if (@call(.always_inline, f, .{s})) |res|
                                 return res
                             else |err|
@@ -69,7 +69,7 @@ pub fn ZigToCFn(comptime fnType: std.builtin.Type.Fn, comptime f: anytype) lua.C
                 },
                 .void => {
                     return struct {
-                        fn inner(s: *lua.State) callconv(.C) c_int {
+                        fn inner(s: *lua.State) callconv(.c) c_int {
                             if (@call(.always_inline, f, .{s}))
                                 return 0
                             else |err|
@@ -93,7 +93,7 @@ pub fn ZigToCFnV(comptime fnType: std.builtin.Type.Fn, comptime f: anytype) lua.
     switch (@typeInfo(fnType.return_type orelse @compileError("Fn must return something"))) {
         .void, .noreturn => {
             return struct {
-                fn inner(L: *lua.State) callconv(.C) c_int {
+                fn inner(L: *lua.State) callconv(.c) c_int {
                     @call(.always_inline, f, .{L});
                     return 0;
                 }
@@ -101,7 +101,7 @@ pub fn ZigToCFnV(comptime fnType: std.builtin.Type.Fn, comptime f: anytype) lua.
         },
         .comptime_int, .comptime_float, .bool, .int, .float, .@"struct", .array, .@"enum", .null, .optional => {
             return struct {
-                fn inner(L: *lua.State) callconv(.C) c_int {
+                fn inner(L: *lua.State) callconv(.c) c_int {
                     Zpushvalue(L, @call(.always_inline, f, .{L})) catch |err| switch (@as(anyerror, err)) {
                         error.RaiseLuauError => L.raiseerror(),
                         error.OutOfMemory => ldo.throw(L, .ErrMem),
@@ -115,7 +115,7 @@ pub fn ZigToCFnV(comptime fnType: std.builtin.Type.Fn, comptime f: anytype) lua.
             switch (@typeInfo(error_union.payload)) {
                 .void, .noreturn => {
                     return struct {
-                        fn inner(L: *lua.State) callconv(.C) c_int {
+                        fn inner(L: *lua.State) callconv(.c) c_int {
                             if (@call(.always_inline, f, .{L}))
                                 return 0
                             else |err|
@@ -125,7 +125,7 @@ pub fn ZigToCFnV(comptime fnType: std.builtin.Type.Fn, comptime f: anytype) lua.
                 },
                 .comptime_int, .comptime_float, .bool, .int, .float, .@"struct", .array, .@"enum", .null, .optional => {
                     return struct {
-                        fn inner(L: *lua.State) callconv(.C) c_int {
+                        fn inner(L: *lua.State) callconv(.c) c_int {
                             if (@call(.always_inline, f, .{L})) |res| {
                                 Zpushvalue(L, res) catch |err| switch (err) {
                                     error.RaiseLuauError => L.raiseerror(),
@@ -142,7 +142,7 @@ pub fn ZigToCFnV(comptime fnType: std.builtin.Type.Fn, comptime f: anytype) lua.
         },
         .error_set => |_| {
             return struct {
-                fn inner(L: *lua.State) callconv(.C) c_int {
+                fn inner(L: *lua.State) callconv(.c) c_int {
                     const err = @call(.always_inline, f, .{L});
                     return handleError(L, err);
                 }
@@ -203,7 +203,7 @@ pub inline fn Zpushclosure(L: *lua.State, comptime f: anytype, name: [:0]const u
 pub fn Zpushclosurek(L: *lua.State, comptime f: anytype, name: [:0]const u8, nup: i32, comptime cont: ?fn (L: *lua.State, status: i32) i32) void {
     L.pushcclosurek(toCFn(f), name, nup, if (cont) |cont_f|
         struct {
-            fn inner(l: *lua.State, status: c_int) callconv(.C) c_int {
+            fn inner(l: *lua.State, status: c_int) callconv(.c) c_int {
                 return @call(.always_inline, cont_f, .{ l, status });
             }
         }.inner
@@ -387,7 +387,7 @@ pub fn Zcallmeta(L: *lua.State, obj: i32, event: [:0]const u8) !bool {
 
 /// Converts value to string & pushes to stack.
 pub fn Ztolstringk(L: *lua.State, idx: i32) ![]const u8 {
-    const MAX_NUM_BUF = std.fmt.format_float.bufferSize(.decimal, f64);
+    const MAX_NUM_BUF = std.fmt.float.bufferSize(.decimal, f64);
     const VEC_SIZE = lua.config.VECTOR_SIZE;
     switch (L.typeOf(idx)) {
         .Nil => try L.pushlstring("nil"),

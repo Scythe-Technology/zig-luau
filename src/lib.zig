@@ -255,7 +255,7 @@ pub const CodeGen = if (!builtin.cpu.arch.isWasm()) struct {
 const alignment = @alignOf(std.c.max_align_t);
 
 /// Allows Luau to allocate memory using a Zig allocator passed in via data.
-fn alloc(data: ?*anyopaque, ptr: ?*anyopaque, osize: usize, nsize: usize) callconv(.C) ?*align(alignment) anyopaque {
+fn alloc(data: ?*anyopaque, ptr: ?*anyopaque, osize: usize, nsize: usize) callconv(.c) ?*align(alignment) anyopaque {
     // just like malloc() returns a pointer "which is suitably aligned for any built-in type",
     // the memory allocated by this function should also be aligned for any type that Lua may
     // desire to allocate. use the largest alignment for the target
@@ -277,7 +277,7 @@ fn alloc(data: ?*anyopaque, ptr: ?*anyopaque, osize: usize, nsize: usize) callco
         return null;
     } else {
         // ptr is null, allocate a new block of memory
-        const new_ptr = allocator_ptr.alignedAlloc(u8, alignment, nsize) catch return null;
+        const new_ptr = allocator_ptr.alignedAlloc(u8, .fromByteUnits(alignment), nsize) catch return null;
         return new_ptr.ptr;
     }
 }
@@ -306,23 +306,23 @@ comptime {
         _ = struct {
             var exception_buf: [4096]u8 = undefined;
             var exception_fba = std.heap.FixedBufferAllocator.init(exception_buf[0..]);
-            export fn __cxa_allocate_exception(size: usize) callconv(.C) [*]u8 {
+            export fn __cxa_allocate_exception(size: usize) callconv(.c) [*]u8 {
                 const data = exception_fba.allocator().alloc(u8, size + 4) catch unreachable;
                 std.mem.writeInt(u32, data[0..4], size, .little);
                 return data[4..].ptr;
             }
-            export fn __cxa_free_exception(data: [*]const u8) callconv(.C) void {
+            export fn __cxa_free_exception(data: [*]const u8) callconv(.c) void {
                 const size = std.mem.readInt(u32, (data - 4)[0..4], .little);
                 exception_fba.allocator().free(data[0 .. size + 4]);
             }
             // should NEVER be called as we override in the luau upstream dependency
-            export fn __cxa_throw(thrown_exception: *u8, cpp_type_info: *anyopaque, dest: *const fn () callconv(.C) void) callconv(.C) noreturn {
+            export fn __cxa_throw(thrown_exception: *u8, cpp_type_info: *anyopaque, dest: *const fn () callconv(.c) void) callconv(.c) noreturn {
                 _ = thrown_exception;
                 _ = cpp_type_info;
                 _ = dest;
                 unreachable;
             }
-            export fn clock() callconv(.C) i64 {
+            export fn clock() callconv(.c) i64 {
                 return std.time.milliTimestamp();
             }
         };

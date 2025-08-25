@@ -23,7 +23,7 @@ fn expectStringContains(actual: []const u8, expected_contains: []const u8) !void
     return error.TestExpectedStringContains;
 }
 
-fn alloc(data: ?*anyopaque, ptr: ?*anyopaque, osize: usize, nsize: usize) callconv(.C) ?*anyopaque {
+fn alloc(data: ?*anyopaque, ptr: ?*anyopaque, osize: usize, nsize: usize) callconv(.c) ?*anyopaque {
     _ = data;
 
     const alignment = @alignOf(std.c.max_align_t);
@@ -38,12 +38,12 @@ fn alloc(data: ?*anyopaque, ptr: ?*anyopaque, osize: usize, nsize: usize) callco
     } else if (nsize == 0) {
         return null;
     } else {
-        const new_ptr = testing.allocator.alignedAlloc(u8, alignment, nsize) catch return null;
+        const new_ptr = testing.allocator.alignedAlloc(u8, .fromByteUnits(alignment), nsize) catch return null;
         return new_ptr.ptr;
     }
 }
 
-fn failing_alloc(data: ?*anyopaque, ptr: ?*anyopaque, osize: usize, nsize: usize) callconv(.C) ?*anyopaque {
+fn failing_alloc(data: ?*anyopaque, ptr: ?*anyopaque, osize: usize, nsize: usize) callconv(.c) ?*anyopaque {
     _ = data;
     _ = ptr;
     _ = osize;
