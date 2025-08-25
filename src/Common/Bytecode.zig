@@ -619,6 +619,8 @@ pub const BuiltinFunction = enum(u32) {
 
     // math.lerp
     LBF_MATH_LERP,
+
+    LBF_VECTOR_LERP,
 };
 
 // Capture type, used in CAPTURE

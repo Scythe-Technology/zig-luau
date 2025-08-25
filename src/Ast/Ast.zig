@@ -483,9 +483,28 @@ pub const ExprConstantString = extern struct {
     quoteStyle: QuoteStyle,
 
     pub const QuoteStyle = enum(c_int) {
+        /// A string created using double quotes or an interpolated string,
+        /// as in:
+        ///
+        ///  "foo", `My name is {protagonist}! / And I'm {antagonist}!`
+        ///
         QuotedSimple = 0,
-        QuotedRaw = 1,
-        Unquoted = 2,
+        /// A string created using single quotes, as in:
+        ///
+        ///  'bar'
+        ///
+        QuotedSingle = 1,
+        /// A string created using `[[ ... ]]` as in:
+        ///
+        ///   [[ Gee, this sure is a long string.
+        ///   it even has a new line in it! ]]
+        ///
+        QuotedRaw = 2,
+        /// A "string" in the context of a table literal, as in:
+        ///
+        ///  { foo = 42 } -- `foo` here is a "constant string"
+        ///
+        Unquoted = 3,
     };
 
     pub const is = IsFn;
