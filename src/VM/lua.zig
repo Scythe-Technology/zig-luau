@@ -237,24 +237,24 @@ pub const Callbacks = extern struct {
     userdata: ?*anyopaque = null,
 
     /// gets called at safepoints (loop back edges, call/ret, gc) if set
-    interrupt: ?*const fn (L: *State, gc: c_int) callconv(.C) void = null,
+    interrupt: ?*const fn (L: *State, gc: c_int) callconv(.c) void = null,
     /// gets called when an unprotected error is raised (if longjmp is used)
-    panic: ?*const fn (L: *State, errcode: c_int) callconv(.C) void = null,
+    panic: ?*const fn (L: *State, errcode: c_int) callconv(.c) void = null,
 
     /// gets called when L is created (LP == parent) or destroyed (LP == NULL)
-    userthread: ?*const fn (LP: ?*State, L: *State) callconv(.C) void = null,
+    userthread: ?*const fn (LP: ?*State, L: *State) callconv(.c) void = null,
     /// gets called when a string is created; returned atom can be retrieved via tostringatom
-    useratom: ?*const fn (s: [*c]const u8, l: usize) callconv(.C) i16 = null,
+    useratom: ?*const fn (s: [*c]const u8, l: usize) callconv(.c) i16 = null,
 
     /// gets called when BREAK instruction is encountered
-    debugbreak: ?*const fn (L: *State, ar: *c.lua_Debug) callconv(.C) void = null,
+    debugbreak: ?*const fn (L: *State, ar: *c.lua_Debug) callconv(.c) void = null,
     /// gets called after each instruction in single step mode
-    debugstep: ?*const fn (L: *State, ar: *c.lua_Debug) callconv(.C) void = null,
+    debugstep: ?*const fn (L: *State, ar: *c.lua_Debug) callconv(.c) void = null,
     /// gets called when thread execution is interrupted by break in another thread
-    debuginterrupt: ?*const fn (L: *State, ar: *c.lua_Debug) callconv(.C) void = null,
+    debuginterrupt: ?*const fn (L: *State, ar: *c.lua_Debug) callconv(.c) void = null,
     /// gets called when protected call results in an error
-    debugprotectederror: ?*const fn (L: *State) callconv(.C) void = null,
+    debugprotectederror: ?*const fn (L: *State) callconv(.c) void = null,
 
     /// gets called when memory is allocated
-    onallocate: ?*const fn (L: *State, osize: usize, nsize: usize) callconv(.C) void = null,
+    onallocate: ?*const fn (L: *State, osize: usize, nsize: usize) callconv(.c) void = null,
 };
