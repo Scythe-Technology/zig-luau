@@ -129,7 +129,7 @@ pub fn getcoverage(
             depth: c_int,
             hits: [*c]const c_int,
             size: usize,
-        ) callconv(.C) void {
+        ) callconv(.c) void {
             @call(.always_inline, callback, .{
                 @as(*T, @ptrCast(@alignCast(ctx.?))),
                 if (func != null) std.mem.span(func) else null,
