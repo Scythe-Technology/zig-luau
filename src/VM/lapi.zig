@@ -115,7 +115,13 @@ pub fn checkstack(L: *lua.State, size: usize) Errorset.Memory!bool {
     if (size > lua.config.I_MAXCSTACK or (L.top - L.base + size) > lua.config.I_MAXCSTACK)
         return false
     else {
-        try @call(.always_inline, rawcheckstack, .{ L, size });
+        if (ldo.stacklimitreached(L, size)) {
+            try ldo.Dgrowstack(L, size);
+        } else {
+            if (comptime build_config.hard_stack_tests)
+                try ldo.Dreallocstack(L, L.stacksize - lua.config.EXTRA_SIZE, false);
+        }
+        ldo.expandstacklimit(L, &L.top[size]);
         return true;
     }
 }
