@@ -21,6 +21,9 @@ pub inline fn throw(L: *lua.State, errcode: lua.Status) noreturn {
 pub inline fn getgrownstacksize(L: *lua.State, n: usize) usize {
     return if (n <= L.stacksize) 2 * @as(u32, @intCast(L.stacksize)) else @as(u32, @intCast(L.stacksize)) + n;
 }
+pub inline fn stacklimitreached(L: *lua.State, n: usize) bool {
+    return @intFromPtr(L.stack_last) - @intFromPtr(L.top) <= n * @sizeOf(lobject.TValue);
+}
 
 pub inline fn Dcheckstackfornewci(L: *lua.State, n: usize) Errorset.Memory!void {
     if (@intFromPtr(L.stack_last) - @intFromPtr(L.top) < n * @sizeOf(lobject.TValue))
