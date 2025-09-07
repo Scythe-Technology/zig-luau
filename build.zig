@@ -734,6 +734,7 @@ const LUAU_Analysis_SOURCE_FILES = [_][]const u8{
     "Analysis/src/ApplyTypeFunction.cpp",
     "Analysis/src/AstJsonEncoder.cpp",
     "Analysis/src/AstQuery.cpp",
+    "Analysis/src/AstUtils.cpp",
     "Analysis/src/Autocomplete.cpp",
     "Analysis/src/AutocompleteCore.cpp",
     "Analysis/src/BuiltinDefinitions.cpp",
