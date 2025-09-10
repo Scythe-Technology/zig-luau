@@ -230,7 +230,7 @@ pub const Metamethods = struct {
     pub const namecall = "__namecall";
 };
 
-pub const CodeGen = if (!builtin.cpu.arch.isWasm()) struct {
+pub const CodeGen = if (build_config.buildCodeGen) struct {
     pub fn Supported() bool {
         return codegen.supported();
     }
@@ -245,10 +245,10 @@ pub const CodeGen = if (!builtin.cpu.arch.isWasm()) struct {
         return false;
     }
     pub fn Create(_: *VM.lua.State) void {
-        @panic("CodeGen is not supported on wasm");
+        @panic("CodeGen is not supported on " ++ @tagName(builtin.target.cpu.arch));
     }
     pub fn Compile(_: *VM.lua.State, _: i32) void {
-        @panic("CodeGen is not supported on wasm");
+        @panic("CodeGen is not supported on " ++ @tagName(builtin.target.cpu.arch));
     }
 };
 
