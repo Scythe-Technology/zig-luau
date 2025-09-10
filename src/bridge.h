@@ -5,7 +5,7 @@
 #include "lua.h"
 #include "lualib.h"
 #include "luacode.h"
-#if !defined(__EMSCRIPTEN__) && !defined(__wasm__) && !defined(__wasm32__) && !defined(__wasm64__)
+#if (defined(__x86_64__) || defined(__amd64__) || defined(__aarch64__) || defined(__arm64__) || defined(__ARM64__)) && !defined(__BIG_ENDIAN__)
 #include "luacodegen.h"
 #endif
 

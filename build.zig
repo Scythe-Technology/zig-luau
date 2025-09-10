@@ -26,8 +26,16 @@ pub fn build(b: *Build) !void {
     const luau_dep = b.dependency("luau", .{});
 
     const build_Ast = b.option(bool, "Ast", "Build Luau Ast") orelse true;
-    const build_CodeGen = b.option(bool, "CodeGen", "Build Luau CodeGen") orelse !target.result.cpu.arch.isWasm();
-    const build_Analysis = b.option(bool, "Analysis", "Build Luau Analysis") orelse !target.result.cpu.arch.isWasm();
+    const build_CodeGen = b.option(bool, "CodeGen", "Build Luau CodeGen") orelse switch (target.result.cpu.arch) {
+        .x86_64, .aarch64 => true,
+        else => false,
+    };
+    const build_Analysis = b.option(bool, "Analysis", "Build Luau Analysis") orelse switch (target.result.cpu.arch) {
+        .wasm32, .wasm64 => false,
+        .powerpc64, .powerpc64le => false,
+        .loongarch64 => false,
+        else => true,
+    };
     const build_Compiler = b.option(bool, "Compiler", "Build Luau Compiler") orelse true;
     const build_VM = b.option(bool, "VM", "Build Luau VM") orelse true;
 
@@ -63,8 +71,10 @@ pub fn build(b: *Build) !void {
     });
     headers.addIncludePath(luau_dep.path("Compiler/include"));
     headers.addIncludePath(luau_dep.path("VM/include"));
-    if (!target.result.cpu.arch.isWasm())
-        headers.addIncludePath(luau_dep.path("CodeGen/include"));
+    switch (target.result.cpu.arch) {
+        .x86_64, .aarch64 => headers.addIncludePath(luau_dep.path("CodeGen/include")),
+        else => {},
+    }
 
     const c_module = headers.createModule();
 
@@ -251,8 +261,10 @@ fn buildAndLinkModule(
 
     module.addIncludePath(dependency.path("Compiler/include"));
     module.addIncludePath(dependency.path("VM/include"));
-    if (!target.result.cpu.arch.isWasm())
-        module.addIncludePath(dependency.path("CodeGen/include"));
+    switch (target.result.cpu.arch) {
+        .x86_64, .aarch64 => module.addIncludePath(dependency.path("CodeGen/include")),
+        else => {},
+    }
 
     module.linkLibrary(lib);
 }
