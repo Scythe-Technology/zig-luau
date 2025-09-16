@@ -24,7 +24,7 @@ const char* outputBytes(const std::string& result, size_t* len)
 
 ZIG_EXPORT const char* ZIG_LUAU_COMPILER(compile_ParseResult)(
     const Luau::ParseResult* result,
-    const Luau::AstNameTable* names,
+    Luau::AstNameTable* names,
     size_t* len,
     lua_CompileOptions* options,
     Luau::BytecodeEncoder* encoder = nullptr
@@ -64,7 +64,7 @@ ZIG_EXPORT const char* ZIG_LUAU_COMPILER(compile_ParseResult)(
 
 ZIG_EXPORT int ZIG_LUAU_COMPILER(compileLoad_ParseResult)(
     const Luau::ParseResult* result,
-    const Luau::AstNameTable* names,
+    Luau::AstNameTable* names,
     lua_State* L,
     const char* moduleName,
     const lua_CompileOptions* options,

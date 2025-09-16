@@ -271,11 +271,13 @@ pub const Attr = extern struct {
 
     type: Attr.Type,
     args: Array(*Expr),
+    name: Name,
 
     pub const Type = enum(c_int) {
         Checked = 0,
         Native = 1,
         Deprecated = 2,
+        Unknown = 3,
     };
 
     pub const is = IsFn;
