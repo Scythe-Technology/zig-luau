@@ -1134,6 +1134,10 @@ pub fn pcall(L: *lua.State, nargs: i32, nresults: i32, msgh: i32) lua.Status {
     return @enumFromInt(c.lua_pcall(@ptrCast(L), nargs, nresults, msgh));
 }
 
+pub fn cpcall(L: *lua.State, func: lua.CFunction, ud: *anyopaque) lua.Status {
+    return @enumFromInt(c.lua_cpcall(@ptrCast(L), @ptrCast(func), ud));
+}
+
 pub fn status(L: *lua.State) lua.Status {
     return @enumFromInt(L.curr_status);
 }
