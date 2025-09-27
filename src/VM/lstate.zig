@@ -500,6 +500,7 @@ pub const lua_State = extern struct {
     //
     pub const call = lapi.call;
     pub const pcall = lapi.pcall;
+    pub const cpcall = lapi.cpcall;
 
     //
     // coroutine functions
@@ -591,6 +592,7 @@ pub const lua_State = extern struct {
     pub const Lregister = laux.Lregister;
     pub const Lfindtable = laux.Lfindtable;
     pub const Ltypename = laux.Ltypename;
+    pub const Lcallyieldable = laux.Lcallyieldable;
     pub const Ltolstring = laux.Ltolstring;
 
     // ldebug

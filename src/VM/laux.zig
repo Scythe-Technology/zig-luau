@@ -256,6 +256,10 @@ pub inline fn Ltypename(L: *lua.State, idx: i32) [:0]const u8 {
     return std.mem.span(c.luaL_typename(@ptrCast(L), idx));
 }
 
+pub inline fn Lcallyieldable(L: *lua.State, nargs: i32, nresults: i32) i32 {
+    return c.luaL_callyieldable(@ptrCast(L), nargs, nresults);
+}
+
 /// `unsafe` throws exceptions. Use `Ztolstring`.
 pub inline fn Ltolstring(L: *lua.State, idx: i32) [:0]const u8 {
     var len: usize = undefined;
