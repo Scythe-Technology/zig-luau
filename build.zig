@@ -790,7 +790,6 @@ const LUAU_Analysis_SOURCE_FILES = [_][]const u8{
     "Analysis/src/ToDot.cpp",
     "Analysis/src/TopoSortStatements.cpp",
     "Analysis/src/ToString.cpp",
-    "Analysis/src/Transpiler.cpp",
     "Analysis/src/TxnLog.cpp",
     "Analysis/src/Type.cpp",
     "Analysis/src/TypeArena.cpp",
@@ -824,6 +823,7 @@ const LUAU_Ast_SOURCE_FILES = [_][]const u8{
     "Ast/src/Lexer.cpp",
     "Ast/src/Location.cpp",
     "Ast/src/Parser.cpp",
+    "Ast/src/PrettyPrinter.cpp",
     "Ast/src/StringUtils.cpp",
     "Ast/src/TimeTrace.cpp",
 };
