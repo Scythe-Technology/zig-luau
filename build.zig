@@ -354,6 +354,8 @@ fn buildAst(
 
     linkIncludePath(lib, libCommon);
 
+    lib.linkLibrary(libCommon);
+
     lib.linkLibCpp();
 
     for (LUAU_Ast_HEADERS_DIRS) |dir|
