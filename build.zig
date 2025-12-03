@@ -100,12 +100,12 @@ pub fn build(b: *Build) !void {
 
     const compile_flags = FLAGS.items;
 
-    const libCommon = buildCommon(b, target, luau_dep, optimize, version);
+    const libCommon = buildCommon(b, target, luau_dep, optimize, version, compile_flags);
     const libAst = buildAst(b, target, luau_dep, optimize, version, compile_flags, libCommon);
-    const libConfig = buildConfig(b, target, luau_dep, optimize, version, compile_flags, libAst);
     const libEqSat = buildEqSat(b, target, luau_dep, optimize, version, compile_flags, libCommon);
     const libCompiler = buildCompiler(b, target, luau_dep, optimize, version, compile_flags, libAst);
     const libVM = buildVM(b, target, luau_dep, optimize, version, compile_flags, libCommon);
+    const libConfig = buildConfig(b, target, luau_dep, optimize, version, compile_flags, libCommon, libAst, libCompiler, libVM);
     const libCodeGen = buildCodeGen(b, target, luau_dep, optimize, version, compile_flags, libVM);
     const libAnalysis = try buildAnalysis(b, target, luau_dep, optimize, version, compile_flags, libAst, libEqSat, libConfig, libCompiler, libVM);
 
@@ -307,6 +307,7 @@ fn buildCommon(
     dependency: *Build.Dependency,
     optimize: std.builtin.OptimizeMode,
     version: std.SemanticVersion,
+    flags: []const []const u8,
 ) *Step.Compile {
     const lib = b.addLibrary(.{
         .name = "Common",
@@ -318,8 +319,16 @@ fn buildCommon(
     });
     lib.version = version;
 
+    lib.linkLibCpp();
+
     for (LUAU_Common_HEADERS_DIRS) |dir|
         lib.addIncludePath(dependency.path(dir));
+
+    lib.addCSourceFiles(.{
+        .root = dependency.path(""),
+        .files = &LUAU_Common_SOURCE_FILES,
+        .flags = flags,
+    });
 
     return lib;
 }
@@ -402,7 +411,10 @@ fn buildConfig(
     optimize: std.builtin.OptimizeMode,
     version: std.SemanticVersion,
     flags: []const []const u8,
+    libCommon: *Step.Compile,
     libAst: *Step.Compile,
+    libCompiler: *Step.Compile,
+    libVM: *Step.Compile,
 ) *Step.Compile {
     const lib = b.addLibrary(.{
         .name = "Config",
@@ -414,8 +426,15 @@ fn buildConfig(
     });
     lib.version = version;
 
+    linkIncludePath(lib, libCommon);
     linkIncludePath(lib, libAst);
+    linkIncludePath(lib, libCompiler);
+    linkIncludePath(lib, libVM);
+
+    lib.linkLibrary(libCommon);
     lib.linkLibrary(libAst);
+    lib.linkLibrary(libCompiler);
+    lib.linkLibrary(libVM);
 
     lib.linkLibCpp();
 
@@ -775,10 +794,12 @@ const LUAU_Analysis_SOURCE_FILES = [_][]const u8{
     "Analysis/src/Linter.cpp",
     "Analysis/src/LValue.cpp",
     "Analysis/src/Module.cpp",
+    "Analysis/src/NativeStackGuard.cpp",
     "Analysis/src/NonStrictTypeChecker.cpp",
     "Analysis/src/Normalize.cpp",
     "Analysis/src/OverloadResolution.cpp",
     "Analysis/src/Quantify.cpp",
+    "Analysis/src/RecursionCounter.cpp",
     "Analysis/src/Refinement.cpp",
     "Analysis/src/RequireTracer.cpp",
     "Analysis/src/Scope.cpp",
@@ -824,8 +845,6 @@ const LUAU_Ast_SOURCE_FILES = [_][]const u8{
     "Ast/src/Location.cpp",
     "Ast/src/Parser.cpp",
     "Ast/src/PrettyPrinter.cpp",
-    "Ast/src/StringUtils.cpp",
-    "Ast/src/TimeTrace.cpp",
 };
 
 const LUAU_CodeGen_HEADERS_DIRS = [_][]const u8{
@@ -874,6 +893,10 @@ const LUAU_CodeGen_SOURCE_FILES = [_][]const u8{
 const LUAU_Common_HEADERS_DIRS = [_][]const u8{
     "Common/include/",
 };
+const LUAU_Common_SOURCE_FILES = [_][]const u8{
+    "Common/src/StringUtils.cpp",
+    "Common/src/TimeTrace.cpp",
+};
 
 const LUAU_Compiler_HEADERS_DIRS = [_][]const u8{
     "Compiler/include/",
@@ -897,6 +920,7 @@ const LUAU_Config_HEADERS_DIRS = [_][]const u8{
 };
 const LUAU_Config_SOURCE_FILES = [_][]const u8{
     "Config/src/Config.cpp",
+    "Config/src/LuauConfig.cpp",
     "Config/src/LinterConfig.cpp",
 };
 

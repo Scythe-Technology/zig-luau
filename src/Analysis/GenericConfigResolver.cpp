@@ -1,6 +1,6 @@
 #include <bridge.h>
 
-#include "Luau/Config.h"
+#include "Luau/ConfigResolver.h"
 
 #include "./FileUtils.h"
 
@@ -19,23 +19,23 @@ struct GenericConfigResolver : Luau::ConfigResolver
         defaultConfig.mode = mode;
     }
 
-    const Luau::Config& getConfig(const Luau::ModuleName& name) const override
+    const Luau::Config& getConfig(const Luau::ModuleName& name, const Luau::TypeCheckLimits& limits) const override
     {
         std::optional<std::string> path = getParentPath(name);
         if (!path)
             return defaultConfig;
 
-        return readConfigRec(*path);
+        return readConfigRec(*path, limits);
     }
 
-    const Luau::Config& readConfigRec(const std::string& path) const
+    const Luau::Config& readConfigRec(const std::string& path, const Luau::TypeCheckLimits& limits) const
     {
         auto it = configCache.find(path);
         if (it != configCache.end())
             return it->second;
 
         std::optional<std::string> parent = getParentPath(path);
-        Luau::Config result = parent ? readConfigRec(*parent) : defaultConfig;
+        Luau::Config result = parent ? readConfigRec(*parent, limits) : defaultConfig;
 
         std::string configPath = joinPaths(path, Luau::kConfigName);
 

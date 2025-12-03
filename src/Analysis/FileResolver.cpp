@@ -61,7 +61,7 @@ struct zig_FileResolver : Luau::FileResolver
         return Luau::SourceCode{sourceStr, sourceType};
     }
 
-    std::optional<Luau::ModuleInfo> resolveModule(const Luau::ModuleInfo* context, Luau::AstExpr* node) override
+    std::optional<Luau::ModuleInfo> resolveModule(const Luau::ModuleInfo* context, Luau::AstExpr* node, const Luau::TypeCheckLimits& limits) override
     {
         if (Luau::AstExprConstantString* expr = node->as<Luau::AstExprConstantString>())
         {
