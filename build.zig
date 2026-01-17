@@ -753,6 +753,7 @@ const LUAU_Analysis_SOURCE_FILES = [_][]const u8{
     "Analysis/src/Instantiation2.cpp",
     "Analysis/src/IostreamHelpers.cpp",
     "Analysis/src/IterativeTypeVisitor.cpp",
+    "Analysis/src/IterativeTypeFunctionTypeVisitor.cpp",
     "Analysis/src/JsonEmitter.cpp",
     "Analysis/src/Linter.cpp",
     "Analysis/src/LValue.cpp",
