@@ -223,7 +223,7 @@ pub const global_State = extern struct {
     /// list of weak tables (to be cleared)
     weak: ?*GCObject,
 
-    /// when totalbytes > GCthreshold, run GC step
+    /// when totalbytes >= GCthreshold, run GC step
     GCthreshold: usize,
     /// number of bytes currently allocated
     totalbytes: usize,
@@ -244,9 +244,6 @@ pub const global_State = extern struct {
     allgcopages: ?*lmem.lua_Page,
     /// position of the sweep in `allgcopages'
     sweepgcopage: ?*lmem.lua_Page,
-
-    /// total amount of memory used by each memory category
-    memcatbytes: [lua.config.MEMORY_CATEGORIES]usize,
 
     mainthread: *lua_State,
     /// head of double-linked list of all open upvalues
@@ -277,6 +274,11 @@ pub const global_State = extern struct {
     cb: lua.Callbacks,
 
     ecb: ExecutionCallbacks,
+
+    ecbdata: [lua.config.EXECUTION_CALLBACK_STORAGE]u8 align(16),
+
+    /// total amount of memory used by each memory category
+    memcatbytes: [lua.config.MEMORY_CATEGORIES]usize,
 
     /// for each userdata tag, a gc callback to be called immediately before freeing memory
     udatagc: [lua.config.UTAG_LIMIT]?*const fn (*lua_State, ?*anyopaque) callconv(.c) void,
@@ -923,6 +925,8 @@ pub fn newstate(f: lua.Alloc, ud: ?*anyopaque) Errorset.Table!*lua_State {
     g.cb = .{};
 
     g.ecb = .{};
+
+    g.ecbdata = std.mem.zeroes([lua.config.EXECUTION_CALLBACK_STORAGE]u8);
 
     g.gcstats = .{};
 

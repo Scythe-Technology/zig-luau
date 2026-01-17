@@ -36,6 +36,9 @@ pub const SIZECLASSES = c.LUA_SIZECLASSES;
 /// available number of separate memory categories
 pub const MEMORY_CATEGORIES = c.LUA_MEMORY_CATEGORIES;
 
+/// extra storage for execution callbacks in global state
+pub const EXECUTION_CALLBACK_STORAGE = c.LUA_EXECUTION_CALLBACK_STORAGE;
+
 /// minimum size for the string table (must be power of 2)
 pub const MINSTRTABSIZE = c.LUA_MINSTRTABSIZE;
 

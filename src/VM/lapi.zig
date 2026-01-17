@@ -41,7 +41,7 @@ pub inline fn api_incr_top(L: *State) void {
 }
 
 pub inline fn api_update_top(L: *State, p: *lobject.TValue) void {
-    api_check(L, @intFromPtr(p) >= @intFromPtr(L.base) and @intFromPtr(p) < @intFromPtr(L.ci.?[0].top));
+    api_check(L, @intFromPtr(p) >= @intFromPtr(L.base) and @intFromPtr(p) <= @intFromPtr(L.ci.?[0].top));
     L.top = @ptrCast(p);
 }
 
