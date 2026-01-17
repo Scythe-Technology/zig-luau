@@ -45,16 +45,22 @@ pub const ParseOptions = extern struct {
 };
 
 extern "c" fn zig_Luau_Ast_Parser_parse([*]const u8, usize, *Lexer.AstNameTable, *Allocator, *const ParseOptions) *ParseResult;
-extern "c" fn zig_Luau_Ast_Parser_parseExpr([*]const u8, usize, *Lexer.AstNameTable, *Allocator, *const ParseOptions) *ParseExprResult;
+extern "c" fn zig_Luau_Ast_Parser_parseExpr([*]const u8, usize, *Lexer.AstNameTable, *Allocator, *const ParseOptions) *ParseNodeResult(Ast.Expr);
+extern "c" fn zig_Luau_Ast_Parser_parseType([*]const u8, usize, *Lexer.AstNameTable, *Allocator, *const ParseOptions) *ParseNodeResult(Ast.Type);
 extern "c" fn zig_Luau_Ast_ParseResult_dtor(*ParseResult) void;
-extern "c" fn zig_Luau_Ast_ParseExprResult_dtor(*ParseExprResult) void;
+extern "c" fn zig_Luau_Ast_ParseNodeResult_AstExpr_dtor(*ParseNodeResult(Ast.Expr)) void;
+extern "c" fn zig_Luau_Ast_ParseNodeResult_AstType_dtor(*ParseNodeResult(Ast.Type)) void;
 
 pub fn parse(source: []const u8, nameTable: *Lexer.AstNameTable, allocator: *Allocator, options: ParseOptions) *ParseResult {
     return zig_Luau_Ast_Parser_parse(source.ptr, source.len, nameTable, allocator, &options);
 }
 
-pub fn parseExpr(source: []const u8, nameTable: *Lexer.AstNameTable, allocator: *Allocator, options: ParseOptions) *ParseExprResult {
+pub fn parseExpr(source: []const u8, nameTable: *Lexer.AstNameTable, allocator: *Allocator, options: ParseOptions) *ParseNodeResult(Ast.Expr) {
     return zig_Luau_Ast_Parser_parseExpr(source.ptr, source.len, nameTable, allocator, &options);
+}
+
+pub fn parseType(source: []const u8, nameTable: *Lexer.AstNameTable, allocator: *Allocator, options: ParseOptions) *ParseNodeResult(Ast.Type) {
+    return zig_Luau_Ast_Parser_parseType(source.ptr, source.len, nameTable, allocator, &options);
 }
 
 pub const CstNodeMap = DenseHash.DenseHashMap(*Ast.Node, *Cst.Node, struct {});
@@ -75,21 +81,30 @@ pub const ParseResult = extern struct {
     }
 };
 
-pub const ParseExprResult = extern struct {
-    expr: *Ast.Expr,
-    lines: usize = 0,
+pub fn ParseNodeResult(comptime T: type) type {
+    return extern struct {
+        expr: *T,
+        lines: usize = 0,
 
-    hotcomments: cpp_std.Vector(HotComment),
-    errors: cpp_std.Vector(ParseError),
+        hotcomments: cpp_std.Vector(HotComment),
+        errors: cpp_std.Vector(ParseError),
 
-    commentLocations: cpp_std.Vector(Comment),
+        commentLocations: cpp_std.Vector(Comment),
 
-    cstNodeMap: CstNodeMap,
+        cstNodeMap: CstNodeMap,
 
-    pub inline fn deinit(self: *ParseExprResult) void {
-        zig_Luau_Ast_ParseExprResult_dtor(self);
-    }
-};
+        pub const Self = @This();
+
+        pub inline fn deinit(self: *Self) void {
+            comptime std.debug.assert(T == Ast.Type or T == Ast.Expr);
+            if (T == Ast.Type) {
+                zig_Luau_Ast_ParseNodeResult_AstType_dtor(self);
+            } else {
+                zig_Luau_Ast_ParseNodeResult_AstExpr_dtor(self);
+            }
+        }
+    };
+}
 
 test ParseResult {
     {
