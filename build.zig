@@ -102,12 +102,11 @@ pub fn build(b: *Build) !void {
 
     const libCommon = buildCommon(b, target, luau_dep, optimize, version, compile_flags);
     const libAst = buildAst(b, target, luau_dep, optimize, version, compile_flags, libCommon);
-    const libEqSat = buildEqSat(b, target, luau_dep, optimize, version, compile_flags, libCommon);
     const libCompiler = buildCompiler(b, target, luau_dep, optimize, version, compile_flags, libAst);
     const libVM = buildVM(b, target, luau_dep, optimize, version, compile_flags, libCommon);
     const libConfig = buildConfig(b, target, luau_dep, optimize, version, compile_flags, libCommon, libAst, libCompiler, libVM);
     const libCodeGen = buildCodeGen(b, target, luau_dep, optimize, version, compile_flags, libVM);
-    const libAnalysis = try buildAnalysis(b, target, luau_dep, optimize, version, compile_flags, libAst, libEqSat, libConfig, libCompiler, libVM);
+    const libAnalysis = try buildAnalysis(b, target, luau_dep, optimize, version, compile_flags, libAst, libConfig, libCompiler, libVM);
 
     const lib = try buildLuau(
         b,
@@ -460,7 +459,6 @@ fn buildAnalysis(
     version: std.SemanticVersion,
     flags: []const []const u8,
     libAst: *Step.Compile,
-    libEqSat: *Step.Compile,
     libConfig: *Step.Compile,
     libCompiler: *Step.Compile,
     libVM: *Step.Compile,
@@ -476,13 +474,11 @@ fn buildAnalysis(
     lib.version = version;
 
     linkIncludePath(lib, libAst);
-    linkIncludePath(lib, libEqSat);
     linkIncludePath(lib, libConfig);
     linkIncludePath(lib, libCompiler);
     linkIncludePath(lib, libVM);
 
     lib.linkLibrary(libAst);
-    lib.linkLibrary(libEqSat);
     lib.linkLibrary(libConfig);
     lib.linkLibrary(libCompiler);
     lib.linkLibrary(libVM);
@@ -495,41 +491,6 @@ fn buildAnalysis(
     lib.addCSourceFiles(.{
         .root = dependency.path(""),
         .files = &LUAU_Analysis_SOURCE_FILES,
-        .flags = flags,
-    });
-
-    return lib;
-}
-
-fn buildEqSat(
-    b: *Build,
-    target: Build.ResolvedTarget,
-    dependency: *Build.Dependency,
-    optimize: std.builtin.OptimizeMode,
-    version: std.SemanticVersion,
-    flags: []const []const u8,
-    libCommon: *Step.Compile,
-) *Step.Compile {
-    const lib = b.addLibrary(.{
-        .name = "EqSat",
-        .linkage = .static,
-        .root_module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    lib.version = version;
-
-    linkIncludePath(lib, libCommon);
-
-    lib.linkLibCpp();
-
-    for (LUAU_EqSat_HEADERS_DIRS) |dir|
-        lib.addIncludePath(dependency.path(dir));
-
-    lib.addCSourceFiles(.{
-        .root = dependency.path(""),
-        .files = &LUAU_EqSat_SOURCE_FILES,
         .flags = flags,
     });
 
@@ -780,7 +741,6 @@ const LUAU_Analysis_SOURCE_FILES = [_][]const u8{
     "Analysis/src/DcrLogger.cpp",
     "Analysis/src/Def.cpp",
     "Analysis/src/EmbeddedBuiltinDefinitions.cpp",
-    "Analysis/src/EqSatSimplification.cpp",
     "Analysis/src/Error.cpp",
     "Analysis/src/ExpectedTypeVisitor.cpp",
     "Analysis/src/FileResolver.cpp",
@@ -792,6 +752,7 @@ const LUAU_Analysis_SOURCE_FILES = [_][]const u8{
     "Analysis/src/Instantiation.cpp",
     "Analysis/src/Instantiation2.cpp",
     "Analysis/src/IostreamHelpers.cpp",
+    "Analysis/src/IterativeTypeVisitor.cpp",
     "Analysis/src/JsonEmitter.cpp",
     "Analysis/src/Linter.cpp",
     "Analysis/src/LValue.cpp",
@@ -806,6 +767,7 @@ const LUAU_Analysis_SOURCE_FILES = [_][]const u8{
     "Analysis/src/RequireTracer.cpp",
     "Analysis/src/Scope.cpp",
     "Analysis/src/Simplify.cpp",
+    "Analysis/src/StructuralTypeEquality.cpp",
     "Analysis/src/Substitution.cpp",
     "Analysis/src/Subtyping.cpp",
     "Analysis/src/Symbol.cpp",
@@ -924,14 +886,6 @@ const LUAU_Config_SOURCE_FILES = [_][]const u8{
     "Config/src/Config.cpp",
     "Config/src/LuauConfig.cpp",
     "Config/src/LinterConfig.cpp",
-};
-
-const LUAU_EqSat_HEADERS_DIRS = [_][]const u8{
-    "EqSat/include/",
-};
-const LUAU_EqSat_SOURCE_FILES = [_][]const u8{
-    "EqSat/src/Id.cpp",
-    "EqSat/src/UnionFind.cpp",
 };
 
 const LUAU_Require_HEADERS_DIRS = [_][]const u8{

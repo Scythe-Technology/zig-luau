@@ -348,7 +348,7 @@ test Frontend {
                             if (!std.mem.eql(u8, readableModuleName, "./sub/test.luau"))
                                 @panic("Expected no errors in main module");
                             std.testing.expectEqual(.Error, kind) catch @panic("failed");
-                            std.testing.expectEqualStrings("Unknown global 'g'", errorMessage) catch @panic("failed");
+                            std.testing.expectEqualStrings("Unknown global 'g'; consider assigning to it first", errorMessage) catch @panic("failed");
                             std.testing.expectEqualStrings("TypeError", typeName) catch @panic("failed");
                             std.testing.expectEqual(1, loc.begin.line) catch @panic("failed");
                             std.testing.expectEqual(14, loc.begin.column) catch @panic("failed");

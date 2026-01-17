@@ -21,7 +21,9 @@ pub const Node = extern struct {
         expr_type_assertion,
         expr_if_else,
         expr_interp_string,
+        expr_explicit_type_instantiation,
         stat_do,
+        stat_do_DEPRECATED,
         stat_repeat,
         stat_return,
         stat_local,
@@ -59,7 +61,9 @@ pub const Node = extern struct {
                 .expr_type_assertion => ExprTypeAssertion,
                 .expr_if_else => ExprIfElse,
                 .expr_interp_string => ExprInterpString,
+                .expr_explicit_type_instantiation => ExprExplicitTypeInstantiation,
                 .stat_do => StatDo,
+                .stat_do_DEPRECATED => StatDo_DEPRECATED,
                 .stat_repeat => StatRepeat,
                 .stat_return => StatReturn,
                 .stat_local => StatLocal,
@@ -119,12 +123,25 @@ pub const ExprConstantString = extern struct {
     };
 };
 
+pub const TypeInstantiation = extern struct {
+    classIndex: Node.Kind,
+
+    leftArrow1Position: Location.Position = .zeros,
+    leftArrow2Position: Location.Position = .zeros,
+
+    sourceString: Ast.Array(Location.Position),
+
+    rightArrow1Position: Location.Position = .zeros,
+    rightArrow2Position: Location.Position = .zeros,
+};
+
 pub const ExprCall = extern struct {
     classIndex: Node.Kind,
 
     openParens: cpp_std.Optional(Location.Position),
     closeParens: cpp_std.Optional(Location.Position),
     commaPositions: Ast.Array(Location.Position),
+    explicitTypes: ?*TypeInstantiation = null,
 };
 
 pub const ExprIndexExpr = extern struct {
@@ -198,7 +215,20 @@ pub const ExprInterpString = extern struct {
     stringPositions: Ast.Array(Location.Position),
 };
 
+pub const ExprExplicitTypeInstantiation = extern struct {
+    classIndex: Node.Kind,
+
+    instantiation: TypeInstantiation,
+};
+
 pub const StatDo = extern struct {
+    classIndex: Node.Kind,
+
+    statsStartPosition: Location.Position,
+    endPosition: Location.Position,
+};
+
+pub const StatDo_DEPRECATED = extern struct {
     classIndex: Node.Kind,
 
     endPosition: Location.Position,
@@ -455,7 +485,9 @@ test "Index" {
         extern "c" const CstExprTypeAssertionIndex: u8;
         extern "c" const CstExprIfElseIndex: u8;
         extern "c" const CstExprInterpStringIndex: u8;
+        extern "c" const CstExprExplicitTypeInstantiationIndex: u8;
         extern "c" const CstStatDoIndex: u8;
+        extern "c" const CstStatDo_DEPRECATEDIndex: u8;
         extern "c" const CstStatRepeatIndex: u8;
         extern "c" const CstStatReturnIndex: u8;
         extern "c" const CstStatLocalIndex: u8;
@@ -497,7 +529,9 @@ test "Index" {
     try std.testing.expect(Indexes.CstExprTypeAssertionIndex == @intFromEnum(Node.Kind.expr_type_assertion));
     try std.testing.expect(Indexes.CstExprIfElseIndex == @intFromEnum(Node.Kind.expr_if_else));
     try std.testing.expect(Indexes.CstExprInterpStringIndex == @intFromEnum(Node.Kind.expr_interp_string));
+    try std.testing.expect(Indexes.CstExprExplicitTypeInstantiationIndex == @intFromEnum(Node.Kind.expr_explicit_type_instantiation));
     try std.testing.expect(Indexes.CstStatDoIndex == @intFromEnum(Node.Kind.stat_do));
+    try std.testing.expect(Indexes.CstStatDo_DEPRECATEDIndex == @intFromEnum(Node.Kind.stat_do_DEPRECATED));
     try std.testing.expect(Indexes.CstStatRepeatIndex == @intFromEnum(Node.Kind.stat_repeat));
     try std.testing.expect(Indexes.CstStatReturnIndex == @intFromEnum(Node.Kind.stat_return));
     try std.testing.expect(Indexes.CstStatLocalIndex == @intFromEnum(Node.Kind.stat_local));
@@ -526,5 +560,5 @@ test "Index" {
 }
 
 // sources:
-// https://github.com/luau-lang/luau/blob/6ff0650a8d4ba90df9826492b68c88911e39b1c1/Ast/include/Luau/Cst.h
-// https://github.com/luau-lang/luau/blob/6ff0650a8d4ba90df9826492b68c88911e39b1c1/Ast/src/Cst.cpp
+// https://github.com/luau-lang/luau/blob/750431b009c4bd268353de00ced9bbadfde06c02/Ast/include/Luau/Cst.h
+// https://github.com/luau-lang/luau/blob/750431b009c4bd268353de00ced9bbadfde06c02/Ast/src/Cst.cpp

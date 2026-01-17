@@ -67,6 +67,7 @@ pub const Node = extern struct {
         expr_type_assertion,
         expr_if_else,
         expr_interp_string,
+        expr_instantiate,
         stat_block,
         stat_if,
         stat_while,
@@ -128,6 +129,7 @@ pub const Node = extern struct {
                 .expr_type_assertion => ExprTypeAssertion,
                 .expr_if_else => ExprIfElse,
                 .expr_interp_string => ExprInterpString,
+                .expr_instantiate => ExprInstantiate,
                 .stat_block => StatBlock,
                 .stat_if => StatIf,
                 .stat_while => StatWhile,
@@ -192,6 +194,7 @@ pub const Node = extern struct {
                 .expr_type_assertion,
                 .expr_if_else,
                 .expr_interp_string,
+                .expr_instantiate,
                 .expr_error,
                 => Expr,
                 .stat_block,
@@ -583,6 +586,10 @@ pub const ExprCall = extern struct {
     location: Location,
 
     func: *Expr,
+    /// These will only be filled in specifically `t:f<<A, B>>()`.
+    /// In `f<<A, B>>()`, this is parsed as `f<<A, B>>` as an expression,
+    /// which is then called.
+    typeArguments: Array(TypeOrPack),
     args: Array(*Expr),
     self: bool,
     argLocation: Location,
@@ -927,6 +934,35 @@ pub const ExprInterpString = extern struct {
         if (try Visitor.visit(visitor, self)) {
             for (self.expressions.slice()) |expr|
                 try expr.visit(visitor);
+        }
+    }
+};
+
+/// f<<T>>
+pub const ExprInstantiate = extern struct {
+    vtable: *const anyopaque,
+
+    classIndex: Node.Kind,
+    location: Location,
+
+    expr: *Expr,
+    typeArguments: Array(TypeOrPack),
+
+    pub const is = IsFn;
+    pub const as = AsCastFn;
+    pub const asExpr = AsExprCastFn;
+    pub const asStat = AsStatCastFn;
+    pub const asType = AsTypeCastFn;
+
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
+            for (self.typeArguments.slice()) |param| {
+                if (param.type) |node| {
+                    try node.visit(visitor);
+                } else {
+                    try param.typePack.?.visit(visitor);
+                }
+            }
         }
     }
 };
@@ -2189,6 +2225,7 @@ test "Index" {
         extern "c" const AstExprTypeAssertionIndex: u8;
         extern "c" const AstExprIfElseIndex: u8;
         extern "c" const AstExprInterpStringIndex: u8;
+        extern "c" const AstExprInstantiateIndex: u8;
         extern "c" const AstStatBlockIndex: u8;
         extern "c" const AstStatIfIndex: u8;
         extern "c" const AstStatWhileIndex: u8;
@@ -2248,6 +2285,7 @@ test "Index" {
     try std.testing.expect(Indexes.AstExprTypeAssertionIndex == @intFromEnum(Node.Kind.expr_type_assertion));
     try std.testing.expect(Indexes.AstExprIfElseIndex == @intFromEnum(Node.Kind.expr_if_else));
     try std.testing.expect(Indexes.AstExprInterpStringIndex == @intFromEnum(Node.Kind.expr_interp_string));
+    try std.testing.expect(Indexes.AstExprInstantiateIndex == @intFromEnum(Node.Kind.expr_instantiate));
     try std.testing.expect(Indexes.AstStatBlockIndex == @intFromEnum(Node.Kind.stat_block));
     try std.testing.expect(Indexes.AstStatIfIndex == @intFromEnum(Node.Kind.stat_if));
     try std.testing.expect(Indexes.AstStatWhileIndex == @intFromEnum(Node.Kind.stat_while));
@@ -2287,5 +2325,5 @@ test "Index" {
 }
 
 // sources:
-// https://github.com/luau-lang/luau/blob/6ff0650a8d4ba90df9826492b68c88911e39b1c1/Ast/include/Luau/Ast.h
-// https://github.com/luau-lang/luau/blob/6ff0650a8d4ba90df9826492b68c88911e39b1c1/Ast/src/Ast.cpp
+// https://github.com/luau-lang/luau/blob/750431b009c4bd268353de00ced9bbadfde06c02/Ast/include/Luau/Ast.h
+// https://github.com/luau-lang/luau/blob/750431b009c4bd268353de00ced9bbadfde06c02/Ast/src/Ast.cpp
