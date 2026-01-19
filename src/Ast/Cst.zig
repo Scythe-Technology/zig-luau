@@ -129,7 +129,7 @@ pub const TypeInstantiation = extern struct {
     leftArrow1Position: Location.Position = .zeros,
     leftArrow2Position: Location.Position = .zeros,
 
-    sourceString: Ast.Array(Location.Position),
+    commaPositions: Ast.Array(Location.Position),
 
     rightArrow1Position: Location.Position = .zeros,
     rightArrow2Position: Location.Position = .zeros,
