@@ -771,6 +771,7 @@ const LUAU_Analysis_SOURCE_FILES = [_][]const u8{
     "Analysis/src/StructuralTypeEquality.cpp",
     "Analysis/src/Substitution.cpp",
     "Analysis/src/Subtyping.cpp",
+    "Analysis/src/SubtypingUnifier.cpp",
     "Analysis/src/Symbol.cpp",
     "Analysis/src/TableLiteralInference.cpp",
     "Analysis/src/ToDot.cpp",

@@ -11,6 +11,7 @@ pub const Lexeme = struct {
     pub const Type = enum(c_int) {
         Eof = 0,
 
+        // 1..255 means actual character values
         Char_END = 256,
 
         Equal,
