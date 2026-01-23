@@ -124,8 +124,6 @@ pub const ExprConstantString = extern struct {
 };
 
 pub const TypeInstantiation = extern struct {
-    classIndex: Node.Kind,
-
     leftArrow1Position: Location.Position = .zeros,
     leftArrow2Position: Location.Position = .zeros,
 
