@@ -201,6 +201,8 @@ const ExecutionCallbacks = extern struct {
     getmemorysize: ?*const fn (L: *lua_State, proto: *anyopaque) callconv(.c) usize = null,
     /// gets called to get the userdata type index
     gettypemapping: ?*const fn (L: *lua_State, str: [*c]const u8, len: usize) callconv(.c) u8 = null,
+    /// called to get the execution counter data and count {uint32_t, uint32_t, uint64_t}
+    getcounterdata: ?*const fn (L: *lua_State, proto: *anyopaque, count: *usize) callconv(.c) [*]const u8 = null,
 };
 
 pub const global_State = extern struct {
@@ -909,16 +911,14 @@ pub fn newstate(f: lua.Alloc, ud: ?*anyopaque) Errorset.Table!*lua_State {
     g.allpages = null;
     g.allgcopages = null;
     g.sweepgcopage = null;
-    for (0..@intCast(lua.Type.T_COUNT)) |i|
-        g.mt[i] = null;
+    @memset(g.mt[0..], null);
     for (0..lua.config.UTAG_LIMIT) |i| {
         g.udatagc[i] = null;
         g.udatamt[i] = null;
     }
-    for (0..@intCast(lua.config.LUTAG_LIMIT)) |i|
-        g.lightuserdataname[i] = null;
-    for (0..@intCast(lua.config.MEMORY_CATEGORIES)) |i|
-        g.memcatbytes[i] = 0;
+
+    @memset(g.lightuserdataname[0..], null);
+    @memset(g.memcatbytes[0..], 0);
 
     g.memcatbytes[0] = @sizeOf(LG);
 

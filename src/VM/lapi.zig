@@ -47,7 +47,7 @@ pub inline fn api_update_top(L: *State, p: *lobject.TValue) void {
 
 pub inline fn updateatom(L: *State, ts: *lobject.TString) void {
     if (ts.atom == lstring.ATOM_UNDEF)
-        ts.atom = if (L.global.cb.useratom) |useratom| useratom(@ptrCast(@alignCast(&ts.data)), @intCast(ts.len)) else -1;
+        ts.atom = if (L.global.cb.useratom) |useratom| useratom(L, @ptrCast(@alignCast(&ts.data)), @intCast(ts.len)) else -1;
 }
 
 pub fn getcurrenv(L: *lua.State) *lobject.LuaTable {

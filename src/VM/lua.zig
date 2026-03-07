@@ -244,7 +244,7 @@ pub const Callbacks = extern struct {
     /// gets called when L is created (LP == parent) or destroyed (LP == NULL)
     userthread: ?*const fn (LP: ?*State, L: *State) callconv(.c) void = null,
     /// gets called when a string is created; returned atom can be retrieved via tostringatom
-    useratom: ?*const fn (s: [*c]const u8, l: usize) callconv(.c) i16 = null,
+    useratom: ?*const fn (L: *State, s: [*c]const u8, l: usize) callconv(.c) i16 = null,
 
     /// gets called when BREAK instruction is encountered
     debugbreak: ?*const fn (L: *State, ar: *c.lua_Debug) callconv(.c) void = null,
