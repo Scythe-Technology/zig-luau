@@ -748,7 +748,6 @@ const LUAU_Analysis_SOURCE_FILES = [_][]const u8{
     "Analysis/src/Frontend.cpp",
     "Analysis/src/Generalization.cpp",
     "Analysis/src/GlobalTypes.cpp",
-    "Analysis/src/InferPolarity.cpp",
     "Analysis/src/Instantiation.cpp",
     "Analysis/src/Instantiation2.cpp",
     "Analysis/src/IostreamHelpers.cpp",
