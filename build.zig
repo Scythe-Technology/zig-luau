@@ -41,7 +41,10 @@ pub fn build(b: *Build) !void {
 
     const use_zig_backend = b.option(bool, "use_zig_backend", "Build Luau with zig written backend") orelse true;
     const use_4_vector = b.option(bool, "use_4_vector", "Build Luau to use 4-vectors instead of the default 3-vector.") orelse false;
-    const wasm_env_name = b.option([]const u8, "wasm_env", "The environment to import symbols from when building for WebAssembly.") orelse "env";
+
+    const use_longjmp = b.option(bool, "use_longjmp", "Build Luau with SJLJ instead of exceptions (applies to CodeGen and VM)") orelse true;
+
+    const wasm_cxa_exceptions = b.option(bool, "wasm_cxa_exceptions", "Enable exception cxa implementation") orelse true;
 
     const hard_stack_tests = b.option(bool, "hard_stack_tests", "Enable hard stack tests") orelse false;
     const hard_mem_tests = b.option(u8, "hard_mem_tests", "Enable hard memory tests") orelse 0;
@@ -49,12 +52,15 @@ pub fn build(b: *Build) !void {
     const no_llvm = b.option(bool, "no_llvm", "Build without llvm (tests only + best with zig backend)") orelse false;
     const no_bin = b.option(bool, "no_bin", "Build without binary artifacts") orelse false;
 
+    const cxxflags = b.option([]const []const u8, "cxxflag", "Build C/C++ compile flags") orelse &.{};
+
     // Expose build configuration to the zig-luau module
     const config = b.addOptions();
     config.addOption(bool, "use_4_vector", use_4_vector);
     config.addOption(bool, "use_zig_backend", use_zig_backend);
     config.addOption(u8, "hard_mem_tests", hard_mem_tests);
     config.addOption(bool, "hard_stack_tests", hard_stack_tests);
+    config.addOption(bool, "wasm_cxa_exceptions", wasm_cxa_exceptions);
     config.addOption(std.SemanticVersion, "luau_version", version);
 
     config.addOption(bool, "buildAst", build_Ast);
@@ -80,7 +86,7 @@ pub fn build(b: *Build) !void {
 
     var FLAGS: std.ArrayList([]const u8) = .empty;
 
-    try FLAGS.append(b.allocator, "-DLUA_USE_LONGJMP=" ++ if (!target.result.cpu.arch.isWasm()) "1" else "0");
+    try FLAGS.append(b.allocator, "-DLUA_USE_LONGJMP=" ++ if (use_longjmp) "1" else "0");
     try FLAGS.append(b.allocator, "-DLUA_API=extern\"C\"");
     try FLAGS.append(b.allocator, "-DLUACODE_API=extern\"C\"");
     try FLAGS.append(b.allocator, "-DLUACODEGEN_API=extern\"C\"");
@@ -90,12 +96,9 @@ pub fn build(b: *Build) !void {
         try FLAGS.append(b.allocator, "-DHARDSTACKTESTS");
     if (use_4_vector)
         try FLAGS.append(b.allocator, "-DLUA_VECTOR_SIZE=4");
-    if (target.result.cpu.arch.isWasm()) {
-        if (target.result.os.tag == .emscripten)
-            try FLAGS.append(b.allocator, "-fexceptions");
-        // else
-        // try FLAGS.append("-fwasm-exceptions");
-        try FLAGS.append(b.allocator, b.fmt("-DLUAU_WASM_ENV_NAME=\"{s}\"", .{wasm_env_name}));
+
+    for (cxxflags) |flag| {
+        try FLAGS.append(b.allocator, flag);
     }
 
     const compile_flags = FLAGS.items;

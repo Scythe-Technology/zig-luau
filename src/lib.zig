@@ -302,7 +302,7 @@ pub fn init(allocator_ptr: *const std.mem.Allocator) !*VM.lua.State {
 }
 
 comptime {
-    if (builtin.target.cpu.arch.isWasm() and builtin.target.os.tag != .emscripten) {
+    if (builtin.target.cpu.arch.isWasm() and build_config.wasm_cxa_exceptions) {
         _ = struct {
             var exception_buf: [4096]u8 = undefined;
             var exception_fba = std.heap.FixedBufferAllocator.init(exception_buf[0..]);
