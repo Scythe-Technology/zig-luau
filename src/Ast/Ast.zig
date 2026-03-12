@@ -16,6 +16,7 @@ pub const Local = extern struct {
     shadow: ?*Local,
     functionDepth: usize,
     loopDepth: usize,
+    isConst: bool,
     annotation: ?*Type,
 };
 
