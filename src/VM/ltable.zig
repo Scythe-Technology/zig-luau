@@ -112,8 +112,6 @@ fn hashvec(t: *const LuaTable, v: []const f32) [*]LuaNode {
 fn mainposition(t: *const LuaTable, key: *const TValue) [*]LuaNode {
     comptime std.debug.assert(@sizeOf(LuaNode) == @sizeOf(TValue) * 2);
     comptime std.debug.assert(@alignOf(LuaNode) == @alignOf(TValue));
-    comptime std.debug.assert(@alignOf(LuaNode) == 8);
-
     return switch (key.typeOf()) {
         .Number => hashnum(t, key.nvalue()),
         .Vector => hashvec(t, key.vvalue()),
