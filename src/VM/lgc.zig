@@ -673,6 +673,15 @@ fn markroot(L: *lua.State) void {
     // make global table be traversed before main stack
     markobject(g, @ptrCast(@alignCast(g.mainthread.gt)));
     markvalue(g, L.registry());
+
+    for (0..lua.config.UTAG_LIMIT) |i| {
+        const udatadirect = &L.global.udatadirect[i];
+
+        markvalue(g, &udatadirect.indextm);
+        markvalue(g, &udatadirect.newindextm);
+        markvalue(g, &udatadirect.namecalltm);
+    }
+
     markmt(g);
     g.gcstate = GCSpropagate;
 }

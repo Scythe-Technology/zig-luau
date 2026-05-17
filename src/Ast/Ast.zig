@@ -1194,6 +1194,7 @@ pub const StatLocal = extern struct {
 
     vars: Array(*Local),
     values: Array(*Expr),
+    isConst: bool = false,
     equalsSignLocation: cpp_std.Optional(Location),
 
     pub const is = IsFn;
@@ -1371,6 +1372,7 @@ pub const StatLocalFunction = extern struct {
 
     name: *Local,
     func: *ExprFunction,
+    isConst: bool = false,
 
     pub const is = IsFn;
     pub const as = AsCastFn;

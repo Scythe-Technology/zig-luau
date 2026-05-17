@@ -27,6 +27,11 @@ pub inline fn Sfix(s: *lobject.TString) void {
     s.header.marked |= lgc.bitmask(lgc.FIXEDBIT);
 }
 
+pub inline fn Supdateatom(L: *lua.State, ts: *lobject.TString) void {
+    if (ts.atom == ATOM_UNDEF)
+        ts.atom = if (L.global.cb.useratom) |useratom| useratom(L, @ptrCast(@alignCast(&ts.data)), @intCast(ts.len)) else -1;
+}
+
 pub fn Shash(str: []const u8) u32 {
     // Note that this hashing algorithm is replicated in BytecodeBuilder.cpp, BytecodeBuilder::getStringHash
     var src = str;
