@@ -184,8 +184,16 @@ pub fn Lcheckinteger(L: *lua.State, narg: i32) i32 {
     return L.tointegerx(narg) orelse tag_error(L, narg, .Number);
 }
 
+pub fn Lcheckinteger64(L: *lua.State, narg: i32) i64 {
+    return L.tointeger64(narg) orelse tag_error(L, narg, .Number);
+}
+
 pub fn Loptinteger(L: *lua.State, narg: i32, d: i32) i32 {
     return OptionalValue(i32, L, Lcheckinteger, narg, d);
+}
+
+pub fn Loptinteger64(L: *lua.State, narg: i32, d: i64) i64 {
+    return OptionalValue(i64, L, Lcheckinteger64, narg, d);
 }
 
 pub fn Lcheckunsigned(L: *lua.State, narg: i32) u32 {

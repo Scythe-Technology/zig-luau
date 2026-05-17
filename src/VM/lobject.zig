@@ -28,6 +28,7 @@ pub const Value = extern union {
     p: ?*anyopaque,
     n: f64,
     b: c_int,
+    l: i64,
     /// v[0], v[1] live here; v[2] lives in TValue::extra
     v: [2]f32,
 };
@@ -53,6 +54,9 @@ pub const TValue = extern struct {
     }
     pub inline fn ttisnumber(obj: *const TValue) bool {
         return obj.ttype() == @intFromEnum(lua.Type.Number);
+    }
+    pub inline fn ttisinteger(obj: *const TValue) bool {
+        return obj.ttype() == @intFromEnum(lua.Type.Integer);
     }
     pub inline fn ttisstring(obj: *const TValue) bool {
         return obj.ttype() == @intFromEnum(lua.Type.String);
@@ -101,6 +105,10 @@ pub const TValue = extern struct {
     pub inline fn nvalue(obj: *const TValue) f64 {
         std.debug.assert(obj.ttisnumber());
         return obj.value.n;
+    }
+    pub inline fn lvalue(obj: *const TValue) i64 {
+        std.debug.assert(obj.ttisinteger());
+        return obj.value.l;
     }
     pub inline fn vvalue(obj: *const TValue) []const f32 {
         std.debug.assert(obj.ttisvector());
@@ -161,6 +169,10 @@ pub const TValue = extern struct {
     pub inline fn setnvalue(obj: *TValue, x: f64) void {
         obj.value.n = x;
         obj.settype(.Number);
+    }
+    pub inline fn setlvalue(obj: *TValue, x: i64) void {
+        obj.value.l = x;
+        obj.settype(.Integer);
     }
     pub inline fn setvvalue(obj: *TValue, x: f32, y: f32, z: f32, w: ?f32) void {
         const i_v: [*]f32 = @ptrCast(&obj.value.v);
@@ -487,6 +499,9 @@ pub const TKey = extern struct {
     pub inline fn ttisnumber(obj: *const TKey) bool {
         return obj.ttype() == @intFromEnum(lua.Type.Number);
     }
+    pub inline fn ttisinteger(obj: *const TKey) bool {
+        return obj.ttype() == @intFromEnum(lua.Type.Integer);
+    }
     pub inline fn ttisstring(obj: *const TKey) bool {
         return obj.ttype() == @intFromEnum(lua.Type.String);
     }
@@ -529,6 +544,10 @@ pub const TKey = extern struct {
     pub inline fn nvalue(obj: *const TKey) f64 {
         std.debug.assert(obj.ttisnumber());
         return obj.value.n;
+    }
+    pub inline fn lvalue(obj: *const TKey) i64 {
+        std.debug.assert(obj.ttisinteger());
+        return obj.value.l;
     }
     pub inline fn vvalue(obj: *const TKey) []const f32 {
         std.debug.assert(obj.ttisvector());
@@ -723,6 +742,7 @@ pub fn OrawequalObj(t1: *const TValue, t2: *const TValue) bool {
         .None => unreachable,
         .Nil => return true,
         .Number => return t1.nvalue() == t2.nvalue(),
+        .Integer => return t1.lvalue() == t2.lvalue(),
         .Vector => return lnumutils.iveceq(t1.vvalue(), t2.vvalue()),
         .Boolean => return t1.bvalue() == t2.bvalue(),
         .LightUserdata => return t1.pvalue() == t2.pvalue() and t1.lightuserdatatag() == t2.lightuserdatatag(),
@@ -741,6 +761,7 @@ pub fn OrawequalKey(t1: *const TKey, t2: *const TValue) bool {
         .None => unreachable,
         .Nil => return true,
         .Number => return t1.nvalue() == t2.nvalue(),
+        .Integer => return t1.lvalue() == t2.lvalue(),
         .Vector => return lnumutils.iveceq(t1.vvalue(), t2.vvalue()),
         .Boolean => return t1.bvalue() == t2.bvalue(),
         .LightUserdata => return t1.pvalue() == t2.pvalue() and t1.lightuserdatatag() == t2.lightuserdatatag(),

@@ -78,6 +78,7 @@ pub const Type = enum(i5) {
     Boolean = c.LUA_TBOOLEAN, // must be 1 due to l_isfalse
     LightUserdata = c.LUA_TLIGHTUSERDATA,
     Number = c.LUA_TNUMBER,
+    Integer = c.LUA_TINTEGER,
     Vector = c.LUA_TVECTOR,
     String = c.LUA_TSTRING, // all types above this must be value types, all types below this must be GC types - see iscollectable
     Table = c.LUA_TTABLE,

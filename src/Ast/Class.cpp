@@ -13,6 +13,7 @@ ZIG_EXPORT const unsigned char AstExprGroupIndex = AstExprGroup::ClassIndex();
 ZIG_EXPORT const unsigned char AstExprConstantNilIndex = AstExprConstantNil::ClassIndex();
 ZIG_EXPORT const unsigned char AstExprConstantBoolIndex = AstExprConstantBool::ClassIndex();
 ZIG_EXPORT const unsigned char AstExprConstantNumberIndex = AstExprConstantNumber::ClassIndex();
+ZIG_EXPORT const unsigned char AstExprConstantIntegerIndex = AstExprConstantInteger::ClassIndex();
 ZIG_EXPORT const unsigned char AstExprConstantStringIndex = AstExprConstantString::ClassIndex();
 ZIG_EXPORT const unsigned char AstExprLocalIndex = AstExprLocal::ClassIndex();
 ZIG_EXPORT const unsigned char AstExprGlobalIndex = AstExprGlobal::ClassIndex();
@@ -67,6 +68,7 @@ ZIG_EXPORT const unsigned char AstTypePackGenericIndex = AstTypePackGeneric::Cla
 
 // CST
 ZIG_EXPORT const unsigned char CstExprConstantNumberIndex = CstExprConstantNumber::CstClassIndex();
+ZIG_EXPORT const unsigned char CstExprConstantIntegerIndex = CstExprConstantInteger::CstClassIndex();
 ZIG_EXPORT const unsigned char CstExprConstantStringIndex = CstExprConstantString::CstClassIndex();
 ZIG_EXPORT const unsigned char CstExprCallIndex = CstExprCall::CstClassIndex();
 ZIG_EXPORT const unsigned char CstExprIndexExprIndex = CstExprIndexExpr::CstClassIndex();
@@ -78,7 +80,6 @@ ZIG_EXPORT const unsigned char CstExprIfElseIndex = CstExprIfElse::CstClassIndex
 ZIG_EXPORT const unsigned char CstExprInterpStringIndex = CstExprInterpString::CstClassIndex();
 ZIG_EXPORT const unsigned char CstExprExplicitTypeInstantiationIndex = CstExprExplicitTypeInstantiation::CstClassIndex();
 ZIG_EXPORT const unsigned char CstStatDoIndex = CstStatDo::CstClassIndex();
-ZIG_EXPORT const unsigned char CstStatDo_DEPRECATEDIndex = CstStatDo_DEPRECATED::CstClassIndex();
 ZIG_EXPORT const unsigned char CstStatRepeatIndex = CstStatRepeat::CstClassIndex();
 ZIG_EXPORT const unsigned char CstStatReturnIndex = CstStatReturn::CstClassIndex();
 ZIG_EXPORT const unsigned char CstStatLocalIndex = CstStatLocal::CstClassIndex();
