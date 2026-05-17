@@ -83,6 +83,30 @@ fn hashnum(t: *const LuaTable, n: f64) [*]LuaNode {
     return hashpow2(t, h2);
 }
 
+fn hashint(t: *const LuaTable, n: i64) [*]LuaNode {
+    comptime std.debug.assert(@sizeOf(i64) == @sizeOf(u32) * 2); // expected a 8-byte integer;
+    var i: [2]u32 = undefined;
+    @memcpy(i[0..], &@as([2]u32, @bitCast(n)));
+
+    var h1: u32 = i[0];
+    var h2: u32 = i[1];
+
+    // finalizer from MurmurHash64B
+    const m: u32 = 0x5bd1e995;
+
+    h1 ^= h2 >> 18;
+    h1 *%= m;
+    h2 ^= h1 >> 22;
+    h2 *%= m;
+    h1 ^= h2 >> 17;
+    h1 *%= m;
+    h2 ^= h1 >> 19;
+    h2 *%= m;
+
+    // ... truncated to 32-bit output (normally hash is equal to (uint64_t(h1) << 32) | h2, but we only really need the lower 32-bit half)
+    return hashpow2(t, h2);
+}
+
 fn hashvec(t: *const LuaTable, v: []const f32) [*]LuaNode {
     var i: [LUA_VECTOR_SIZE]u32 = undefined;
     @memcpy(i[0..], (@as([*]const u32, @ptrCast(@alignCast(v.ptr))))[0..LUA_VECTOR_SIZE]);
@@ -114,6 +138,7 @@ fn mainposition(t: *const LuaTable, key: *const TValue) [*]LuaNode {
     comptime std.debug.assert(@alignOf(LuaNode) == @alignOf(TValue));
     return switch (key.typeOf()) {
         .Number => hashnum(t, key.nvalue()),
+        .Integer => hashint(t, key.lvalue()),
         .Vector => hashvec(t, key.vvalue()),
         .String => hashstr(t, key.tsvalue()),
         .Boolean => hashboolean(t, key.bvalue()),

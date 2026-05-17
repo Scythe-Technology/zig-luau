@@ -54,6 +54,7 @@ pub const Node = extern struct {
         expr_constant_nil,
         expr_constant_bool,
         expr_constant_number,
+        expr_constant_integer,
         expr_constant_string,
         expr_local,
         expr_global,
@@ -116,6 +117,7 @@ pub const Node = extern struct {
                 .expr_constant_nil => ExprConstantNil,
                 .expr_constant_bool => ExprConstantBool,
                 .expr_constant_number => ExprConstantNumber,
+                .expr_constant_integer => ExprConstantInteger,
                 .expr_constant_string => ExprConstantString,
                 .expr_local => ExprLocal,
                 .expr_global => ExprGlobal,
@@ -457,6 +459,7 @@ pub const ConstantNumberParseResult = enum(c_int) {
     Malformed = 2,
     BinOverflow = 3,
     HexOverflow = 4,
+    IntOverflow = 5,
 };
 
 pub const ExprConstantNumber = extern struct {
@@ -466,6 +469,26 @@ pub const ExprConstantNumber = extern struct {
     location: Location,
 
     value: f64,
+    parseResult: ConstantNumberParseResult,
+
+    pub const is = IsFn;
+    pub const as = AsCastFn;
+    pub const asExpr = AsExprCastFn;
+    pub const asStat = AsStatCastFn;
+    pub const asType = AsTypeCastFn;
+
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        _ = try Visitor.visit(visitor, self);
+    }
+};
+
+pub const ExprConstantInteger = extern struct {
+    vtable: *const anyopaque,
+
+    classIndex: Node.Kind,
+    location: Location,
+
+    value: i64,
     parseResult: ConstantNumberParseResult,
 
     pub const is = IsFn;
@@ -1504,24 +1527,19 @@ pub const StatDeclareFunction = extern struct {
     }
 };
 
+pub const TableAccess = enum(c_int) {
+    Read = 1,
+    Write = 2,
+    ReadWrite = 3,
+};
+
 pub const DeclaredExternTypeProperty = extern struct {
     name: Name,
     nameLocation: Location,
     ty: *Type = undefined,
     isMethod: bool = false,
     location: Location,
-
-    pub const is = IsFn;
-    pub const as = AsCastFn;
-    pub const asExpr = AsExprCastFn;
-    pub const asStat = AsStatCastFn;
-    pub const asType = AsTypeCastFn;
-};
-
-pub const TableAccess = enum(c_int) {
-    Read = 1,
-    Write = 2,
-    ReadWrite = 3,
+    access: TableAccess = .ReadWrite,
 
     pub const is = IsFn;
     pub const as = AsCastFn;
@@ -2212,6 +2230,7 @@ test "Index" {
         extern "c" const AstExprConstantNilIndex: u8;
         extern "c" const AstExprConstantBoolIndex: u8;
         extern "c" const AstExprConstantNumberIndex: u8;
+        extern "c" const AstExprConstantIntegerIndex: u8;
         extern "c" const AstExprConstantStringIndex: u8;
         extern "c" const AstExprLocalIndex: u8;
         extern "c" const AstExprGlobalIndex: u8;
@@ -2272,6 +2291,7 @@ test "Index" {
     try std.testing.expect(Indexes.AstExprConstantNilIndex == @intFromEnum(Node.Kind.expr_constant_nil));
     try std.testing.expect(Indexes.AstExprConstantBoolIndex == @intFromEnum(Node.Kind.expr_constant_bool));
     try std.testing.expect(Indexes.AstExprConstantNumberIndex == @intFromEnum(Node.Kind.expr_constant_number));
+    try std.testing.expect(Indexes.AstExprConstantIntegerIndex == @intFromEnum(Node.Kind.expr_constant_integer));
     try std.testing.expect(Indexes.AstExprConstantStringIndex == @intFromEnum(Node.Kind.expr_constant_string));
     try std.testing.expect(Indexes.AstExprLocalIndex == @intFromEnum(Node.Kind.expr_local));
     try std.testing.expect(Indexes.AstExprGlobalIndex == @intFromEnum(Node.Kind.expr_global));
@@ -2326,5 +2346,5 @@ test "Index" {
 }
 
 // sources:
-// https://github.com/luau-lang/luau/blob/750431b009c4bd268353de00ced9bbadfde06c02/Ast/include/Luau/Ast.h
-// https://github.com/luau-lang/luau/blob/750431b009c4bd268353de00ced9bbadfde06c02/Ast/src/Ast.cpp
+// https://github.com/luau-lang/luau/blob/40d4815888f63362a6cb79b3e74c4aafa0b2cbf4/Ast/include/Luau/Ast.h
+// https://github.com/luau-lang/luau/blob/40d4815888f63362a6cb79b3e74c4aafa0b2cbf4/Ast/src/Ast.cpp

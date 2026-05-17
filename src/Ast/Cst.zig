@@ -13,6 +13,8 @@ pub const Node = extern struct {
     pub const Kind = enum(i32) {
         unknown,
         expr_constant_number,
+        expr_constant_integer,
+        expr_constant_string,
         expr_call,
         expr_index_expr,
         expr_function,
@@ -45,12 +47,12 @@ pub const Node = extern struct {
         type_singleton_string,
         type_pack_explicit,
         type_pack_generic,
-        expr_constant_string, // out of order
 
         pub fn Type(comptime self: Kind) type {
             return switch (self) {
                 .unknown => Node,
                 .expr_constant_number => ExprConstantNumber,
+                .expr_constant_integer => ExprConstantInteger,
                 .expr_constant_string => ExprConstantString,
                 .expr_call => ExprCall,
                 .expr_index_expr => ExprIndexExpr,
@@ -101,6 +103,12 @@ pub fn AsCastFn(base: anytype, comptime to: Node.Kind) ?*to.Type() {
 }
 
 pub const ExprConstantNumber = extern struct {
+    classIndex: Node.Kind,
+
+    value: Ast.Array(u8),
+};
+
+pub const ExprConstantInteger = extern struct {
     classIndex: Node.Kind,
 
     value: Ast.Array(u8),
@@ -466,6 +474,7 @@ test "Index" {
         return error.SkipZigTest;
     const Indexes = struct {
         extern "c" const CstExprConstantNumberIndex: u8;
+        extern "c" const CstExprConstantIntegerIndex: u8;
         extern "c" const CstExprConstantStringIndex: u8;
         extern "c" const CstExprCallIndex: u8;
         extern "c" const CstExprIndexExprIndex: u8;
@@ -505,11 +514,8 @@ test "Index" {
     };
 
     try std.testing.expect(Indexes.CstExprConstantNumberIndex == @intFromEnum(Node.Kind.expr_constant_number));
-
-    // TODO: invalid index, got 1 instead of another value that is not equal `CstExprConstantNumberIndex` or any other cst index
-    // luau/c++ compiler bug
-    // try std.testing.expect(Indexes.CstExprConstantStringIndex == @intFromEnum(Node.Kind.expr_constant_string));
-
+    try std.testing.expect(Indexes.CstExprConstantIntegerIndex == @intFromEnum(Node.Kind.expr_constant_integer));
+    try std.testing.expect(Indexes.CstExprConstantStringIndex == @intFromEnum(Node.Kind.expr_constant_string));
     try std.testing.expect(Indexes.CstExprCallIndex == @intFromEnum(Node.Kind.expr_call));
     try std.testing.expect(Indexes.CstExprIndexExprIndex == @intFromEnum(Node.Kind.expr_index_expr));
     try std.testing.expect(Indexes.CstExprFunctionIndex == @intFromEnum(Node.Kind.expr_function));
@@ -548,5 +554,5 @@ test "Index" {
 }
 
 // sources:
-// https://github.com/luau-lang/luau/blob/750431b009c4bd268353de00ced9bbadfde06c02/Ast/include/Luau/Cst.h
-// https://github.com/luau-lang/luau/blob/750431b009c4bd268353de00ced9bbadfde06c02/Ast/src/Cst.cpp
+// https://github.com/luau-lang/luau/blob/40d4815888f63362a6cb79b3e74c4aafa0b2cbf4/Ast/include/Luau/Cst.h
+// https://github.com/luau-lang/luau/blob/40d4815888f63362a6cb79b3e74c4aafa0b2cbf4/Ast/src/Cst.cpp

@@ -43,6 +43,7 @@ pub const typenames = [_][:0]const u8{
 
     "userdata",
     "number",
+    "integer",
     "vector",
 
     "string",

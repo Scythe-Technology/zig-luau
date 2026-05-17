@@ -140,7 +140,7 @@ pub fn ZigToCFnV(comptime fnType: std.builtin.Type.Fn, comptime f: anytype) lua.
                 else => |t| @compileError("Unsupported Fn Return type " ++ @tagName(t)),
             }
         },
-        .error_set => |_| {
+        .error_set => {
             return struct {
                 fn inner(L: *lua.State) callconv(.c) c_int {
                     const err = @call(.always_inline, f, .{L});
@@ -408,6 +408,12 @@ pub fn Ztolstringk(L: *lua.State, idx: i32) ![]const u8 {
             try L.pushlstring(buf);
         },
         .String => L.pushvalue(idx),
+        .Integer => {
+            const l = L.tointeger64(idx).?;
+            var s: [MAX_NUM_BUF]u8 = undefined;
+            const buf = std.fmt.bufPrint(&s, "{d}", .{l}) catch unreachable; // should be able to fit
+            try L.pushlstring(buf);
+        },
         else => {
             const ptr = L.topointer(idx);
             var s: [20 + ltm.LONGEST_TYPENAME_SIZE]u8 = undefined; // 16 + 2 + 2(extra) + size
