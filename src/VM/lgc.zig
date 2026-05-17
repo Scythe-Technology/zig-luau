@@ -674,12 +674,17 @@ fn markroot(L: *lua.State) void {
     markobject(g, @ptrCast(@alignCast(g.mainthread.gt)));
     markvalue(g, L.registry());
 
-    for (0..lua.config.UTAG_LIMIT) |i| {
+    for (0..ludata.UTAG_INTERNAL_LIMIT) |i| {
         const udatadirect = &L.global.udatadirect[i];
 
         markvalue(g, &udatadirect.indextm);
         markvalue(g, &udatadirect.newindextm);
         markvalue(g, &udatadirect.namecalltm);
+    }
+
+    for (0..ludata.UTAG_INTERNAL_LIMIT) |i| {
+        if (g.udatadirectfields[i]) |f|
+            markobject(g, f.obj2gco());
     }
 
     markmt(g);

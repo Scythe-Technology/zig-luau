@@ -16,6 +16,9 @@ pub const UTAG_IDTOR = lua.config.UTAG_LIMIT;
 /// special tag value is used for newproxy-created user data (all other user data objects are host-exposed)
 pub const UTAG_PROXY = (lua.config.UTAG_LIMIT + 1);
 
+/// must be updated if more internal tags are added
+pub const UTAG_INTERNAL_LIMIT = UTAG_PROXY + 1;
+
 pub inline fn sizeudata(len: usize) usize {
     return @offsetOf(lobject.Udata, "data") + (if (len > 16) ((len + 15) & ~@as(usize, 15)) else len);
 }
