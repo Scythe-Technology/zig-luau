@@ -1,11 +1,11 @@
 .{
     .name = .luau,
     .fingerprint = 0x5e07e249a70630b8,
-    .version = "0.0.0+711",
+    .version = "0.0.0+714",
     .dependencies = .{
         .luau = .{
-            .url = "git+https://github.com/luau-lang/luau#0.711",
-            .hash = "N-V-__8AALOWsQAhyvvkzPHGJ9DSKm8szMxtc2I_yoGEHiek",
+            .url = "git+https://github.com/luau-lang/luau#0.714",
+            .hash = "N-V-__8AAMRbsACaAtu-NLCcdQx2sDKiASLNBV1EvegunVsf",
         },
     },
     .paths = .{

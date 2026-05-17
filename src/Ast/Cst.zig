@@ -23,7 +23,6 @@ pub const Node = extern struct {
         expr_interp_string,
         expr_explicit_type_instantiation,
         stat_do,
-        stat_do_DEPRECATED,
         stat_repeat,
         stat_return,
         stat_local,
@@ -63,7 +62,6 @@ pub const Node = extern struct {
                 .expr_interp_string => ExprInterpString,
                 .expr_explicit_type_instantiation => ExprExplicitTypeInstantiation,
                 .stat_do => StatDo,
-                .stat_do_DEPRECATED => StatDo_DEPRECATED,
                 .stat_repeat => StatRepeat,
                 .stat_return => StatReturn,
                 .stat_local => StatLocal,
@@ -223,12 +221,6 @@ pub const StatDo = extern struct {
     classIndex: Node.Kind,
 
     statsStartPosition: Location.Position,
-    endPosition: Location.Position,
-};
-
-pub const StatDo_DEPRECATED = extern struct {
-    classIndex: Node.Kind,
-
     endPosition: Location.Position,
 };
 
@@ -485,7 +477,6 @@ test "Index" {
         extern "c" const CstExprInterpStringIndex: u8;
         extern "c" const CstExprExplicitTypeInstantiationIndex: u8;
         extern "c" const CstStatDoIndex: u8;
-        extern "c" const CstStatDo_DEPRECATEDIndex: u8;
         extern "c" const CstStatRepeatIndex: u8;
         extern "c" const CstStatReturnIndex: u8;
         extern "c" const CstStatLocalIndex: u8;
@@ -529,7 +520,6 @@ test "Index" {
     try std.testing.expect(Indexes.CstExprInterpStringIndex == @intFromEnum(Node.Kind.expr_interp_string));
     try std.testing.expect(Indexes.CstExprExplicitTypeInstantiationIndex == @intFromEnum(Node.Kind.expr_explicit_type_instantiation));
     try std.testing.expect(Indexes.CstStatDoIndex == @intFromEnum(Node.Kind.stat_do));
-    try std.testing.expect(Indexes.CstStatDo_DEPRECATEDIndex == @intFromEnum(Node.Kind.stat_do_DEPRECATED));
     try std.testing.expect(Indexes.CstStatRepeatIndex == @intFromEnum(Node.Kind.stat_repeat));
     try std.testing.expect(Indexes.CstStatReturnIndex == @intFromEnum(Node.Kind.stat_return));
     try std.testing.expect(Indexes.CstStatLocalIndex == @intFromEnum(Node.Kind.stat_local));
