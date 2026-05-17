@@ -15,6 +15,7 @@ const linit = @import("linit.zig");
 const lmem = @import("lmem.zig");
 const lfunc = @import("lfunc.zig");
 const ltable = @import("ltable.zig");
+const ludata = @import("ludata.zig");
 const ldebug = @import("ldebug.zig");
 const lstring = @import("lstring.zig");
 const lcommon = @import("lcommon.zig");
@@ -296,7 +297,7 @@ pub const global_State = extern struct {
     ecbdata: [lua.config.EXECUTION_CALLBACK_STORAGE]u8 align(16),
 
     /// Set of userdata __index/__newindex/__namecall metamethods for a direct access
-    udatadirect: [lua.config.UTAG_LIMIT]UdataDirectAccessData,
+    udatadirect: [ludata.UTAG_INTERNAL_LIMIT]UdataDirectAccessData,
 
     /// total amount of memory used by each memory category
     memcatbytes: [lua.config.MEMORY_CATEGORIES]usize,
@@ -308,6 +309,9 @@ pub const global_State = extern struct {
 
     /// names for tagged lightuserdata
     lightuserdataname: [lua.config.LUTAG_LIMIT]?*lobject.TString,
+
+    // per-tag direct field dispatch tables; NULL until first field is registered for that tag
+    udatadirectfields: [ludata.UTAG_INTERNAL_LIMIT]?*lobject.LuaTable,
 
     gcstats: GCStats,
 
@@ -931,18 +935,25 @@ pub fn newstate(f: lua.Alloc, ud: ?*anyopaque) Errorset.Table!*lua_State {
     g.gcgoal = lgc.I_GCGOAL;
     g.gcstepmul = lgc.I_GCSTEPMUL;
     g.gcstepsize = @as(c_int, lgc.I_GCSTEPSIZE) << 10;
+
     for (0..@intCast(lua.config.SIZECLASSES)) |i| {
         g.freepages[i] = null;
         g.freegcopages[i] = null;
     }
+
     g.allpages = null;
     g.allgcopages = null;
     g.sweepgcopage = null;
-    @memset(g.mt[0..], null);
-    for (0..lua.config.UTAG_LIMIT) |i| {
-        g.udatagc[i] = null;
-        g.udatamt[i] = null;
 
+    @memset(g.mt[0..], null);
+
+    for (0..lua.Type.T_COUNT) |i|
+        g.mt[i] = null;
+
+    @memset(g.udatagc[0..], null);
+    @memset(g.udatamt[0..], null);
+
+    for (0..ludata.UTAG_INTERNAL_LIMIT) |i| {
         const udatadirect = &g.udatadirect[i];
 
         udatadirect.indextm.setnilvalue();
@@ -952,6 +963,8 @@ pub fn newstate(f: lua.Alloc, ud: ?*anyopaque) Errorset.Table!*lua_State {
         udatadirect.newindex = null;
         udatadirect.namecall = null;
     }
+
+    @memset(g.udatadirectfields[0..], null);
 
     @memset(g.lightuserdataname[0..], null);
     @memset(g.memcatbytes[0..], 0);
