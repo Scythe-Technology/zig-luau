@@ -297,7 +297,7 @@ fn linkIncludePath(
                         std.mem.eql(u8, path.dependency.sub_path, target_dir.path.dependency.sub_path))
                         break :blk;
 
-                target.addIncludePath(path);
+                target.root_module.addIncludePath(path);
             },
             else => {},
         };
@@ -311,22 +311,23 @@ fn buildCommon(
     version: std.SemanticVersion,
     flags: []const []const u8,
 ) *Step.Compile {
+    const mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libcpp = true,
+    });
+
     const lib = b.addLibrary(.{
         .name = "Common",
         .linkage = .static,
-        .root_module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-        }),
+        .root_module = mod,
+        .version = version,
     });
-    lib.version = version;
-
-    lib.linkLibCpp();
 
     for (LUAU_Common_HEADERS_DIRS) |dir|
-        lib.addIncludePath(dependency.path(dir));
+        mod.addIncludePath(dependency.path(dir));
 
-    lib.addCSourceFiles(.{
+    mod.addCSourceFiles(.{
         .root = dependency.path(""),
         .files = &LUAU_Common_SOURCE_FILES,
         .flags = flags,
@@ -344,26 +345,27 @@ fn buildAst(
     flags: []const []const u8,
     libCommon: *Step.Compile,
 ) *Step.Compile {
+    const mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libcpp = true,
+    });
+
     const lib = b.addLibrary(.{
         .name = "Ast",
         .linkage = .static,
-        .root_module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-        }),
+        .root_module = mod,
+        .version = version,
     });
-    lib.version = version;
 
     linkIncludePath(lib, libCommon);
 
-    lib.linkLibrary(libCommon);
-
-    lib.linkLibCpp();
+    mod.linkLibrary(libCommon);
 
     for (LUAU_Ast_HEADERS_DIRS) |dir|
-        lib.addIncludePath(dependency.path(dir));
+        mod.addIncludePath(dependency.path(dir));
 
-    lib.addCSourceFiles(.{
+    mod.addCSourceFiles(.{
         .root = dependency.path(""),
         .files = &LUAU_Ast_SOURCE_FILES,
         .flags = flags,
@@ -381,25 +383,26 @@ fn buildCompiler(
     flags: []const []const u8,
     libAst: *Step.Compile,
 ) *Step.Compile {
+    const mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libcpp = true,
+    });
+
     const lib = b.addLibrary(.{
         .name = "Compiler",
         .linkage = .static,
-        .root_module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-        }),
+        .root_module = mod,
+        .version = version,
     });
-    lib.version = version;
 
     linkIncludePath(lib, libAst);
-    lib.linkLibrary(libAst);
-
-    lib.linkLibCpp();
+    mod.linkLibrary(libAst);
 
     for (LUAU_Compiler_HEADERS_DIRS) |dir|
-        lib.addIncludePath(dependency.path(dir));
+        mod.addIncludePath(dependency.path(dir));
 
-    lib.addCSourceFiles(.{
+    mod.addCSourceFiles(.{
         .root = dependency.path(""),
         .files = &LUAU_Compiler_SOURCE_FILES,
         .flags = flags,
@@ -420,32 +423,33 @@ fn buildConfig(
     libCompiler: *Step.Compile,
     libVM: *Step.Compile,
 ) *Step.Compile {
+    const mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libcpp = true,
+    });
+
     const lib = b.addLibrary(.{
         .name = "Config",
         .linkage = .static,
-        .root_module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-        }),
+        .root_module = mod,
+        .version = version,
     });
-    lib.version = version;
 
     linkIncludePath(lib, libCommon);
     linkIncludePath(lib, libAst);
     linkIncludePath(lib, libCompiler);
     linkIncludePath(lib, libVM);
 
-    lib.linkLibrary(libCommon);
-    lib.linkLibrary(libAst);
-    lib.linkLibrary(libCompiler);
-    lib.linkLibrary(libVM);
-
-    lib.linkLibCpp();
+    mod.linkLibrary(libCommon);
+    mod.linkLibrary(libAst);
+    mod.linkLibrary(libCompiler);
+    mod.linkLibrary(libVM);
 
     for (LUAU_Config_HEADERS_DIRS) |dir|
-        lib.addIncludePath(dependency.path(dir));
+        mod.addIncludePath(dependency.path(dir));
 
-    lib.addCSourceFiles(.{
+    mod.addCSourceFiles(.{
         .root = dependency.path(""),
         .files = &LUAU_Config_SOURCE_FILES,
         .flags = flags,
@@ -466,32 +470,33 @@ fn buildAnalysis(
     libCompiler: *Step.Compile,
     libVM: *Step.Compile,
 ) !*Step.Compile {
+    const mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libcpp = true,
+    });
+
     const lib = b.addLibrary(.{
         .name = "Analysis",
         .linkage = .static,
-        .root_module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-        }),
+        .root_module = mod,
+        .version = version,
     });
-    lib.version = version;
 
     linkIncludePath(lib, libAst);
     linkIncludePath(lib, libConfig);
     linkIncludePath(lib, libCompiler);
     linkIncludePath(lib, libVM);
 
-    lib.linkLibrary(libAst);
-    lib.linkLibrary(libConfig);
-    lib.linkLibrary(libCompiler);
-    lib.linkLibrary(libVM);
-
-    lib.linkLibCpp();
+    mod.linkLibrary(libAst);
+    mod.linkLibrary(libConfig);
+    mod.linkLibrary(libCompiler);
+    mod.linkLibrary(libVM);
 
     for (LUAU_Analysis_HEADERS_DIRS) |dir|
-        lib.addIncludePath(dependency.path(dir));
+        mod.addIncludePath(dependency.path(dir));
 
-    lib.addCSourceFiles(.{
+    mod.addCSourceFiles(.{
         .root = dependency.path(""),
         .files = &LUAU_Analysis_SOURCE_FILES,
         .flags = flags,
@@ -509,25 +514,26 @@ fn buildCodeGen(
     flags: []const []const u8,
     libVM: *Step.Compile,
 ) *Step.Compile {
+    const mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libcpp = true,
+    });
+
     const lib = b.addLibrary(.{
         .name = "CodeGen",
         .linkage = .static,
-        .root_module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-        }),
+        .root_module = mod,
+        .version = version,
     });
-    lib.version = version;
 
     linkIncludePath(lib, libVM);
-    lib.linkLibrary(libVM);
-
-    lib.linkLibCpp();
+    mod.linkLibrary(libVM);
 
     for (LUAU_CodeGen_HEADERS_DIRS) |dir|
-        lib.addIncludePath(dependency.path(dir));
+        mod.addIncludePath(dependency.path(dir));
 
-    lib.addCSourceFiles(.{
+    mod.addCSourceFiles(.{
         .root = dependency.path(""),
         .files = &LUAU_CodeGen_SOURCE_FILES,
         .flags = flags,
@@ -545,25 +551,25 @@ fn buildVM(
     flags: []const []const u8,
     libCommon: *Step.Compile,
 ) *Step.Compile {
+    const mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libcpp = true,
+    });
+
     const lib = b.addLibrary(.{
         .name = "VM",
         .linkage = .static,
-        .root_module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-        }),
+        .root_module = mod,
+        .version = version,
     });
-
-    lib.version = version;
 
     linkIncludePath(lib, libCommon);
 
-    lib.linkLibCpp();
-
     for (LUAU_VM_HEADERS_DIRS) |dir|
-        lib.addIncludePath(dependency.path(dir));
+        mod.addIncludePath(dependency.path(dir));
 
-    lib.addCSourceFiles(.{
+    mod.addCSourceFiles(.{
         .root = dependency.path(""),
         .files = &LUAU_VM_SOURCE_FILES,
         .flags = flags,
@@ -653,25 +659,26 @@ fn buildLuau(
     libVM: ?*Step.Compile,
     Mode: struct { type: enum { @"test", normal } = .normal },
 ) !*Step.Compile {
+    const mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libcpp = true,
+    });
+
     const lib = b.addLibrary(.{
         .name = "luau",
         .linkage = .static,
-        .root_module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-        }),
+        .root_module = mod,
+        .version = version,
     });
-    lib.version = version;
 
-    lib.addIncludePath(b.path("src"));
+    mod.addIncludePath(b.path("src"));
 
-    lib.linkLibCpp();
+    mod.addCSourceFile(.{ .file = b.path("src/bridge.cpp"), .flags = flags });
 
-    lib.addCSourceFile(.{ .file = b.path("src/bridge.cpp"), .flags = flags });
-
-    if (libAst) |mod| {
-        lib.linkLibrary(mod);
-        lib.addCSourceFiles(.{ .flags = flags, .root = b.path("src/Ast/"), .files = if (Mode.type == .@"test") &.{
+    if (libAst) |lib_ast| {
+        mod.linkLibrary(lib_ast);
+        mod.addCSourceFiles(.{ .flags = flags, .root = b.path("src/Ast/"), .files = if (Mode.type == .@"test") &.{
             "Allocator.cpp",
             "Lexer.cpp",
             "Parser.cpp",
@@ -681,35 +688,35 @@ fn buildLuau(
             "Lexer.cpp",
             "Parser.cpp",
         } });
-        linkIncludePath(lib, mod);
+        linkIncludePath(lib, lib_ast);
     }
-    if (libAnalysis) |mod| {
-        lib.linkLibrary(mod);
-        lib.addCSourceFiles(.{ .flags = flags, .root = b.path("src/Analysis/"), .files = &.{
+    if (libAnalysis) |lib_analysis| {
+        mod.linkLibrary(lib_analysis);
+        mod.addCSourceFiles(.{ .flags = flags, .root = b.path("src/Analysis/"), .files = &.{
             "FileUtils.cpp",
             "AstJsonEncoder.cpp",
             "Frontend.cpp",
             "FileResolver.cpp",
             "GenericConfigResolver.cpp",
         } });
-        linkIncludePath(lib, mod);
+        linkIncludePath(lib, lib_analysis);
     }
-    if (libCodeGen) |mod| {
-        lib.linkLibrary(mod);
-        linkIncludePath(lib, mod);
+    if (libCodeGen) |lib_code_gen| {
+        mod.linkLibrary(lib_code_gen);
+        linkIncludePath(lib, lib_code_gen);
     }
-    if (libCompiler) |mod| {
-        lib.linkLibrary(mod);
-        lib.addCSourceFile(.{ .file = b.path("src/Compiler/Compiler.cpp"), .flags = flags });
-        linkIncludePath(lib, mod);
+    if (libCompiler) |lib_compiler| {
+        mod.linkLibrary(lib_compiler);
+        mod.addCSourceFile(.{ .file = b.path("src/Compiler/Compiler.cpp"), .flags = flags });
+        linkIncludePath(lib, lib_compiler);
     }
-    if (libVM) |mod| {
-        lib.linkLibrary(mod);
+    if (libVM) |lib_vm| {
+        mod.linkLibrary(lib_vm);
         if (Mode.type == .@"test") {
-            lib.addCSourceFile(.{ .file = b.path("src/VM/acc.cpp"), .flags = flags });
-            lib.addIncludePath(dependency.path("VM/src"));
+            mod.addCSourceFile(.{ .file = b.path("src/VM/acc.cpp"), .flags = flags });
+            mod.addIncludePath(dependency.path("VM/src"));
         }
-        linkIncludePath(lib, mod);
+        linkIncludePath(lib, lib_vm);
     }
 
     // It may not be as likely that other software links against Luau, but might as well expose these anyway
