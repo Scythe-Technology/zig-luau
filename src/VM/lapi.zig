@@ -45,11 +45,6 @@ pub inline fn api_update_top(L: *State, p: *lobject.TValue) void {
     L.top = @ptrCast(p);
 }
 
-pub inline fn updateatom(L: *State, ts: *lobject.TString) void {
-    if (ts.atom == lstring.ATOM_UNDEF)
-        ts.atom = if (L.global.cb.useratom) |useratom| useratom(L, @ptrCast(@alignCast(&ts.data)), @intCast(ts.len)) else -1;
-}
-
 pub fn getcurrenv(L: *lua.State) *lobject.LuaTable {
     if (L.ci == L.base_ci) // no enclosing function?
         return L.gt.? // use global table as environment
@@ -139,6 +134,7 @@ pub fn xmove(from: *lua.State, to: *lua.State, n: u32) void {
     }
     if (from == to)
         return;
+
     api_checknelems(from, n);
     api_check(from, from.global == to.global);
     api_check(from, to.ci.?[0].top - to.top >= n);
@@ -525,7 +521,7 @@ pub fn tolstringatom(L: *lua.State, idx: i32, atom: ?*i16) ?[:0]const u8 {
         return null;
     const s = o.tsvalue();
     if (atom) |a| {
-        updateatom(L, s);
+        lstring.Supdateatom(L, s);
         a.* = s.atom;
     }
     return s.toSlice();
@@ -546,7 +542,7 @@ pub fn namecallatom(L: *lua.State, atom: ?*i16) ?[:0]const u8 {
     }
     const s = L.namecall orelse return null;
     if (atom) |a| {
-        updateatom(L, s);
+        lstring.Supdateatom(L, s);
         a.* = s.atom;
     }
     return s.toSlice();
@@ -1170,6 +1166,8 @@ pub fn status(L: *lua.State) lua.Status {
 }
 
 pub fn costatus(L: *lua.State, co: *lua.State) lua.CoStatus {
+    api_check(L, L.global == co.global);
+
     if (co == L)
         return .Running;
     switch (co.status()) {
@@ -1511,6 +1509,7 @@ pub fn setuserdatametatable(L: *lua.State, tag: u8) void {
     if (comptime !build_config.use_zig_backend) {
         return c.lua_setuserdatametatable(@ptrCast(L), @intCast(tag));
     }
+    api_checknelems(L, 1);
     api_check(L, tag < lua.config.UTAG_LIMIT);
     api_check(L, L.global.udatamt[tag] == null); // reassignment not supported
     const n = L.top - 1;

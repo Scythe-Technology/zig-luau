@@ -205,6 +205,22 @@ const ExecutionCallbacks = extern struct {
     getcounterdata: ?*const fn (L: *lua_State, proto: *anyopaque, count: *usize) callconv(.c) [*]const u8 = null,
 };
 
+const UdataDirectAccessData = extern struct {
+    // NOTE: experimental API and is subject to breaking changes
+    // registration of callbacks for direct userdata __index, __newindex and __namecall access with string keys assigned with an atom
+    // cachedslot is initially 0 and can be set to a custom value to help with data lookup inside the userdata
+    // IMPORTANT: cachedslot values are shared between all userdata, callbacks function of one userdata tag has to correctly handle values set by another
+    pub const Access = fn (L: *lua_State, data: *anyopaque, atom: c_int, cachedslot: *u16, utag: c_int) callconv(.c) void;
+    pub const Namecall = fn (L: *lua_State, data: *anyopaque, atom: c_int, cachedslot: *u16, utag: c_int) callconv(.c) c_int;
+
+    indextm: lobject.TValue,
+    newindextm: lobject.TValue,
+    namecalltm: lobject.TValue,
+    index: ?*const Access,
+    newindex: ?*const Access,
+    namecall: ?*const Namecall,
+};
+
 pub const global_State = extern struct {
     /// hash table for strings
     strt: stringtable,
@@ -278,6 +294,9 @@ pub const global_State = extern struct {
     ecb: ExecutionCallbacks,
 
     ecbdata: [lua.config.EXECUTION_CALLBACK_STORAGE]u8 align(16),
+
+    /// Set of userdata __index/__newindex/__namecall metamethods for a direct access
+    udatadirect: [lua.config.UTAG_LIMIT]UdataDirectAccessData,
 
     /// total amount of memory used by each memory category
     memcatbytes: [lua.config.MEMORY_CATEGORIES]usize,
@@ -840,6 +859,9 @@ pub fn resetthread(L: *lua_State) Errorset.Memory!void {
     if (comptime !build_config.use_zig_backend) {
         return c.lua_resetthread(@ptrCast(L));
     }
+    lapi.api_check(L, !L.isactive);
+    lapi.api_check(L, L.status() != .Ok or L.ci == L.base_ci);
+
     // close upvalues before clearing anything
     lfunc.Fclose(L, @ptrCast(L.stack));
     // clear call frames
@@ -920,6 +942,15 @@ pub fn newstate(f: lua.Alloc, ud: ?*anyopaque) Errorset.Table!*lua_State {
     for (0..lua.config.UTAG_LIMIT) |i| {
         g.udatagc[i] = null;
         g.udatamt[i] = null;
+
+        const udatadirect = &g.udatadirect[i];
+
+        udatadirect.indextm.setnilvalue();
+        udatadirect.newindextm.setnilvalue();
+        udatadirect.namecalltm.setnilvalue();
+        udatadirect.index = null;
+        udatadirect.newindex = null;
+        udatadirect.namecall = null;
     }
 
     @memset(g.lightuserdataname[0..], null);

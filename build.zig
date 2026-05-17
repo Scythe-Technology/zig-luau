@@ -105,7 +105,8 @@ pub fn build(b: *Build) !void {
 
     const libCommon = buildCommon(b, target, luau_dep, optimize, version, compile_flags);
     const libAst = buildAst(b, target, luau_dep, optimize, version, compile_flags, libCommon);
-    const libCompiler = buildCompiler(b, target, luau_dep, optimize, version, compile_flags, libAst);
+    const libBytecode = buildBytecode(b, target, luau_dep, optimize, version, compile_flags, libCommon);
+    const libCompiler = buildCompiler(b, target, luau_dep, optimize, version, compile_flags, libAst, libBytecode);
     const libVM = buildVM(b, target, luau_dep, optimize, version, compile_flags, libCommon);
     const libConfig = buildConfig(b, target, luau_dep, optimize, version, compile_flags, libCommon, libAst, libCompiler, libVM);
     const libCodeGen = buildCodeGen(b, target, luau_dep, optimize, version, compile_flags, libVM);
@@ -359,7 +360,6 @@ fn buildAst(
     });
 
     linkIncludePath(lib, libCommon);
-
     mod.linkLibrary(libCommon);
 
     for (LUAU_Ast_HEADERS_DIRS) |dir|
@@ -374,6 +374,43 @@ fn buildAst(
     return lib;
 }
 
+fn buildBytecode(
+    b: *Build,
+    target: Build.ResolvedTarget,
+    dependency: *Build.Dependency,
+    optimize: std.builtin.OptimizeMode,
+    version: std.SemanticVersion,
+    flags: []const []const u8,
+    libCommon: *Step.Compile,
+) *Step.Compile {
+    const mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libcpp = true,
+    });
+
+    const lib = b.addLibrary(.{
+        .name = "Bytecode",
+        .linkage = .static,
+        .root_module = mod,
+        .version = version,
+    });
+
+    linkIncludePath(lib, libCommon);
+    mod.linkLibrary(libCommon);
+
+    for (LUAU_Bytecode_HEADERS_DIRS) |dir|
+        mod.addIncludePath(dependency.path(dir));
+
+    mod.addCSourceFiles(.{
+        .root = dependency.path(""),
+        .files = &LUAU_Bytecode_SOURCE_FILES,
+        .flags = flags,
+    });
+
+    return lib;
+}
+
 fn buildCompiler(
     b: *Build,
     target: Build.ResolvedTarget,
@@ -382,6 +419,7 @@ fn buildCompiler(
     version: std.SemanticVersion,
     flags: []const []const u8,
     libAst: *Step.Compile,
+    libBytecode: *Step.Compile,
 ) *Step.Compile {
     const mod = b.createModule(.{
         .target = target,
@@ -397,7 +435,9 @@ fn buildCompiler(
     });
 
     linkIncludePath(lib, libAst);
+    linkIncludePath(lib, libBytecode);
     mod.linkLibrary(libAst);
+    mod.linkLibrary(libBytecode);
 
     for (LUAU_Compiler_HEADERS_DIRS) |dir|
         mod.addIncludePath(dependency.path(dir));
@@ -770,7 +810,7 @@ const LUAU_Analysis_SOURCE_FILES = [_][]const u8{
     "Analysis/src/NativeStackGuard.cpp",
     "Analysis/src/NonStrictTypeChecker.cpp",
     "Analysis/src/Normalize.cpp",
-    "Analysis/src/OverloadResolution.cpp",
+    "Analysis/src/OverloadResolver.cpp",
     "Analysis/src/Quantify.cpp",
     "Analysis/src/RecursionCounter.cpp",
     "Analysis/src/Refinement.cpp",
@@ -823,6 +863,15 @@ const LUAU_Ast_SOURCE_FILES = [_][]const u8{
     "Ast/src/PrettyPrinter.cpp",
 };
 
+const LUAU_Bytecode_HEADERS_DIRS = [_][]const u8{
+    "Bytecode/include/",
+    "Bytecode/src/",
+};
+const LUAU_Bytecode_SOURCE_FILES = [_][]const u8{
+    "Bytecode/src/BytecodeBuilder.cpp",
+    "Bytecode/src/BytecodeGraph.cpp",
+};
+
 const LUAU_CodeGen_HEADERS_DIRS = [_][]const u8{
     "CodeGen/include/",
     "CodeGen/src/",
@@ -872,6 +921,7 @@ const LUAU_Common_HEADERS_DIRS = [_][]const u8{
 const LUAU_Common_SOURCE_FILES = [_][]const u8{
     "Common/src/StringUtils.cpp",
     "Common/src/TimeTrace.cpp",
+    "Common/src/BytecodeWire.cpp",
 };
 
 const LUAU_Compiler_HEADERS_DIRS = [_][]const u8{
@@ -881,7 +931,6 @@ const LUAU_Compiler_HEADERS_DIRS = [_][]const u8{
 const LUAU_Compiler_SOURCE_FILES = [_][]const u8{
     "Compiler/src/BuiltinFolding.cpp",
     "Compiler/src/Builtins.cpp",
-    "Compiler/src/BytecodeBuilder.cpp",
     "Compiler/src/Compiler.cpp",
     "Compiler/src/ConstantFolding.cpp",
     "Compiler/src/CostModel.cpp",
