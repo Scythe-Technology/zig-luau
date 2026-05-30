@@ -324,8 +324,14 @@ comptime {
                 _ = dest;
                 unreachable;
             }
+
+            var threaded: ?std.Io.Threaded = null;
             export fn clock() callconv(.c) i64 {
-                return std.time.milliTimestamp();
+                const th = threaded orelse blk: {
+                    threaded = std.Io.Threaded.init(std.heap.c_allocator, .{});
+                    break :blk threaded.?;
+                };
+                return std.Io.Timestamp.now(th.io(), .cpu_process).toMilliseconds();
             }
         };
     }
