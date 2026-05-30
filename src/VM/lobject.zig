@@ -88,6 +88,12 @@ pub const TValue = extern struct {
     pub inline fn ttisupval(obj: *const TValue) bool {
         return obj.ttype() == @intFromEnum(lua.Type.UpVal);
     }
+    pub inline fn ttisclass(obj: *const TValue) bool {
+        return obj.ttype() == @intFromEnum(lua.Type.Class);
+    }
+    pub inline fn ttisobject(obj: *const TValue) bool {
+        return obj.ttype() == @intFromEnum(lua.Type.Object);
+    }
 
     pub inline fn obj2gco(obj: *TValue) *lstate.GCObject {
         std.debug.assert(obj.iscollectable());
@@ -146,9 +152,13 @@ pub const TValue = extern struct {
         std.debug.assert(obj.ttisupval());
         return &obj.value.gc.?.uv;
     }
-    pub inline fn cobjvalue(obj: *const TValue) *anyopaque {
-        std.debug.assert(obj.ttisisclassobject());
-        return &obj.value.gc.?.classobj;
+    pub inline fn classvalue(obj: *const TValue) *LuauClass {
+        std.debug.assert(obj.ttisclass());
+        return &obj.value.gc.?.lclass;
+    }
+    pub inline fn objectvalue(obj: *const TValue) *LuauObject {
+        std.debug.assert(obj.ttisobject());
+        return &obj.value.gc.?.lobject;
     }
     pub inline fn svalue(obj: *const TValue) [*c]const u8 {
         return obj.tsvalue().getstr();
@@ -240,14 +250,14 @@ pub const TValue = extern struct {
         obj.* = o2.*;
         obj.checkliveness(L.global);
     }
-    pub inline fn setcobjvalue(obj: *TValue, L: *lstate.lua_State, x: *anyopaque) void {
+    pub inline fn setclassvalue(obj: *TValue, L: *lstate.lua_State, x: *LuauClass) void {
         obj.value.gc = @ptrCast(@alignCast(x));
-        obj.settype(.ClassObj);
+        obj.settype(.Class);
         obj.checkliveness(L.global);
     }
-    pub inline fn setsinstvalue(obj: *TValue, L: *lstate.lua_State, x: *anyopaque) void {
+    pub inline fn setobjectvalue(obj: *TValue, L: *lstate.lua_State, x: *LuauObject) void {
         obj.value.gc = @ptrCast(@alignCast(x));
-        obj.settype(.ClassInst);
+        obj.settype(.Object);
         obj.checkliveness(L.global);
     }
 
@@ -730,7 +740,7 @@ pub const LuaTable = extern struct {
     }
 };
 
-pub const ClassObject = extern struct {
+pub const LuauClass = extern struct {
     header: CommonHeader,
 
     gclist: ?*lstate.GCObject,
@@ -750,6 +760,10 @@ pub const ClassObject = extern struct {
     /// __call, but we may add more metamethods to class objects in the future.
     metatable: *LuaTable,
 
+    /// Metatable for instances of this class. NULL until the first metamethod
+    /// is added via luaR_addclassmember.
+    instancemetatable: ?*LuaTable,
+
     /// Number of instance members that we expect instances of this class object
     /// to have.
     numberofinstancemembers: c_int,
@@ -764,18 +778,18 @@ pub const ClassObject = extern struct {
     // instance or static members, creating class instances).
     numberofallmembers: c_int,
 
-    pub inline fn obj2gco(obj: *ClassObject) *lstate.GCObject {
+    pub inline fn obj2gco(obj: *LuauClass) *lstate.GCObject {
         return @ptrCast(@alignCast(obj));
     }
 };
 
-pub const ClassInstance = extern struct {
+pub const LuauObject = extern struct {
     header: CommonHeader,
 
     gclist: ?*lstate.GCObject,
 
     /// The class object that this value is an instance of.
-    classobj: *ClassObject,
+    lclass: *LuauClass,
 
     /// The number of members that this instance contains. We need this in order
     /// to free ourselves if we got swept in the same GC cycle as our class
@@ -785,7 +799,7 @@ pub const ClassInstance = extern struct {
     /// The fields of this instance.
     members: [*]TValue,
 
-    pub inline fn obj2gco(obj: *ClassInstance) *lstate.GCObject {
+    pub inline fn obj2gco(obj: *LuauObject) *lstate.GCObject {
         return @ptrCast(@alignCast(obj));
     }
 };
@@ -896,8 +910,8 @@ test "size match" {
         extern "c" const TKey_size: u8;
         extern "c" const LuaNode_size: u8;
         extern "c" const LuaTable_size: u8;
-        extern "c" const LuaClassObject_size: u8;
-        extern "c" const LuaClassInstance_size: u8;
+        extern "c" const LuauClass_size: u8;
+        extern "c" const LuauObject_size: u8;
 
         extern "c" const TString_data_offset: u8;
         extern "c" const Udata_data_offset: u8;
@@ -918,8 +932,8 @@ test "size match" {
     try std.testing.expect(Sizes.TKey_size == @sizeOf(TKey));
     try std.testing.expect(Sizes.LuaNode_size == @sizeOf(LuaNode));
     try std.testing.expect(Sizes.LuaTable_size == @sizeOf(LuaTable));
-    try std.testing.expect(Sizes.LuaClassObject_size == @sizeOf(ClassObject));
-    try std.testing.expect(Sizes.LuaClassInstance_size == @sizeOf(ClassInstance));
+    try std.testing.expect(Sizes.LuauClass_size == @sizeOf(LuauClass));
+    try std.testing.expect(Sizes.LuauObject_size == @sizeOf(LuauObject));
 
     try std.testing.expect(Sizes.TString_data_offset == @offsetOf(TString, "data"));
     try std.testing.expect(Sizes.Udata_data_offset == @offsetOf(Udata, "data"));

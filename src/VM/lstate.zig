@@ -433,8 +433,8 @@ pub const lua_State = extern struct {
     pub const isthread = lapi.isthread;
     pub const isbuffer = lapi.isbuffer;
     pub const isnoneornil = lapi.isnoneornil;
-    pub const isclassobject = lapi.isclassobject;
-    pub const isclassinstance = lapi.isclassinstance;
+    pub const isclass = lapi.isclass;
+    pub const isobject = lapi.isobject;
     pub const typeOf = lapi.typeOf;
     pub const typename = lapi.typename;
 
@@ -710,8 +710,8 @@ pub const GCObject = extern union {
     uv: lobject.UpVal,
     th: lua_State, // thread
     buf: lobject.Buffer,
-    classobj: lobject.ClassObject,
-    classinst: lobject.ClassInstance,
+    lclass: lobject.LuauClass,
+    lobject: lobject.LuauObject,
 
     pub inline fn tots(o: *GCObject) *lobject.TString {
         std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.String));
@@ -745,13 +745,13 @@ pub const GCObject = extern union {
         std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.Buffer));
         return &o.buf;
     }
-    pub inline fn tocobj(o: *GCObject) *lobject.ClassObject {
-        std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.ClassObj));
-        return &o.classobj;
+    pub inline fn toclass(o: *GCObject) *lobject.LuauClass {
+        std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.Class));
+        return &o.lclass;
     }
-    pub inline fn tocinst(o: *GCObject) *lobject.ClassInstance {
-        std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.ClassInst));
-        return &o.classinst;
+    pub inline fn toobject(o: *GCObject) *lobject.LuauObject {
+        std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.Object));
+        return &o.lobject;
     }
 };
 

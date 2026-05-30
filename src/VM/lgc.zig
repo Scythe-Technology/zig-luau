@@ -286,7 +286,7 @@ pub inline fn Cthreadbarrier(L: *lua.State) void {
     }
 }
 
-pub inline fn Cclassinstbarrier(L: *lua.State) void {
+pub inline fn Cobjectbarrier(L: *lua.State) void {
     if (isblack(@ptrCast(@alignCast(L)))) {
         Cbarrierback(L, @ptrCast(@alignCast(L)), &L.gclist);
     }
@@ -449,7 +449,7 @@ fn traversestack(g: *lstate.global_State, L: *lua.State) void {
     }
 }
 
-fn traverseclassobject(g: *lstate.global_State, classobject: *lobject.ClassObject) void {
+fn traverseclassobject(g: *lstate.global_State, classobject: *lobject.LuauClass) void {
     markobject(g, @ptrCast(@alignCast(classobject.name)));
     markobject(g, @ptrCast(@alignCast(classobject.memberstooffset)));
     for (0..@intCast(classobject.numberofallmembers)) |i|
@@ -457,10 +457,12 @@ fn traverseclassobject(g: *lstate.global_State, classobject: *lobject.ClassObjec
     for (0..@intCast(classobject.numberofallmembers - classobject.numberofinstancemembers)) |i|
         markobject(g, @ptrCast(@alignCast(&classobject.staticmembers[i])));
     markobject(g, @ptrCast(@alignCast(classobject.metatable)));
+    if (classobject.instancemetatable) |mt|
+        markobject(g, @ptrCast(@alignCast(mt)));
 }
 
-fn traverseclassinstances(g: *lstate.global_State, classinst: *lobject.ClassInstance) void {
-    markobject(g, @ptrCast(@alignCast(classinst.classobj)));
+fn traverseclassinstances(g: *lstate.global_State, classinst: *lobject.LuauObject) void {
+    markobject(g, @ptrCast(@alignCast(classinst.lclass)));
     for (0..@intCast(classinst.numberofmembers)) |i|
         markobject(g, @ptrCast(@alignCast(&classinst.members[i])));
 }
@@ -556,19 +558,19 @@ fn propagatemark(g: *lstate.global_State) Errorset.Memory!usize {
                 (@sizeOf(lobject.UpVal) * @as(u32, @intCast(p.sizeupvalues))) +
                 @as(u32, @intCast(p.sizetypeinfo));
         },
-        @intFromEnum(lua.Type.ClassObj) => {
-            const classobject = o.tocobj();
+        @intFromEnum(lua.Type.Class) => {
+            const classobject = o.toclass();
             g.gray = classobject.gclist;
             traverseclassobject(g, classobject);
-            return @sizeOf(lobject.ClassObject) +
+            return @sizeOf(lobject.LuauClass) +
                 (@as(u32, @intCast(classobject.numberofallmembers)) - @as(u32, @intCast(classobject.numberofinstancemembers))) * @sizeOf(lobject.TValue) +
                 @as(u32, @intCast(classobject.numberofallmembers)) * @sizeOf(*lobject.TString);
         },
-        @intFromEnum(lua.Type.ClassInst) => {
-            const classinst = o.tocinst();
+        @intFromEnum(lua.Type.Object) => {
+            const classinst = o.toobject();
             g.gray = classinst.gclist;
             traverseclassinstances(g, classinst);
-            return @sizeOf(lobject.ClassInstance) +
+            return @sizeOf(lobject.LuauObject) +
                 (@as(u32, @intCast(classinst.numberofmembers)) * @sizeOf(lobject.TValue));
         },
         else => unreachable,
@@ -659,8 +661,8 @@ fn freeobj(L: *lua.State, o: *lstate.GCObject, page: *lmem.lua_Page) void {
         @intFromEnum(lua.Type.String) => lstring.Sfree(L, o.tots(), page),
         @intFromEnum(lua.Type.Userdata) => ludata.Ufreeudata(L, o.tou(), page),
         @intFromEnum(lua.Type.Buffer) => lbuffer.Bfreebuffer(L, o.tobuf(), page),
-        @intFromEnum(lua.Type.ClassObj) => lclass.Rfreeclassobject(L, o.tocobj(), page),
-        @intFromEnum(lua.Type.ClassInst) => lclass.Rfreeclassinstance(L, o.tocinst(), page),
+        @intFromEnum(lua.Type.Class) => lclass.Rfreeclass(L, o.toclass(), page),
+        @intFromEnum(lua.Type.Object) => lclass.Rfreeobject(L, o.toobject(), page),
         else => unreachable,
     }
 }

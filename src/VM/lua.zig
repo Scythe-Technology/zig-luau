@@ -86,8 +86,8 @@ pub const Type = enum(i6) {
     Userdata = c.LUA_TUSERDATA,
     Thread = c.LUA_TTHREAD,
     Buffer = c.LUA_TBUFFER,
-    ClassObj = c.LUA_TCLASSOBJ,
-    ClassInst = c.LUA_TCLASSINST,
+    Class = c.LUA_TCLASS,
+    Object = c.LUA_TOBJECT,
 
     // values below this line are used in GCObject tags but may never show up in TValue type tags
 

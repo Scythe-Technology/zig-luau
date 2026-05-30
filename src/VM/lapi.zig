@@ -98,8 +98,14 @@ pub fn Atoobject(L: *lua.State, idx: i32) ?*const lobject.TValue {
     return if (p == lobject.Onilobject) null else p;
 }
 
-pub fn Apushobject(L: *lua.State, o: *const lobject.TValue) void {
+pub fn Apushvalue(L: *lua.State, o: *const lobject.TValue) void {
     L.top[0].setobj(L, o);
+    api_incr_top(L);
+}
+
+pub fn Apushclass(L: *lua.State, lco: *lobject.LuauClass) void {
+    api_check(L, @as(?*anyopaque, @ptrCast(@alignCast(lco))) != null);
+    L.top[0].setclassvalue(L, lco);
     api_incr_top(L);
 }
 
@@ -980,6 +986,7 @@ pub fn getmetatable(L: *lua.State, idx: i32) bool {
     switch (o.tt) {
         @intFromEnum(lua.Type.Table) => mt = o.hvalue().metatable,
         @intFromEnum(lua.Type.Userdata) => mt = o.uvalue().metatable,
+        @intFromEnum(lua.Type.Object) => mt = o.objectvalue().lclass.instancemetatable,
         else => mt = L.global.mt[@intCast(o.tt)],
     }
     if (mt) |ptr| {

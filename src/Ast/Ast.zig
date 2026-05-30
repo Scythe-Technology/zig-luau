@@ -1559,6 +1559,7 @@ pub const ClassProperty = extern struct {
 };
 
 pub const ClassMethod = extern struct {
+    qualifierLocation: cpp_std.Optional(Location),
     keywordLocation: Location,
     functionName: Name,
     nameLocation: Location,
@@ -1576,6 +1577,7 @@ pub const StatClass = extern struct {
 
     name: Name,
     members: Array(ClassMember),
+    exported: bool,
 
     pub const is = IsFn;
     pub const as = AsCastFn;

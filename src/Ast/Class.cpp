@@ -68,6 +68,7 @@ ZIG_EXPORT const unsigned char AstTypePackVariadicIndex = AstTypePackVariadic::C
 ZIG_EXPORT const unsigned char AstTypePackGenericIndex = AstTypePackGeneric::ClassIndex();
 
 // CST
+ZIG_EXPORT const unsigned char CstExprGroupIndex = CstExprGroup::CstClassIndex();
 ZIG_EXPORT const unsigned char CstExprConstantNumberIndex = CstExprConstantNumber::CstClassIndex();
 ZIG_EXPORT const unsigned char CstExprConstantIntegerIndex = CstExprConstantInteger::CstClassIndex();
 ZIG_EXPORT const unsigned char CstExprConstantStringIndex = CstExprConstantString::CstClassIndex();
@@ -104,5 +105,6 @@ ZIG_EXPORT const unsigned char CstTypeTypeofIndex = CstTypeTypeof::CstClassIndex
 ZIG_EXPORT const unsigned char CstTypeUnionIndex = CstTypeUnion::CstClassIndex();
 ZIG_EXPORT const unsigned char CstTypeIntersectionIndex = CstTypeIntersection::CstClassIndex();
 ZIG_EXPORT const unsigned char CstTypeSingletonStringIndex = CstTypeSingletonString::CstClassIndex();
+ZIG_EXPORT const unsigned char CstTypeGroupIndex = CstTypeGroup::CstClassIndex();
 ZIG_EXPORT const unsigned char CstTypePackExplicitIndex = CstTypePackExplicit::CstClassIndex();
 ZIG_EXPORT const unsigned char CstTypePackGenericIndex = CstTypePackGeneric::CstClassIndex();

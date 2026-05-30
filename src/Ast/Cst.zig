@@ -12,6 +12,7 @@ pub const Node = extern struct {
 
     pub const Kind = enum(i32) {
         unknown,
+        expr_group,
         expr_constant_number,
         expr_constant_integer,
         expr_constant_string,
@@ -45,12 +46,14 @@ pub const Node = extern struct {
         type_union,
         type_intersection,
         type_singleton_string,
+        type_group,
         type_pack_explicit,
         type_pack_generic,
 
         pub fn Type(comptime self: Kind) type {
             return switch (self) {
                 .unknown => Node,
+                .expr_group => ExprGroup,
                 .expr_constant_number => ExprConstantNumber,
                 .expr_constant_integer => ExprConstantInteger,
                 .expr_constant_string => ExprConstantString,
@@ -84,6 +87,7 @@ pub const Node = extern struct {
                 .type_union => TypeUnion,
                 .type_intersection => TypeIntersection,
                 .type_singleton_string => TypeSingletonString,
+                .type_group => TypeGroup,
                 .type_pack_explicit => TypePackExplicit,
                 .type_pack_generic => TypePackGeneric,
             };
@@ -101,6 +105,12 @@ pub fn IsFn(base: anytype, comptime to: Node.Kind) bool {
 pub fn AsCastFn(base: anytype, comptime to: Node.Kind) ?*to.Type() {
     return if (base.classIndex == to) @ptrCast(@alignCast(base)) else null;
 }
+
+pub const ExprGroup = extern struct {
+    classIndex: Node.Kind,
+
+    closePosition: Location.Position,
+};
 
 pub const ExprConstantNumber = extern struct {
     classIndex: Node.Kind,
@@ -402,6 +412,12 @@ pub const TypeSingletonString = extern struct {
     blockDepth: u32,
 };
 
+pub const TypeGroup = extern struct {
+    classIndex: Node.Kind,
+
+    closePosition: Location.Position,
+};
+
 pub const TypePackExplicit = extern struct {
     classIndex: Node.Kind,
 
@@ -473,6 +489,7 @@ test "Index" {
     if (@import("builtin").cpu.arch.isWasm() or @import("builtin").os.tag == .windows)
         return error.SkipZigTest;
     const Indexes = struct {
+        extern "c" const CstExprGroupIndex: u8;
         extern "c" const CstExprConstantNumberIndex: u8;
         extern "c" const CstExprConstantIntegerIndex: u8;
         extern "c" const CstExprConstantStringIndex: u8;
@@ -509,10 +526,12 @@ test "Index" {
         extern "c" const CstTypeUnionIndex: u8;
         extern "c" const CstTypeIntersectionIndex: u8;
         extern "c" const CstTypeSingletonStringIndex: u8;
+        extern "c" const CstTypeGroupIndex: u8;
         extern "c" const CstTypePackExplicitIndex: u8;
         extern "c" const CstTypePackGenericIndex: u8;
     };
 
+    try std.testing.expect(Indexes.CstExprGroupIndex == @intFromEnum(Node.Kind.expr_group));
     try std.testing.expect(Indexes.CstExprConstantNumberIndex == @intFromEnum(Node.Kind.expr_constant_number));
     try std.testing.expect(Indexes.CstExprConstantIntegerIndex == @intFromEnum(Node.Kind.expr_constant_integer));
     try std.testing.expect(Indexes.CstExprConstantStringIndex == @intFromEnum(Node.Kind.expr_constant_string));
@@ -549,6 +568,7 @@ test "Index" {
     try std.testing.expect(Indexes.CstTypeUnionIndex == @intFromEnum(Node.Kind.type_union));
     try std.testing.expect(Indexes.CstTypeIntersectionIndex == @intFromEnum(Node.Kind.type_intersection));
     try std.testing.expect(Indexes.CstTypeSingletonStringIndex == @intFromEnum(Node.Kind.type_singleton_string));
+    try std.testing.expect(Indexes.CstTypeGroupIndex == @intFromEnum(Node.Kind.type_group));
     try std.testing.expect(Indexes.CstTypePackExplicitIndex == @intFromEnum(Node.Kind.type_pack_explicit));
     try std.testing.expect(Indexes.CstTypePackGenericIndex == @intFromEnum(Node.Kind.type_pack_generic));
 }
