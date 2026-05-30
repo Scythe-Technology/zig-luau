@@ -2,6 +2,7 @@
 
 #include "Luau/Common.h"
 #include "ldo.h"
+#include "lclass.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -102,3 +103,8 @@ ZIG_EXPORT void zig_luau_catch_impl(TryCatchContext *context, const std::excepti
 }
 
 #endif
+
+ZIG_EXPORT int ZIG_FN(luaR_createobject)(lua_State *L)
+{
+    return luaR_createobject(L);
+}
