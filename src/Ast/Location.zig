@@ -1,3 +1,5 @@
+const std = @import("std");
+
 pub const Location = extern struct {
     begin: Position = .zeros,
     end: Position = .zeros,
@@ -26,6 +28,7 @@ pub const Location = extern struct {
         line: c_uint,
         column: c_uint,
 
+        pub const missing: Position = .{ .line = std.math.maxInt(u32), .column = std.math.maxInt(u32) };
         pub const zeros: Position = .{ .line = 0, .column = 0 };
 
         pub fn eq(self: Position, other: Position) bool {
@@ -44,6 +47,10 @@ pub const Location = extern struct {
         }
         pub inline fn greaterThanOrEq(self: Position, other: Position) bool {
             return !self.lessThan(other);
+        }
+
+        pub fn hasValue(self: Position) bool {
+            return self.line != std.math.maxInt(u32) and self.column != std.math.maxInt(u32);
         }
     };
 };

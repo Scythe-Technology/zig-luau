@@ -19,6 +19,9 @@ pub const Local = extern struct {
     functionDepth: usize,
     loopDepth: usize,
     isConst: bool,
+    /// exported is only a property set after construction
+    isExported: bool = false,
+
     annotation: ?*Type,
 };
 
@@ -277,7 +280,7 @@ pub fn AsTypeCastFn(base: anytype) *Type {
 pub const Attr = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .attr,
     location: Location,
 
     type: Attr.Type,
@@ -358,7 +361,7 @@ pub const Stat = extern struct {
 pub const GenericType = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .generic_type,
     location: Location,
 
     name: Name,
@@ -381,7 +384,7 @@ pub const GenericType = extern struct {
 pub const GenericTypePack = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .generic_type_pack,
     location: Location,
 
     name: Name,
@@ -404,7 +407,7 @@ pub const GenericTypePack = extern struct {
 pub const ExprGroup = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .expr_group,
     location: Location,
 
     expr: *Expr,
@@ -425,7 +428,7 @@ pub const ExprGroup = extern struct {
 pub const ExprConstantNil = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .expr_constant_nil,
     location: Location,
 
     pub const is = IsFn;
@@ -442,7 +445,7 @@ pub const ExprConstantNil = extern struct {
 pub const ExprConstantBool = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .expr_constant_bool,
     location: Location,
 
     value: bool,
@@ -470,7 +473,7 @@ pub const ConstantNumberParseResult = enum(c_int) {
 pub const ExprConstantNumber = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .expr_constant_number,
     location: Location,
 
     value: f64,
@@ -490,7 +493,7 @@ pub const ExprConstantNumber = extern struct {
 pub const ExprConstantInteger = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .expr_constant_integer,
     location: Location,
 
     value: i64,
@@ -510,7 +513,7 @@ pub const ExprConstantInteger = extern struct {
 pub const ExprConstantString = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .expr_constant_string,
     location: Location,
 
     value: Array(u8),
@@ -555,7 +558,7 @@ pub const ExprConstantString = extern struct {
 pub const ExprLocal = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .expr_local,
     location: Location,
 
     local: ?*Local,
@@ -575,7 +578,7 @@ pub const ExprLocal = extern struct {
 pub const ExprGlobal = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .expr_global,
     location: Location,
 
     name: Name,
@@ -594,7 +597,7 @@ pub const ExprGlobal = extern struct {
 pub const ExprVarargs = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .expr_varargs,
     location: Location,
 
     pub const is = IsFn;
@@ -611,7 +614,7 @@ pub const ExprVarargs = extern struct {
 pub const ExprCall = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .expr_call,
     location: Location,
 
     func: *Expr,
@@ -642,7 +645,7 @@ pub const ExprCall = extern struct {
 pub const ExprIndexName = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .expr_index_name,
     location: Location,
 
     expr: *Expr,
@@ -667,7 +670,7 @@ pub const ExprIndexName = extern struct {
 pub const ExprIndexExpr = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .expr_index_expr,
     location: Location,
 
     expr: *Expr,
@@ -690,7 +693,7 @@ pub const ExprIndexExpr = extern struct {
 pub const ExprFunction = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .expr_function,
     location: Location,
 
     attributes: Array(*Attr),
@@ -749,7 +752,7 @@ pub const ExprFunction = extern struct {
 pub const ExprTable = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .expr_table,
     location: Location,
 
     items: Array(Item),
@@ -792,7 +795,7 @@ pub const ExprTable = extern struct {
 pub const ExprUnary = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .expr_unary,
     location: Location,
 
     op: Op,
@@ -828,7 +831,7 @@ pub const ExprUnary = extern struct {
 pub const ExprBinary = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .expr_binary,
     location: Location,
 
     op: Op,
@@ -894,7 +897,7 @@ pub const ExprBinary = extern struct {
 pub const ExprTypeAssertion = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .expr_type_assertion,
     location: Location,
 
     expr: *Expr,
@@ -917,7 +920,7 @@ pub const ExprTypeAssertion = extern struct {
 pub const ExprIfElse = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .expr_if_else,
     location: Location,
 
     condition: *Expr,
@@ -944,7 +947,7 @@ pub const ExprIfElse = extern struct {
 pub const ExprInterpString = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .expr_interp_string,
     location: Location,
 
     /// An interpolated string such as `foo{bar}baz` is represented as
@@ -971,7 +974,7 @@ pub const ExprInterpString = extern struct {
 pub const ExprInstantiate = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .expr_instantiate,
     location: Location,
 
     expr: *Expr,
@@ -994,7 +997,7 @@ pub const ExprInstantiate = extern struct {
 pub const StatBlock = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .stat_block,
     location: Location,
     hasSemicolon: bool = false,
 
@@ -1026,7 +1029,7 @@ pub const StatBlock = extern struct {
 pub const StatIf = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .stat_if,
     location: Location,
     hasSemicolon: bool = false,
 
@@ -1057,7 +1060,7 @@ pub const StatIf = extern struct {
 pub const StatWhile = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .stat_while,
     location: Location,
     hasSemicolon: bool = false,
 
@@ -1083,7 +1086,7 @@ pub const StatWhile = extern struct {
 pub const StatRepeat = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .stat_repeat,
     location: Location,
     hasSemicolon: bool = false,
 
@@ -1108,7 +1111,7 @@ pub const StatRepeat = extern struct {
 pub const StatBreak = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .stat_break,
     location: Location,
     hasSemicolon: bool = false,
 
@@ -1126,7 +1129,7 @@ pub const StatBreak = extern struct {
 pub const StatContinue = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .stat_continue,
     location: Location,
     hasSemicolon: bool = false,
 
@@ -1144,7 +1147,7 @@ pub const StatContinue = extern struct {
 pub const StatReturn = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .stat_return,
     location: Location,
     hasSemicolon: bool = false,
 
@@ -1167,7 +1170,7 @@ pub const StatReturn = extern struct {
 pub const StatExpr = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .stat_expr,
     location: Location,
     hasSemicolon: bool = false,
 
@@ -1188,13 +1191,16 @@ pub const StatExpr = extern struct {
 pub const StatLocal = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .stat_local,
     location: Location,
     hasSemicolon: bool = false,
 
     vars: Array(*Local),
     values: Array(*Expr),
+
     isConst: bool = false,
+    isExported: bool = false,
+
     equalsSignLocation: cpp_std.Optional(Location),
 
     pub const is = IsFn;
@@ -1218,7 +1224,7 @@ pub const StatLocal = extern struct {
 pub const StatFor = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .stat_for,
     location: Location,
     hasSemicolon: bool = false,
 
@@ -1255,7 +1261,7 @@ pub const StatFor = extern struct {
 pub const StatForIn = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .stat_for_in,
     location: Location,
     hasSemicolon: bool = false,
 
@@ -1290,7 +1296,7 @@ pub const StatForIn = extern struct {
 pub const StatAssign = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .stat_assign,
     location: Location,
     hasSemicolon: bool = false,
 
@@ -1317,7 +1323,7 @@ pub const StatAssign = extern struct {
 pub const StatCompoundAssign = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .stat_compound_assign,
     location: Location,
     hasSemicolon: bool = false,
 
@@ -1342,7 +1348,7 @@ pub const StatCompoundAssign = extern struct {
 pub const StatFunction = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .stat_function,
     location: Location,
     hasSemicolon: bool = false,
 
@@ -1366,7 +1372,7 @@ pub const StatFunction = extern struct {
 pub const StatLocalFunction = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .stat_local_function,
     location: Location,
     hasSemicolon: bool = false,
 
@@ -1390,7 +1396,7 @@ pub const StatLocalFunction = extern struct {
 pub const StatTypeAlias = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .stat_type_alias,
     location: Location,
     hasSemicolon: bool = false,
 
@@ -1423,7 +1429,7 @@ pub const StatTypeAlias = extern struct {
 pub const StatTypeFunction = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .stat_type_function,
     location: Location,
     hasSemicolon: bool = false,
 
@@ -1449,7 +1455,7 @@ pub const StatTypeFunction = extern struct {
 pub const StatDeclareGlobal = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .stat_declare_global,
     location: Location,
     hasSemicolon: bool = false,
 
@@ -1484,7 +1490,7 @@ pub const ArgumentName = extern struct {
 pub const StatDeclareFunction = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .stat_declare_function,
     location: Location,
     hasSemicolon: bool = false,
 
@@ -1571,7 +1577,7 @@ const ClassMember = Variant(&.{ ClassProperty, ClassMethod });
 pub const StatClass = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .stat_class,
     location: Location,
     hasSemicolon: bool = false,
 
@@ -1610,7 +1616,7 @@ pub const TableIndexer = extern struct {
 pub const StatDeclareExternType = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .stat_declare_extern_type,
     location: Location,
     hasSemicolon: bool = false,
 
@@ -1668,7 +1674,7 @@ pub const TypeOrPack = extern struct {
 pub const TypeReference = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .type_reference,
     location: Location,
 
     hasParameterList: bool,
@@ -1702,7 +1708,7 @@ pub const TableProp = extern struct {
 pub const TypeTable = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .type_table,
     location: Location,
 
     props: Array(TableProp),
@@ -1730,7 +1736,7 @@ pub const TypeTable = extern struct {
 pub const TypeFunction = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .type_function,
     location: Location,
 
     attributes: Array(*Attr),
@@ -1773,7 +1779,7 @@ pub const TypeFunction = extern struct {
 pub const TypeTypeof = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .type_typeof,
     location: Location,
 
     expr: *Expr,
@@ -1794,7 +1800,7 @@ pub const TypeTypeof = extern struct {
 pub const TypeOptional = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .type_optional,
     location: Location,
 
     pub const is = IsFn;
@@ -1811,7 +1817,7 @@ pub const TypeOptional = extern struct {
 pub const TypeUnion = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .type_union,
     location: Location,
 
     types: Array(*Type),
@@ -1833,7 +1839,7 @@ pub const TypeUnion = extern struct {
 pub const TypeIntersection = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .type_intersection,
     location: Location,
 
     types: Array(*Type),
@@ -1855,7 +1861,7 @@ pub const TypeIntersection = extern struct {
 pub const ExprError = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .expr_error,
     location: Location,
 
     expressions: Array(*Expr),
@@ -1878,7 +1884,7 @@ pub const ExprError = extern struct {
 pub const StatError = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .stat_error,
     location: Location,
     MAYBE_hasSemicolon: bool = false,
 
@@ -1906,7 +1912,7 @@ pub const StatError = extern struct {
 pub const TypeError = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .type_error,
     location: Location,
 
     types: Array(*Type),
@@ -1930,7 +1936,7 @@ pub const TypeError = extern struct {
 pub const TypeSingletonBool = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .type_singleton_bool,
     location: Location,
 
     value: bool,
@@ -1949,7 +1955,7 @@ pub const TypeSingletonBool = extern struct {
 pub const TypeSingletonString = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .type_singleton_string,
     location: Location,
 
     value: Array(u8),
@@ -1968,7 +1974,7 @@ pub const TypeSingletonString = extern struct {
 pub const TypeGroup = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .type_group,
     location: Location,
 
     type: *Type,
@@ -2006,7 +2012,7 @@ pub const TypePack = extern struct {
 pub const TypePackExplicit = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .type_pack_explicit,
     location: Location,
 
     typeList: TypeList,
@@ -2031,7 +2037,7 @@ pub const TypePackExplicit = extern struct {
 pub const TypePackVariadic = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .type_pack_variadic,
     location: Location,
 
     variadicType: *Type,
@@ -2051,7 +2057,7 @@ pub const TypePackVariadic = extern struct {
 pub const TypePackGeneric = extern struct {
     vtable: *const anyopaque,
 
-    classIndex: Node.Kind,
+    classIndex: Node.Kind = .type_pack_generic,
     location: Location,
 
     genericName: Name,
@@ -2274,132 +2280,168 @@ test Node {
     }
 }
 
-test "Index" {
+test "AstValuesCheck" {
     if (@import("builtin").cpu.arch.isWasm() or @import("builtin").os.tag == .windows)
         return error.SkipZigTest;
-    const Indexes = struct {
-        extern "c" const AstAttrIndex: u8;
-        extern "c" const AstGenericTypeIndex: u8;
-        extern "c" const AstGenericTypePackIndex: u8;
-        extern "c" const AstExprGroupIndex: u8;
-        extern "c" const AstExprConstantNilIndex: u8;
-        extern "c" const AstExprConstantBoolIndex: u8;
-        extern "c" const AstExprConstantNumberIndex: u8;
-        extern "c" const AstExprConstantIntegerIndex: u8;
-        extern "c" const AstExprConstantStringIndex: u8;
-        extern "c" const AstExprLocalIndex: u8;
-        extern "c" const AstExprGlobalIndex: u8;
-        extern "c" const AstExprVarargsIndex: u8;
-        extern "c" const AstExprCallIndex: u8;
-        extern "c" const AstExprIndexNameIndex: u8;
-        extern "c" const AstExprIndexExprIndex: u8;
-        extern "c" const AstExprFunctionIndex: u8;
-        extern "c" const AstExprTableIndex: u8;
-        extern "c" const AstExprUnaryIndex: u8;
-        extern "c" const AstExprBinaryIndex: u8;
-        extern "c" const AstExprTypeAssertionIndex: u8;
-        extern "c" const AstExprIfElseIndex: u8;
-        extern "c" const AstExprInterpStringIndex: u8;
-        extern "c" const AstExprInstantiateIndex: u8;
-        extern "c" const AstStatBlockIndex: u8;
-        extern "c" const AstStatIfIndex: u8;
-        extern "c" const AstStatWhileIndex: u8;
-        extern "c" const AstStatRepeatIndex: u8;
-        extern "c" const AstStatBreakIndex: u8;
-        extern "c" const AstStatContinueIndex: u8;
-        extern "c" const AstStatReturnIndex: u8;
-        extern "c" const AstStatExprIndex: u8;
-        extern "c" const AstStatLocalIndex: u8;
-        extern "c" const AstStatForIndex: u8;
-        extern "c" const AstStatForInIndex: u8;
-        extern "c" const AstStatAssignIndex: u8;
-        extern "c" const AstStatCompoundAssignIndex: u8;
-        extern "c" const AstStatFunctionIndex: u8;
-        extern "c" const AstStatLocalFunctionIndex: u8;
-        extern "c" const AstStatTypeAliasIndex: u8;
-        extern "c" const AstStatTypeFunctionIndex: u8;
-        extern "c" const AstStatDeclareFunctionIndex: u8;
-        extern "c" const AstStatDeclareGlobalIndex: u8;
-        extern "c" const AstStatClassIndex: u8;
-        extern "c" const AstStatDeclareExternTypeIndex: u8;
-        extern "c" const AstTypeReferenceIndex: u8;
-        extern "c" const AstTypeTableIndex: u8;
-        extern "c" const AstTypeFunctionIndex: u8;
-        extern "c" const AstTypeTypeofIndex: u8;
-        extern "c" const AstTypeOptionalIndex: u8;
-        extern "c" const AstTypeUnionIndex: u8;
-        extern "c" const AstTypeIntersectionIndex: u8;
-        extern "c" const AstExprErrorIndex: u8;
-        extern "c" const AstStatErrorIndex: u8;
-        extern "c" const AstTypeErrorIndex: u8;
-        extern "c" const AstTypeSingletonBoolIndex: u8;
-        extern "c" const AstTypeSingletonStringIndex: u8;
-        extern "c" const AstTypeGroupIndex: u8;
-        extern "c" const AstTypePackExplicitIndex: u8;
-        extern "c" const AstTypePackVariadicIndex: u8;
-        extern "c" const AstTypePackGenericIndex: u8;
+    const AstValues = struct {
+        pub extern "c" const AstAttrIndex: u8;
+        pub extern "c" const AstGenericTypeIndex: u8;
+        pub extern "c" const AstGenericTypePackIndex: u8;
+        pub extern "c" const AstExprGroupIndex: u8;
+        pub extern "c" const AstExprConstantNilIndex: u8;
+        pub extern "c" const AstExprConstantBoolIndex: u8;
+        pub extern "c" const AstExprConstantNumberIndex: u8;
+        pub extern "c" const AstExprConstantIntegerIndex: u8;
+        pub extern "c" const AstExprConstantStringIndex: u8;
+        pub extern "c" const AstExprLocalIndex: u8;
+        pub extern "c" const AstExprGlobalIndex: u8;
+        pub extern "c" const AstExprVarargsIndex: u8;
+        pub extern "c" const AstExprCallIndex: u8;
+        pub extern "c" const AstExprIndexNameIndex: u8;
+        pub extern "c" const AstExprIndexExprIndex: u8;
+        pub extern "c" const AstExprFunctionIndex: u8;
+        pub extern "c" const AstExprTableIndex: u8;
+        pub extern "c" const AstExprUnaryIndex: u8;
+        pub extern "c" const AstExprBinaryIndex: u8;
+        pub extern "c" const AstExprTypeAssertionIndex: u8;
+        pub extern "c" const AstExprIfElseIndex: u8;
+        pub extern "c" const AstExprInterpStringIndex: u8;
+        pub extern "c" const AstExprInstantiateIndex: u8;
+        pub extern "c" const AstStatBlockIndex: u8;
+        pub extern "c" const AstStatIfIndex: u8;
+        pub extern "c" const AstStatWhileIndex: u8;
+        pub extern "c" const AstStatRepeatIndex: u8;
+        pub extern "c" const AstStatBreakIndex: u8;
+        pub extern "c" const AstStatContinueIndex: u8;
+        pub extern "c" const AstStatReturnIndex: u8;
+        pub extern "c" const AstStatExprIndex: u8;
+        pub extern "c" const AstStatLocalIndex: u8;
+        pub extern "c" const AstStatForIndex: u8;
+        pub extern "c" const AstStatForInIndex: u8;
+        pub extern "c" const AstStatAssignIndex: u8;
+        pub extern "c" const AstStatCompoundAssignIndex: u8;
+        pub extern "c" const AstStatFunctionIndex: u8;
+        pub extern "c" const AstStatLocalFunctionIndex: u8;
+        pub extern "c" const AstStatTypeAliasIndex: u8;
+        pub extern "c" const AstStatTypeFunctionIndex: u8;
+        pub extern "c" const AstStatDeclareFunctionIndex: u8;
+        pub extern "c" const AstStatDeclareGlobalIndex: u8;
+        pub extern "c" const AstStatClassIndex: u8;
+        pub extern "c" const AstStatDeclareExternTypeIndex: u8;
+        pub extern "c" const AstTypeReferenceIndex: u8;
+        pub extern "c" const AstTypeTableIndex: u8;
+        pub extern "c" const AstTypeFunctionIndex: u8;
+        pub extern "c" const AstTypeTypeofIndex: u8;
+        pub extern "c" const AstTypeOptionalIndex: u8;
+        pub extern "c" const AstTypeUnionIndex: u8;
+        pub extern "c" const AstTypeIntersectionIndex: u8;
+        pub extern "c" const AstExprErrorIndex: u8;
+        pub extern "c" const AstStatErrorIndex: u8;
+        pub extern "c" const AstTypeErrorIndex: u8;
+        pub extern "c" const AstTypeSingletonBoolIndex: u8;
+        pub extern "c" const AstTypeSingletonStringIndex: u8;
+        pub extern "c" const AstTypeGroupIndex: u8;
+        pub extern "c" const AstTypePackExplicitIndex: u8;
+        pub extern "c" const AstTypePackVariadicIndex: u8;
+        pub extern "c" const AstTypePackGenericIndex: u8;
+
+        pub extern "c" const AstAttrSize: usize;
+        pub extern "c" const AstGenericTypeSize: usize;
+        pub extern "c" const AstGenericTypePackSize: usize;
+        pub extern "c" const AstExprGroupSize: usize;
+        pub extern "c" const AstExprConstantNilSize: usize;
+        pub extern "c" const AstExprConstantBoolSize: usize;
+        pub extern "c" const AstExprConstantNumberSize: usize;
+        pub extern "c" const AstExprConstantIntegerSize: usize;
+        pub extern "c" const AstExprConstantStringSize: usize;
+        pub extern "c" const AstExprLocalSize: usize;
+        pub extern "c" const AstExprGlobalSize: usize;
+        pub extern "c" const AstExprVarargsSize: usize;
+        pub extern "c" const AstExprCallSize: usize;
+        pub extern "c" const AstExprIndexNameSize: usize;
+        pub extern "c" const AstExprIndexExprSize: usize;
+        pub extern "c" const AstExprFunctionSize: usize;
+        pub extern "c" const AstExprTableSize: usize;
+        pub extern "c" const AstExprUnarySize: usize;
+        pub extern "c" const AstExprBinarySize: usize;
+        pub extern "c" const AstExprTypeAssertionSize: usize;
+        pub extern "c" const AstExprIfElseSize: usize;
+        pub extern "c" const AstExprInterpStringSize: usize;
+        pub extern "c" const AstExprInstantiateSize: usize;
+        pub extern "c" const AstStatBlockSize: usize;
+        pub extern "c" const AstStatIfSize: usize;
+        pub extern "c" const AstStatWhileSize: usize;
+        pub extern "c" const AstStatRepeatSize: usize;
+        pub extern "c" const AstStatBreakSize: usize;
+        pub extern "c" const AstStatContinueSize: usize;
+        pub extern "c" const AstStatReturnSize: usize;
+        pub extern "c" const AstStatExprSize: usize;
+        pub extern "c" const AstStatLocalSize: usize;
+        pub extern "c" const AstStatForSize: usize;
+        pub extern "c" const AstStatForInSize: usize;
+        pub extern "c" const AstStatAssignSize: usize;
+        pub extern "c" const AstStatCompoundAssignSize: usize;
+        pub extern "c" const AstStatFunctionSize: usize;
+        pub extern "c" const AstStatLocalFunctionSize: usize;
+        pub extern "c" const AstStatTypeAliasSize: usize;
+        pub extern "c" const AstStatTypeFunctionSize: usize;
+        pub extern "c" const AstStatDeclareFunctionSize: usize;
+        pub extern "c" const AstStatDeclareGlobalSize: usize;
+        pub extern "c" const AstStatClassSize: usize;
+        pub extern "c" const AstStatDeclareExternTypeSize: usize;
+        pub extern "c" const AstTypeReferenceSize: usize;
+        pub extern "c" const AstTypeTableSize: usize;
+        pub extern "c" const AstTypeFunctionSize: usize;
+        pub extern "c" const AstTypeTypeofSize: usize;
+        pub extern "c" const AstTypeOptionalSize: usize;
+        pub extern "c" const AstTypeUnionSize: usize;
+        pub extern "c" const AstTypeIntersectionSize: usize;
+        pub extern "c" const AstExprErrorSize: usize;
+        pub extern "c" const AstStatErrorSize: usize;
+        pub extern "c" const AstTypeErrorSize: usize;
+        pub extern "c" const AstTypeSingletonBoolSize: usize;
+        pub extern "c" const AstTypeSingletonStringSize: usize;
+        pub extern "c" const AstTypeGroupSize: usize;
+        pub extern "c" const AstTypePackExplicitSize: usize;
+        pub extern "c" const AstTypePackVariadicSize: usize;
+        pub extern "c" const AstTypePackGenericSize: usize;
     };
 
-    try std.testing.expect(Indexes.AstAttrIndex == @intFromEnum(Node.Kind.attr));
-    try std.testing.expect(Indexes.AstGenericTypeIndex == @intFromEnum(Node.Kind.generic_type));
-    try std.testing.expect(Indexes.AstGenericTypePackIndex == @intFromEnum(Node.Kind.generic_type_pack));
-    try std.testing.expect(Indexes.AstExprGroupIndex == @intFromEnum(Node.Kind.expr_group));
-    try std.testing.expect(Indexes.AstExprConstantNilIndex == @intFromEnum(Node.Kind.expr_constant_nil));
-    try std.testing.expect(Indexes.AstExprConstantBoolIndex == @intFromEnum(Node.Kind.expr_constant_bool));
-    try std.testing.expect(Indexes.AstExprConstantNumberIndex == @intFromEnum(Node.Kind.expr_constant_number));
-    try std.testing.expect(Indexes.AstExprConstantIntegerIndex == @intFromEnum(Node.Kind.expr_constant_integer));
-    try std.testing.expect(Indexes.AstExprConstantStringIndex == @intFromEnum(Node.Kind.expr_constant_string));
-    try std.testing.expect(Indexes.AstExprLocalIndex == @intFromEnum(Node.Kind.expr_local));
-    try std.testing.expect(Indexes.AstExprGlobalIndex == @intFromEnum(Node.Kind.expr_global));
-    try std.testing.expect(Indexes.AstExprVarargsIndex == @intFromEnum(Node.Kind.expr_varargs));
-    try std.testing.expect(Indexes.AstExprCallIndex == @intFromEnum(Node.Kind.expr_call));
-    try std.testing.expect(Indexes.AstExprIndexNameIndex == @intFromEnum(Node.Kind.expr_index_name));
-    try std.testing.expect(Indexes.AstExprIndexExprIndex == @intFromEnum(Node.Kind.expr_index_expr));
-    try std.testing.expect(Indexes.AstExprFunctionIndex == @intFromEnum(Node.Kind.expr_function));
-    try std.testing.expect(Indexes.AstExprTableIndex == @intFromEnum(Node.Kind.expr_table));
-    try std.testing.expect(Indexes.AstExprUnaryIndex == @intFromEnum(Node.Kind.expr_unary));
-    try std.testing.expect(Indexes.AstExprBinaryIndex == @intFromEnum(Node.Kind.expr_binary));
-    try std.testing.expect(Indexes.AstExprTypeAssertionIndex == @intFromEnum(Node.Kind.expr_type_assertion));
-    try std.testing.expect(Indexes.AstExprIfElseIndex == @intFromEnum(Node.Kind.expr_if_else));
-    try std.testing.expect(Indexes.AstExprInterpStringIndex == @intFromEnum(Node.Kind.expr_interp_string));
-    try std.testing.expect(Indexes.AstExprInstantiateIndex == @intFromEnum(Node.Kind.expr_instantiate));
-    try std.testing.expect(Indexes.AstStatBlockIndex == @intFromEnum(Node.Kind.stat_block));
-    try std.testing.expect(Indexes.AstStatIfIndex == @intFromEnum(Node.Kind.stat_if));
-    try std.testing.expect(Indexes.AstStatWhileIndex == @intFromEnum(Node.Kind.stat_while));
-    try std.testing.expect(Indexes.AstStatRepeatIndex == @intFromEnum(Node.Kind.stat_repeat));
-    try std.testing.expect(Indexes.AstStatBreakIndex == @intFromEnum(Node.Kind.stat_break));
-    try std.testing.expect(Indexes.AstStatContinueIndex == @intFromEnum(Node.Kind.stat_continue));
-    try std.testing.expect(Indexes.AstStatReturnIndex == @intFromEnum(Node.Kind.stat_return));
-    try std.testing.expect(Indexes.AstStatExprIndex == @intFromEnum(Node.Kind.stat_expr));
-    try std.testing.expect(Indexes.AstStatLocalIndex == @intFromEnum(Node.Kind.stat_local));
-    try std.testing.expect(Indexes.AstStatForIndex == @intFromEnum(Node.Kind.stat_for));
-    try std.testing.expect(Indexes.AstStatForInIndex == @intFromEnum(Node.Kind.stat_for_in));
-    try std.testing.expect(Indexes.AstStatAssignIndex == @intFromEnum(Node.Kind.stat_assign));
-    try std.testing.expect(Indexes.AstStatCompoundAssignIndex == @intFromEnum(Node.Kind.stat_compound_assign));
-    try std.testing.expect(Indexes.AstStatFunctionIndex == @intFromEnum(Node.Kind.stat_function));
-    try std.testing.expect(Indexes.AstStatLocalFunctionIndex == @intFromEnum(Node.Kind.stat_local_function));
-    try std.testing.expect(Indexes.AstStatTypeAliasIndex == @intFromEnum(Node.Kind.stat_type_alias));
-    try std.testing.expect(Indexes.AstStatTypeFunctionIndex == @intFromEnum(Node.Kind.stat_type_function));
-    try std.testing.expect(Indexes.AstStatDeclareFunctionIndex == @intFromEnum(Node.Kind.stat_declare_function));
-    try std.testing.expect(Indexes.AstStatDeclareGlobalIndex == @intFromEnum(Node.Kind.stat_declare_global));
-    try std.testing.expect(Indexes.AstStatClassIndex == @intFromEnum(Node.Kind.stat_class));
-    try std.testing.expect(Indexes.AstStatDeclareExternTypeIndex == @intFromEnum(Node.Kind.stat_declare_extern_type));
-    try std.testing.expect(Indexes.AstTypeReferenceIndex == @intFromEnum(Node.Kind.type_reference));
-    try std.testing.expect(Indexes.AstTypeTableIndex == @intFromEnum(Node.Kind.type_table));
-    try std.testing.expect(Indexes.AstTypeFunctionIndex == @intFromEnum(Node.Kind.type_function));
-    try std.testing.expect(Indexes.AstTypeTypeofIndex == @intFromEnum(Node.Kind.type_typeof));
-    try std.testing.expect(Indexes.AstTypeOptionalIndex == @intFromEnum(Node.Kind.type_optional));
-    try std.testing.expect(Indexes.AstTypeUnionIndex == @intFromEnum(Node.Kind.type_union));
-    try std.testing.expect(Indexes.AstTypeIntersectionIndex == @intFromEnum(Node.Kind.type_intersection));
-    try std.testing.expect(Indexes.AstExprErrorIndex == @intFromEnum(Node.Kind.expr_error));
-    try std.testing.expect(Indexes.AstStatErrorIndex == @intFromEnum(Node.Kind.stat_error));
-    try std.testing.expect(Indexes.AstTypeErrorIndex == @intFromEnum(Node.Kind.type_error));
-    try std.testing.expect(Indexes.AstTypeSingletonBoolIndex == @intFromEnum(Node.Kind.type_singleton_bool));
-    try std.testing.expect(Indexes.AstTypeSingletonStringIndex == @intFromEnum(Node.Kind.type_singleton_string));
-    try std.testing.expect(Indexes.AstTypeGroupIndex == @intFromEnum(Node.Kind.type_group));
-    try std.testing.expect(Indexes.AstTypePackExplicitIndex == @intFromEnum(Node.Kind.type_pack_explicit));
-    try std.testing.expect(Indexes.AstTypePackVariadicIndex == @intFromEnum(Node.Kind.type_pack_variadic));
-    try std.testing.expect(Indexes.AstTypePackGenericIndex == @intFromEnum(Node.Kind.type_pack_generic));
+    @setEvalBranchQuota(2000);
+    inline for (@typeInfo(AstValues).@"struct".decls) |decl| {
+        if (comptime std.mem.endsWith(u8, decl.name, "Index")) {
+            const name = decl.name[3 .. decl.name.len - 5];
+
+            const ast_node_type = @field(Ast, name);
+            const info = @typeInfo(ast_node_type).@"struct";
+
+            comptime var field: ?std.builtin.Type.StructField = null;
+            inline for (info.fields) |f| {
+                if (comptime std.mem.eql(u8, f.name, "classIndex")) {
+                    field = f;
+                    break;
+                }
+            }
+            if (field == null)
+                @compileError("classIndex field not found");
+            const default_value_ptr = field.?.default_value_ptr orelse @compileError("classIndex field does not have a default value");
+            const enum_value = @as(*const Ast.Node.Kind, @ptrCast(@alignCast(default_value_ptr))).*;
+
+            std.testing.expectEqual(@intFromEnum(enum_value), @field(AstValues, decl.name)) catch |err| {
+                std.debug.print("error for {s}\n", .{name});
+                return err;
+            };
+        } else if (comptime std.mem.endsWith(u8, decl.name, "Size")) {
+            const name = decl.name[3 .. decl.name.len - 4];
+
+            const ast_node_type = @field(Ast, name);
+
+            std.testing.expectEqual(@sizeOf(ast_node_type), @field(AstValues, decl.name)) catch |err| {
+                std.debug.print("error for {s}\n", .{name});
+                return err;
+            };
+        } else @compileError("unknown exported constant");
+    }
 }
 
 // sources:

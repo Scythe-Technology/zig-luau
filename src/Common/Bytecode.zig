@@ -410,6 +410,33 @@ pub const Opcode = enum(u32) {
     // C: constant table index (0..255)
     IDIVK,
 
+    // Atom-based userdata field access acceleration
+    // These are equivalent to their GETTABLEKS/SETTABLEKS/NAMECALL counterparts, except tailored towards userdata field accesses
+    // If the user has registered metamethods for a userdata tag, callbacks will be called by these instructions
+    GETUDATAKS,
+    SETUDATAKS,
+    NAMECALLUDATA,
+
+    // NEWCLASSMEMBER: register this method on a class object.
+    // A: target register of class
+    // B: reserved
+    // C: initial value of this member. currently must be a function.
+    // AUX: The name of this member as a constant string
+    NEWCLASSMEMBER,
+
+    // CALLFB: call specified function with collecting runtime stats in a feedback slot
+    // A: register where the function object lives, followed by arguments; results are placed starting from the same register
+    // B: argument count + 1, or 0 to preserve all arguments up to top (MULTRET)
+    // C: result count + 1, or 0 to preserve all values and adjust top (MULTRET)
+    // AUX: feedback slot id. 0xFFFFFFFF - sealed
+    CALLFB,
+
+    // CMPPROTO: check if a register contains a closure with a specified Luau function proto id
+    // A: closure register
+    // D: jump offset if proto doesn't match
+    // AUX: proto id
+    CMPPROTO,
+
     // Enum entry for number of opcodes, not a valid opcode by itself!
     _COUNT,
 };
@@ -451,6 +478,13 @@ pub const BytecodeTag = enum(u32) {
     CONSTANT_TABLE,
     CONSTANT_CLOSURE,
     CONSTANT_VECTOR,
+    CONSTANT_TABLE_WITH_CONSTANTS,
+    CONSTANT_INTEGER,
+    CONSTANT_CLASS_SHAPE,
+
+    // WARNING: This must always be last.
+    CONSTANT__COUNT,
+
     // Bytecode version; runtime supports [MIN, MAX], compiler emits TARGET by default but may emit a higher version when flags are enabled
     // Type encoding version
     // Types of constant table entries
@@ -620,7 +654,56 @@ pub const BuiltinFunction = enum(u32) {
     // math.lerp
     LBF_MATH_LERP,
 
+    // vector.lerp
     LBF_VECTOR_LERP,
+
+    // math.
+    LBF_MATH_ISNAN,
+    LBF_MATH_ISINF,
+    LBF_MATH_ISFINITE,
+
+    // integer
+    LBF_INTEGER_CREATE,
+    LBF_INTEGER_TONUMBER,
+    LBF_INTEGER_NEG,
+    LBF_INTEGER_ADD,
+    LBF_INTEGER_SUB,
+    LBF_INTEGER_MUL,
+    LBF_INTEGER_DIV,
+    LBF_INTEGER_MIN,
+    LBF_INTEGER_MAX,
+    LBF_INTEGER_REM,
+    LBF_INTEGER_IDIV,
+    LBF_INTEGER_UDIV,
+    LBF_INTEGER_UREM,
+    LBF_INTEGER_MOD,
+    LBF_INTEGER_CLAMP,
+    LBF_INTEGER_BAND,
+    LBF_INTEGER_BOR,
+    LBF_INTEGER_BNOT,
+    LBF_INTEGER_BXOR,
+    LBF_INTEGER_LT,
+    LBF_INTEGER_LE,
+    LBF_INTEGER_ULT,
+    LBF_INTEGER_ULE,
+    LBF_INTEGER_GT,
+    LBF_INTEGER_GE,
+    LBF_INTEGER_UGT,
+    LBF_INTEGER_UGE,
+    LBF_INTEGER_LSHIFT,
+    LBF_INTEGER_RSHIFT,
+    LBF_INTEGER_ARSHIFT,
+    LBF_INTEGER_LROTATE,
+    LBF_INTEGER_RROTATE,
+    LBF_INTEGER_EXTRACT,
+    LBF_INTEGER_BTEST,
+    LBF_INTEGER_COUNTRZ,
+    LBF_INTEGER_COUNTLZ,
+    LBF_INTEGER_BSWAP,
+
+    // buffer.readinteger / buffer.writeinteger (int64_t)
+    LBF_BUFFER_READINTEGER,
+    LBF_BUFFER_WRITEINTEGER,
 };
 
 // Capture type, used in CAPTURE
@@ -632,13 +715,17 @@ pub const CaptureType = enum(u32) {
 
 // Proto flag bitmask, stored in Proto::flags
 pub const ProtoFlag = enum(u32) {
-    // used to tag main proto for modules with --!native
+    /// used to tag main proto for modules with --!native
     LPF_NATIVE_MODULE = 1 << 0,
-    // used to tag individual protos as not profitable to compile natively
+    /// used to tag individual protos as not profitable to compile natively
     LPF_NATIVE_COLD = 1 << 1,
-    // used to tag main proto for modules that have at least one function with native attribute
+    /// used to tag main proto for modules that have at least one function with native attribute
     LPF_NATIVE_FUNCTION = 1 << 2,
+    /// function can be inlined
+    LPF_INLINABLE = 1 << 3,
 };
+
+pub const LuauFeedbackType = enum(u32) { LFT_CALLTARGET = 0 };
 
 // sources:
 // https://github.com/luau-lang/luau/blob/a2303a6ae68c53035eccf230c4450b9f068536af/Common/include/Luau/Bytecode.h
