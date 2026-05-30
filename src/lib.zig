@@ -34,6 +34,7 @@ pub const Common = struct {
     pub const Bytecode = @import("Common/Bytecode.zig");
     pub const BytecodeUtils = @import("Common/BytecodeUtils.zig");
     pub const ExperimentalFlags = @import("Common/ExperimentalFlags.zig");
+    pub const Variant = @import("Common/Variant.zig");
     test {
         inline for (@typeInfo(@This()).@"struct".decls) |decl|
             std.testing.refAllDecls(@field(@This(), decl.name));
@@ -65,6 +66,7 @@ pub const VM = if (build_config.buildVM) struct {
     pub const ltable = @import("VM/ltable.zig");
     pub const ludata = @import("VM/ludata.zig");
     pub const lbuffer = @import("VM/lbuffer.zig");
+    pub const lclass = @import("VM/lclass.zig");
     pub const lfunc = @import("VM/lfunc.zig");
     pub const ldebug = @import("VM/ldebug.zig");
     pub const lobject = @import("VM/lobject.zig");

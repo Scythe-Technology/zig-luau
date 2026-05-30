@@ -113,6 +113,25 @@ fn validateproto(g: *const lstate.global_State, f: *lobject.Proto) void {
             validateobjref(g, f.obj2gco(), varname.obj2gco());
 }
 
+fn validateclassobject(g: *const lstate.global_State, lco: *lobject.ClassObject) void {
+    const obj = lco.obj2gco();
+    validateobjref(g, obj, lco.name.obj2gco());
+    validateobjref(g, obj, lco.memberstooffset.obj2gco());
+    for (0..@intCast(lco.numberofallmembers)) |i| {
+        validateobjref(g, obj, lco.offsettomember[i].obj2gco());
+        if (i >= lco.numberofinstancemembers)
+            validateref(g, obj, &lco.staticmembers[i - @as(u32, @intCast(lco.numberofinstancemembers))]);
+    }
+    validateobjref(g, obj, lco.metatable.obj2gco());
+}
+
+fn validateclassinstance(g: *const lstate.global_State, inst: *lobject.ClassInstance) void {
+    const obj = inst.obj2gco();
+    validateobjref(g, obj, inst.classobj.obj2gco());
+    for (0..@intCast(inst.classobj.numberofinstancemembers)) |i|
+        validateref(g, obj, &inst.members[i]);
+}
+
 fn validateobj(g: *const lstate.global_State, o: *lstate.GCObject) void {
     if (lgc.isdead(g, o)) {
         std.debug.assert(g.gcstate == lgc.GCSsweep);
@@ -128,6 +147,8 @@ fn validateobj(g: *const lstate.global_State, o: *lstate.GCObject) void {
         @intFromEnum(lua.Type.Thread) => validatestack(g, o.toth()),
         @intFromEnum(lua.Type.Proto) => validateproto(g, o.top()),
         @intFromEnum(lua.Type.UpVal) => validateref(g, o, o.touv().v),
+        @intFromEnum(lua.Type.ClassObj) => validateclassobject(g, o.tocobj()),
+        @intFromEnum(lua.Type.ClassInst) => validateclassinstance(g, o.tocinst()),
         else => unreachable,
     }
 }
@@ -143,6 +164,8 @@ fn validategraylist(g: *const lstate.global_State, obj: ?*lstate.GCObject) void 
             @intFromEnum(lua.Type.Table) => so = o.toh().gclist,
             @intFromEnum(lua.Type.Function) => so = o.tocl().gclist,
             @intFromEnum(lua.Type.Thread) => so = o.toth().gclist,
+            @intFromEnum(lua.Type.ClassObj) => so = o.tocobj().gclist,
+            @intFromEnum(lua.Type.ClassInst) => so = o.tocinst().gclist,
             @intFromEnum(lua.Type.Proto) => so = o.top().gclist,
             else => unreachable,
         }

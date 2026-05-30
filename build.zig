@@ -980,6 +980,7 @@ const LUAU_VM_SOURCE_FILES = [_][]const u8{
     "VM/src/lbuffer.cpp",
     "VM/src/lbuflib.cpp",
     "VM/src/lbuiltins.cpp",
+    "VM/src/lclass.cpp",
     "VM/src/lcorolib.cpp",
     "VM/src/ldblib.cpp",
     "VM/src/ldebug.cpp",

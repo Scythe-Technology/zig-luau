@@ -204,6 +204,8 @@ const ExecutionCallbacks = extern struct {
     gettypemapping: ?*const fn (L: *lua_State, str: [*c]const u8, len: usize) callconv(.c) u8 = null,
     /// called to get the execution counter data and count {uint32_t, uint32_t, uint64_t}
     getcounterdata: ?*const fn (L: *lua_State, proto: *anyopaque, count: *usize) callconv(.c) [*]const u8 = null,
+    /// called when inlining threshold is reached
+    inlinefunction: ?*const fn (L: *lua_State, caller: *lobject.Closure, target: *lobject.Closure, pc: u32) callconv(.c) *lobject.Proto = null,
 };
 
 const UdataDirectAccessData = extern struct {
@@ -314,6 +316,7 @@ pub const global_State = extern struct {
     udatadirectfields: [ludata.UTAG_INTERNAL_LIMIT]?*lobject.LuaTable,
 
     gcstats: GCStats,
+    lastprotoid: u32,
 
     /// TODO: change `false` to be based on configuration (LUAI_GCMETRICS)
     gcmetrics: if (false) GCMetrics else void,
@@ -430,6 +433,8 @@ pub const lua_State = extern struct {
     pub const isthread = lapi.isthread;
     pub const isbuffer = lapi.isbuffer;
     pub const isnoneornil = lapi.isnoneornil;
+    pub const isclassobject = lapi.isclassobject;
+    pub const isclassinstance = lapi.isclassinstance;
     pub const typeOf = lapi.typeOf;
     pub const typename = lapi.typename;
 
@@ -705,6 +710,8 @@ pub const GCObject = extern union {
     uv: lobject.UpVal,
     th: lua_State, // thread
     buf: lobject.Buffer,
+    classobj: lobject.ClassObject,
+    classinst: lobject.ClassInstance,
 
     pub inline fn tots(o: *GCObject) *lobject.TString {
         std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.String));
@@ -737,6 +744,14 @@ pub const GCObject = extern union {
     pub inline fn tobuf(o: *GCObject) *lobject.Buffer {
         std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.Buffer));
         return &o.buf;
+    }
+    pub inline fn tocobj(o: *GCObject) *lobject.ClassObject {
+        std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.ClassObj));
+        return &o.classobj;
+    }
+    pub inline fn tocinst(o: *GCObject) *lobject.ClassInstance {
+        std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.ClassInst));
+        return &o.classinst;
     }
 };
 
@@ -855,8 +870,17 @@ pub fn Efreethread(L: *lua_State, L1: *lua.State, page: *lmem.lua_Page) void {
     const g = L.global;
     if (g.cb.userthread) |ut|
         ut(null, L1);
+
     freestack(L, L1);
     lmem.Mfreegco(L, @ptrCast(@alignCast(L1)), @sizeOf(lua.State), L1.header.memcat, page);
+}
+
+fn cleanupcistack(L: *lua_State) void {
+    var lastci = L.ci.?;
+    while (lastci != L.base_ci) : (lastci -= 1) {
+        std.debug.assert(lastci[0].func[0].clvalue().usage > 0);
+        lastci[0].func[0].clvalue().usage -= 1;
+    }
 }
 
 pub fn resetthread(L: *lua_State) Errorset.Memory!void {
@@ -868,6 +892,9 @@ pub fn resetthread(L: *lua_State) Errorset.Memory!void {
 
     // close upvalues before clearing anything
     lfunc.Fclose(L, @ptrCast(L.stack));
+    // if (FFlag::LuauClosureUsageCounter)
+    //     cleanupcistack(L);
+
     // clear call frames
     const ci = &L.base_ci.?[0];
     ci.func = @ptrCast(L.stack);
@@ -978,6 +1005,7 @@ pub fn newstate(f: lua.Alloc, ud: ?*anyopaque) Errorset.Table!*lua_State {
     g.ecbdata = std.mem.zeroes([lua.config.EXECUTION_CALLBACK_STORAGE]u8);
 
     g.gcstats = .{};
+    g.lastprotoid = 1;
 
     // TODO: LUAI_GCMETRICS
 

@@ -8,6 +8,7 @@ const lperf = @import("lperf.zig");
 const lfunc = @import("lfunc.zig");
 const ltable = @import("ltable.zig");
 const ludata = @import("ludata.zig");
+const lclass = @import("lclass.zig");
 const lstring = @import("lstring.zig");
 const lbuffer = @import("lbuffer.zig");
 const lcommon = @import("lcommon.zig");
@@ -285,6 +286,12 @@ pub inline fn Cthreadbarrier(L: *lua.State) void {
     }
 }
 
+pub inline fn Cclassinstbarrier(L: *lua.State) void {
+    if (isblack(@ptrCast(@alignCast(L)))) {
+        Cbarrierback(L, @ptrCast(@alignCast(L)), &L.gclist);
+    }
+}
+
 pub inline fn Cinit(L: *lua.State, o: *lstate.GCObject, tt: u8) void {
     o.gch.header.marked = Cwhite(L.global);
     o.gch.header.tt = tt;
@@ -442,6 +449,22 @@ fn traversestack(g: *lstate.global_State, L: *lua.State) void {
     }
 }
 
+fn traverseclassobject(g: *lstate.global_State, classobject: *lobject.ClassObject) void {
+    markobject(g, @ptrCast(@alignCast(classobject.name)));
+    markobject(g, @ptrCast(@alignCast(classobject.memberstooffset)));
+    for (0..@intCast(classobject.numberofallmembers)) |i|
+        markobject(g, @ptrCast(@alignCast(classobject.offsettomember[i])));
+    for (0..@intCast(classobject.numberofallmembers - classobject.numberofinstancemembers)) |i|
+        markobject(g, @ptrCast(@alignCast(&classobject.staticmembers[i])));
+    markobject(g, @ptrCast(@alignCast(classobject.metatable)));
+}
+
+fn traverseclassinstances(g: *lstate.global_State, classinst: *lobject.ClassInstance) void {
+    markobject(g, @ptrCast(@alignCast(classinst.classobj)));
+    for (0..@intCast(classinst.numberofmembers)) |i|
+        markobject(g, @ptrCast(@alignCast(&classinst.members[i])));
+}
+
 fn clearstack(L: *lua.State) void {
     const stack_end = L.stack + @as(usize, @intCast(L.stacksize));
     for (L.top[0..(stack_end - L.top)]) |*o| // clear not-marked stack slice
@@ -516,7 +539,9 @@ fn propagatemark(g: *lstate.global_State) Errorset.Memory!usize {
             if (g.gcstate == GCSpropagate)
                 try shrinkstack(th);
 
-            return @sizeOf(lua.State) + (@sizeOf(lobject.TValue) * @as(u32, @intCast(th.stacksize))) + (@sizeOf(lstate.CallInfo) * @as(u32, @intCast(th.size_ci)));
+            return @sizeOf(lua.State) +
+                (@sizeOf(lobject.TValue) * @as(u32, @intCast(th.stacksize))) +
+                (@sizeOf(lstate.CallInfo) * @as(u32, @intCast(th.size_ci)));
         },
         @intFromEnum(lua.Type.Proto) => {
             const p = o.top();
@@ -530,6 +555,21 @@ fn propagatemark(g: *lstate.global_State) Errorset.Memory!usize {
                 (@sizeOf(lobject.LocVar) * @as(u32, @intCast(p.sizelocvars))) +
                 (@sizeOf(lobject.UpVal) * @as(u32, @intCast(p.sizeupvalues))) +
                 @as(u32, @intCast(p.sizetypeinfo));
+        },
+        @intFromEnum(lua.Type.ClassObj) => {
+            const classobject = o.tocobj();
+            g.gray = classobject.gclist;
+            traverseclassobject(g, classobject);
+            return @sizeOf(lobject.ClassObject) +
+                (@as(u32, @intCast(classobject.numberofallmembers)) - @as(u32, @intCast(classobject.numberofinstancemembers))) * @sizeOf(lobject.TValue) +
+                @as(u32, @intCast(classobject.numberofallmembers)) * @sizeOf(*lobject.TString);
+        },
+        @intFromEnum(lua.Type.ClassInst) => {
+            const classinst = o.tocinst();
+            g.gray = classinst.gclist;
+            traverseclassinstances(g, classinst);
+            return @sizeOf(lobject.ClassInstance) +
+                (@as(u32, @intCast(classinst.numberofmembers)) * @sizeOf(lobject.TValue));
         },
         else => unreachable,
     }
@@ -619,6 +659,8 @@ fn freeobj(L: *lua.State, o: *lstate.GCObject, page: *lmem.lua_Page) void {
         @intFromEnum(lua.Type.String) => lstring.Sfree(L, o.tots(), page),
         @intFromEnum(lua.Type.Userdata) => ludata.Ufreeudata(L, o.tou(), page),
         @intFromEnum(lua.Type.Buffer) => lbuffer.Bfreebuffer(L, o.tobuf(), page),
+        @intFromEnum(lua.Type.ClassObj) => lclass.Rfreeclassobject(L, o.tocobj(), page),
+        @intFromEnum(lua.Type.ClassInst) => lclass.Rfreeclassinstance(L, o.tocinst(), page),
         else => unreachable,
     }
 }

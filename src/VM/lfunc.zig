@@ -59,6 +59,10 @@ pub fn Fnewproto(L: *lua.State) !*lobject.Proto {
     f.bytecodeid = 0;
     f.sizetypeinfo = 0;
 
+    f.feedbackvec = null;
+    f.feedbackvecsize = 0;
+    f.funid = 0;
+
     return f;
 }
 
@@ -70,6 +74,7 @@ pub fn FnewLclosure(L: *lua.State, nelems: u8, e: *lobject.LuaTable, p: *lobject
     c.nupvalues = nelems;
     c.stacksize = p.maxstacksize;
     c.preload = 0;
+    c.usage = 0;
     c.d.l.p = p;
     for (0..nelems) |i|
         c.d.l.upreferences()[i].setnilvalue();
@@ -84,6 +89,7 @@ pub fn FnewCclosure(L: *lua.State, nelems: u8, e: *lobject.LuaTable) !*lobject.C
     c.nupvalues = nelems;
     c.stacksize = lua.config.MINSTACK;
     c.preload = 0;
+    c.usage = 0;
     c.d.c.f = null;
     c.d.c.cont = null;
     c.d.c.debugname = null;
@@ -141,6 +147,9 @@ pub fn Ffreeproto(L: *lua.State, f: *lobject.Proto, page: *lmem.lua_Page) void {
 
     if (f.typeinfo) |ti|
         lmem.Mfreearray(L, u8, ti, @intCast(f.sizetypeinfo), f.header.memcat);
+
+    if (f.feedbackvec) |fv|
+        lmem.Mfreearray(L, lobject.FeedbackVectorSlot, fv, f.feedbackvecsize, f.header.memcat);
 
     lmem.Mfreegco(L, f.obj2gco(), @sizeOf(lobject.Proto), f.header.memcat, page);
 }

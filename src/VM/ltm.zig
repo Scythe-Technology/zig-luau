@@ -53,6 +53,8 @@ pub const typenames = [_][:0]const u8{
     "userdata",
     "thread",
     "buffer",
+    "classobject",
+    "classinstance",
 };
 
 pub const eventname = [_][:0]const u8{

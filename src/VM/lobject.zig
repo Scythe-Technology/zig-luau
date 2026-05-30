@@ -146,6 +146,10 @@ pub const TValue = extern struct {
         std.debug.assert(obj.ttisupval());
         return &obj.value.gc.?.uv;
     }
+    pub inline fn cobjvalue(obj: *const TValue) *anyopaque {
+        std.debug.assert(obj.ttisisclassobject());
+        return &obj.value.gc.?.classobj;
+    }
     pub inline fn svalue(obj: *const TValue) [*c]const u8 {
         return obj.tsvalue().getstr();
     }
@@ -236,6 +240,16 @@ pub const TValue = extern struct {
         obj.* = o2.*;
         obj.checkliveness(L.global);
     }
+    pub inline fn setcobjvalue(obj: *TValue, L: *lstate.lua_State, x: *anyopaque) void {
+        obj.value.gc = @ptrCast(@alignCast(x));
+        obj.settype(.ClassObj);
+        obj.checkliveness(L.global);
+    }
+    pub inline fn setsinstvalue(obj: *TValue, L: *lstate.lua_State, x: *anyopaque) void {
+        obj.value.gc = @ptrCast(@alignCast(x));
+        obj.settype(.ClassInst);
+        obj.checkliveness(L.global);
+    }
 
     pub inline fn settype(obj: *TValue, t: lua.Type) void {
         obj.tt = @intFromEnum(t);
@@ -321,6 +335,21 @@ pub const Buffer = extern struct {
     }
 };
 
+pub const FeedbackVectorSlotKind = enum(u8) {
+    CallTarget,
+};
+
+pub const FeedbackVectorSlot = extern struct {
+    kind: FeedbackVectorSlotKind,
+    data: extern union {
+        call_target: extern struct {
+            pc: u32,
+            proto: u32,
+            hits: u32,
+        },
+    },
+};
+
 ///
 /// Function Prototypes
 ///
@@ -370,6 +399,10 @@ pub const Proto = extern struct {
     linedefined: c_int,
     bytecodeid: c_int,
     sizetypeinfo: c_int,
+
+    feedbackvec: ?[*]FeedbackVectorSlot,
+    feedbackvecsize: u32,
+    funid: u32,
 
     pub inline fn obj2gco(obj: *Proto) *lstate.GCObject {
         return @ptrCast(@alignCast(obj));
@@ -432,6 +465,7 @@ pub const Closure = extern struct {
     stacksize: u8,
     preload: u8,
 
+    usage: u64,
     gclist: ?*lstate.GCObject,
     env: *LuaTable,
 
@@ -696,6 +730,66 @@ pub const LuaTable = extern struct {
     }
 };
 
+pub const ClassObject = extern struct {
+    header: CommonHeader,
+
+    gclist: ?*lstate.GCObject,
+
+    name: *TString,
+
+    /// Mapping from offset to static members (only methods for now).
+    staticmembers: [*]TValue,
+
+    /// Mapping from member name to offset.
+    memberstooffset: *LuaTable,
+
+    /// Mapping from offset to member name.
+    offsettomember: [*]*TString,
+
+    /// Metatable for this *class object*. At time of writing this only contains
+    /// __call, but we may add more metamethods to class objects in the future.
+    metatable: *LuaTable,
+
+    /// Number of instance members that we expect instances of this class object
+    /// to have.
+    numberofinstancemembers: c_int,
+
+    // Total number of members that we expect this class object to have between
+    // instance and static members.
+    //
+    // We store this number as an optimization. It's pretty rare that we need
+    // to reference the specific number of static members, but it's very common
+    // to reference the total number of members (for validating hot paths in
+    // the interpreter) and the number of instance members (branching on
+    // instance or static members, creating class instances).
+    numberofallmembers: c_int,
+
+    pub inline fn obj2gco(obj: *ClassObject) *lstate.GCObject {
+        return @ptrCast(@alignCast(obj));
+    }
+};
+
+pub const ClassInstance = extern struct {
+    header: CommonHeader,
+
+    gclist: ?*lstate.GCObject,
+
+    /// The class object that this value is an instance of.
+    classobj: *ClassObject,
+
+    /// The number of members that this instance contains. We need this in order
+    /// to free ourselves if we got swept in the same GC cycle as our class
+    /// pointer.
+    numberofmembers: c_int,
+
+    /// The fields of this instance.
+    members: [*]TValue,
+
+    pub inline fn obj2gco(obj: *ClassInstance) *lstate.GCObject {
+        return @ptrCast(@alignCast(obj));
+    }
+};
+
 pub inline fn lmod(comptime T: type, s: u32, size: T) T {
     std.debug.assert(size & (size - 1) == 0);
     return s & (size - 1);
@@ -802,6 +896,8 @@ test "size match" {
         extern "c" const TKey_size: u8;
         extern "c" const LuaNode_size: u8;
         extern "c" const LuaTable_size: u8;
+        extern "c" const LuaClassObject_size: u8;
+        extern "c" const LuaClassInstance_size: u8;
 
         extern "c" const TString_data_offset: u8;
         extern "c" const Udata_data_offset: u8;
@@ -822,6 +918,8 @@ test "size match" {
     try std.testing.expect(Sizes.TKey_size == @sizeOf(TKey));
     try std.testing.expect(Sizes.LuaNode_size == @sizeOf(LuaNode));
     try std.testing.expect(Sizes.LuaTable_size == @sizeOf(LuaTable));
+    try std.testing.expect(Sizes.LuaClassObject_size == @sizeOf(ClassObject));
+    try std.testing.expect(Sizes.LuaClassInstance_size == @sizeOf(ClassInstance));
 
     try std.testing.expect(Sizes.TString_data_offset == @offsetOf(TString, "data"));
     try std.testing.expect(Sizes.Udata_data_offset == @offsetOf(Udata, "data"));

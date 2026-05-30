@@ -48,6 +48,7 @@ ZIG_EXPORT const unsigned char AstStatTypeAliasIndex = AstStatTypeAlias::ClassIn
 ZIG_EXPORT const unsigned char AstStatTypeFunctionIndex = AstStatTypeFunction::ClassIndex();
 ZIG_EXPORT const unsigned char AstStatDeclareFunctionIndex = AstStatDeclareFunction::ClassIndex();
 ZIG_EXPORT const unsigned char AstStatDeclareGlobalIndex = AstStatDeclareGlobal::ClassIndex();
+ZIG_EXPORT const unsigned char AstStatClassIndex = AstStatClass::ClassIndex();
 ZIG_EXPORT const unsigned char AstStatDeclareExternTypeIndex = AstStatDeclareExternType::ClassIndex();
 ZIG_EXPORT const unsigned char AstTypeReferenceIndex = AstTypeReference::ClassIndex();
 ZIG_EXPORT const unsigned char AstTypeTableIndex = AstTypeTable::ClassIndex();

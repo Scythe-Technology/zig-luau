@@ -2,6 +2,8 @@ const std = @import("std");
 
 const Location = @import("Location.zig").Location;
 
+const Variant = @import("../Common/Variant.zig").Variant;
+
 const cpp_std = @import("../cpp_std.zig");
 
 const Ast = @This();
@@ -89,6 +91,7 @@ pub const Node = extern struct {
         stat_type_function,
         stat_declare_global,
         stat_declare_function,
+        stat_class,
         stat_declare_extern_type,
         type_reference,
         type_table,
@@ -152,6 +155,7 @@ pub const Node = extern struct {
                 .stat_type_function => StatTypeFunction,
                 .stat_declare_global => StatDeclareGlobal,
                 .stat_declare_function => StatDeclareFunction,
+                .stat_class => StatClass,
                 .stat_declare_extern_type => StatDeclareExternType,
                 .type_reference => TypeReference,
                 .type_table => TypeTable,
@@ -219,6 +223,7 @@ pub const Node = extern struct {
                 .stat_type_function,
                 .stat_declare_global,
                 .stat_declare_function,
+                .stat_class,
                 .stat_declare_extern_type,
                 .stat_error,
                 => Stat,
@@ -980,13 +985,8 @@ pub const ExprInstantiate = extern struct {
 
     pub fn visit(self: *@This(), visitor: anytype) !void {
         if (try Visitor.visit(visitor, self)) {
-            for (self.typeArguments.slice()) |param| {
-                if (param.type) |node| {
-                    try node.visit(visitor);
-                } else {
-                    try param.typePack.?.visit(visitor);
-                }
-            }
+            try self.expr.visit(visitor);
+            try TypeOrPack.visitArray(self.typeArguments, visitor);
         }
     }
 };
@@ -1550,6 +1550,53 @@ pub const DeclaredExternTypeProperty = extern struct {
     pub const asType = AsTypeCastFn;
 };
 
+pub const ClassProperty = extern struct {
+    qualifierLocation: Location,
+    name: Name,
+    nameLocation: Location,
+    typeColonLocation: cpp_std.Optional(Location) = .nullopt,
+    ty: ?*Type = null,
+};
+
+pub const ClassMethod = extern struct {
+    keywordLocation: Location,
+    functionName: Name,
+    nameLocation: Location,
+    function: *ExprFunction,
+};
+
+const ClassMember = Variant(&.{ ClassProperty, ClassMethod });
+
+pub const StatClass = extern struct {
+    vtable: *const anyopaque,
+
+    classIndex: Node.Kind,
+    location: Location,
+    hasSemicolon: bool = false,
+
+    name: Name,
+    members: Array(ClassMember),
+
+    pub const is = IsFn;
+    pub const as = AsCastFn;
+    pub const asExpr = AsExprCastFn;
+    pub const asStat = AsStatCastFn;
+    pub const asType = AsTypeCastFn;
+
+    pub fn visit(self: *@This(), visitor: anytype) !void {
+        if (try Visitor.visit(visitor, self)) {
+            for (self.members.slice()) |member| {
+                switch (member.typeId) {
+                    0 => if (member.@"union"().@"0".ty) |ty|
+                        try ty.visit(visitor),
+                    1 => try member.@"union"().@"1".function.visit(visitor),
+                    else => unreachable,
+                }
+            }
+        }
+    }
+};
+
 pub const TableIndexer = extern struct {
     indexType: *Type,
     resultType: *Type,
@@ -1605,6 +1652,15 @@ pub const Type = extern struct {
 pub const TypeOrPack = extern struct {
     type: ?*Type = null,
     typePack: ?*TypePack = null,
+
+    pub fn visitArray(self: Array(TypeOrPack), visitor: anytype) !void {
+        for (self.slice()) |param| {
+            if (param.type) |node|
+                try node.visit(visitor)
+            else
+                try param.typePack.?.visit(visitor);
+        }
+    }
 };
 
 pub const TypeReference = extern struct {
@@ -1628,12 +1684,7 @@ pub const TypeReference = extern struct {
 
     pub fn visit(self: *@This(), visitor: anytype) !void {
         if (try Visitor.visit(visitor, self)) {
-            for (self.parameters.slice()) |param|
-                if (param.type) |node| {
-                    try node.visit(visitor);
-                } else {
-                    try param.typePack.?.visit(visitor);
-                };
+            try TypeOrPack.visitArray(self.parameters, visitor);
         }
     }
 };
@@ -2267,6 +2318,7 @@ test "Index" {
         extern "c" const AstStatTypeFunctionIndex: u8;
         extern "c" const AstStatDeclareFunctionIndex: u8;
         extern "c" const AstStatDeclareGlobalIndex: u8;
+        extern "c" const AstStatClassIndex: u8;
         extern "c" const AstStatDeclareExternTypeIndex: u8;
         extern "c" const AstTypeReferenceIndex: u8;
         extern "c" const AstTypeTableIndex: u8;
@@ -2328,6 +2380,7 @@ test "Index" {
     try std.testing.expect(Indexes.AstStatTypeFunctionIndex == @intFromEnum(Node.Kind.stat_type_function));
     try std.testing.expect(Indexes.AstStatDeclareFunctionIndex == @intFromEnum(Node.Kind.stat_declare_function));
     try std.testing.expect(Indexes.AstStatDeclareGlobalIndex == @intFromEnum(Node.Kind.stat_declare_global));
+    try std.testing.expect(Indexes.AstStatClassIndex == @intFromEnum(Node.Kind.stat_class));
     try std.testing.expect(Indexes.AstStatDeclareExternTypeIndex == @intFromEnum(Node.Kind.stat_declare_extern_type));
     try std.testing.expect(Indexes.AstTypeReferenceIndex == @intFromEnum(Node.Kind.type_reference));
     try std.testing.expect(Indexes.AstTypeTableIndex == @intFromEnum(Node.Kind.type_table));

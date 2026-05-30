@@ -72,7 +72,7 @@ pub const Alloc = *const fn (ud: ?*anyopaque, ptr: ?*anyopaque, osize: usize, ns
 pub const TNONE = c.LUA_TNONE;
 
 /// Must be a signed integer because LuaType.none is -1
-pub const Type = enum(i5) {
+pub const Type = enum(i6) {
     None = TNONE,
     Nil = c.LUA_TNIL, // must be 0 due to lua_isnoneornil
     Boolean = c.LUA_TBOOLEAN, // must be 1 due to l_isfalse
@@ -86,11 +86,18 @@ pub const Type = enum(i5) {
     Userdata = c.LUA_TUSERDATA,
     Thread = c.LUA_TTHREAD,
     Buffer = c.LUA_TBUFFER,
+    ClassObj = c.LUA_TCLASSOBJ,
+    ClassInst = c.LUA_TCLASSINST,
 
     // values below this line are used in GCObject tags but may never show up in TValue type tags
+
+    /// LUA_TDEADKEY is used in TKey to identify Luau table entries that have the value set to nil,
+    /// so that we can remove the strong reference to the key.
+    Deadkey = c.LUA_TDEADKEY,
+
+    // These values should never show up in TValue tag types.
     Proto = c.LUA_TPROTO,
     UpVal = c.LUA_TUPVAL,
-    Deadkey = c.LUA_TDEADKEY,
 
     // the count of TValue type tags
     pub const T_COUNT = c.LUA_T_COUNT;
