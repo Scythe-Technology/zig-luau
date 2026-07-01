@@ -129,6 +129,8 @@ ZIG_EXPORT const unsigned long AstTypePackVariadicSize = sizeof(AstTypePackVaria
 ZIG_EXPORT const unsigned long AstTypePackGenericSize = sizeof(AstTypePackGeneric);
 
 // CST
+ZIG_EXPORT const unsigned char CstAttrIndex = CstAttr::CstClassIndex();
+ZIG_EXPORT const unsigned char CstParametrizedAttrIndex = CstParametrizedAttr::CstClassIndex();
 ZIG_EXPORT const unsigned char CstExprGroupIndex = CstExprGroup::CstClassIndex();
 ZIG_EXPORT const unsigned char CstExprConstantNumberIndex = CstExprConstantNumber::CstClassIndex();
 ZIG_EXPORT const unsigned char CstExprConstantIntegerIndex = CstExprConstantInteger::CstClassIndex();

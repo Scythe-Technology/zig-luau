@@ -12,6 +12,8 @@ pub const Node = extern struct {
 
     pub const Kind = enum(i32) {
         unknown,
+        attr,
+        parametrized_attr,
         expr_group,
         expr_constant_number,
         expr_constant_integer,
@@ -53,6 +55,8 @@ pub const Node = extern struct {
         pub fn Type(comptime self: Kind) type {
             return switch (self) {
                 .unknown => Node,
+                .attr => Attr,
+                .parametrized_attr => ParametrizedAttr,
                 .expr_group => ExprGroup,
                 .expr_constant_number => ExprConstantNumber,
                 .expr_constant_integer => ExprConstantInteger,
@@ -105,6 +109,30 @@ pub fn IsFn(base: anytype, comptime to: Node.Kind) bool {
 pub fn AsCastFn(base: anytype, comptime to: Node.Kind) ?*to.Type() {
     return if (base.classIndex == to) @ptrCast(@alignCast(base)) else null;
 }
+
+pub const Attr = extern struct {
+    classIndex: Node.Kind = .attr,
+
+    /// false when inside an attribute list, ie @[native checked]
+    hasAt: bool,
+};
+
+pub const ParametrizedAttr = extern struct {
+    classIndex: Node.Kind = .parametrized_attr,
+
+    /// for `@x(args)` form
+    openParenPosition: Location.Position,
+    closeParenPosition: Location.Position,
+
+    /// Commas inside the `(a, b, c)` arg list
+    argsCommaPositions: Ast.Array(Location.Position),
+};
+
+pub const AttrList = extern struct {
+    atBracketPosition: Location.Position,
+    closeBracketPosition: Location.Position,
+    commaPositions: Ast.Array(Location.Position),
+};
 
 pub const ExprGroup = extern struct {
     classIndex: Node.Kind = .expr_group,
@@ -168,6 +196,7 @@ pub const ExprIndexExpr = extern struct {
 pub const ExprFunction = extern struct {
     classIndex: Node.Kind = .expr_function,
 
+    attrLists: Ast.Array(*AttrList) = .{},
     functionKeywordPosition: Location.Position = .missing,
     openGenericsPosition: Location.Position = .missing,
     genericsCommaPositions: Ast.Array(Location.Position),
@@ -297,12 +326,14 @@ pub const StatCompoundAssign = extern struct {
 pub const StatFunction = extern struct {
     classIndex: Node.Kind = .stat_function,
 
+    attrLists: Ast.Array(*AttrList),
     functionKeywordPosition: Location.Position,
 };
 
 pub const StatLocalFunction = extern struct {
     classIndex: Node.Kind = .stat_local_function,
 
+    attrLists: Ast.Array(*AttrList),
     localKeywordPosition: Location.Position,
     functionKeywordPosition: Location.Position,
 };
@@ -489,6 +520,8 @@ test "CstValuesCheck" {
     if (@import("builtin").cpu.arch.isWasm() or @import("builtin").os.tag == .windows)
         return error.SkipZigTest;
     const CstValues = struct {
+        pub extern "c" const CstAttrIndex: u8;
+        pub extern "c" const CstParametrizedAttrIndex: u8;
         pub extern "c" const CstExprGroupIndex: u8;
         pub extern "c" const CstExprConstantNumberIndex: u8;
         pub extern "c" const CstExprConstantIntegerIndex: u8;
