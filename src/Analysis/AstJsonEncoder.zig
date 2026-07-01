@@ -40,7 +40,7 @@ test toJson {
         defer std.testing.allocator.free(data);
 
         try std.testing.expectEqualStrings(
-            \\{"type":"AstStatBlock","location":"0,0 - 1,0","hasEnd":true,"body":[{"type":"AstStatLocal","location":"0,0 - 0,11","vars":[{"luauType":null,"name":"x","type":"AstLocal","location":"0,6 - 0,7"}],"values":[{"type":"AstExprConstantNumber","location":"0,10 - 0,11","value":1}]}]}
+            \\{"type":"AstStatBlock","location":"0,0 - 1,0","hasEnd":true,"body":[{"type":"AstStatLocal","location":"0,0 - 0,11","vars":[{"luauType":null,"name":"x","isConst":false,"type":"AstLocal","location":"0,6 - 0,7"}],"values":[{"type":"AstExprConstantNumber","location":"0,10 - 0,11","value":1}]}]}
         , data);
     }
 }

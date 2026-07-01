@@ -29,6 +29,14 @@ pub const Ast = if (build_config.buildAst) struct {
     }
 } else void;
 
+pub const Inliner = if (build_config.buildInliner) struct {
+    pub const luajitinliner = @import("Inliner/luajitinliner.zig");
+    test {
+        inline for (@typeInfo(@This()).@"struct".decls) |decl|
+            std.testing.refAllDecls(@field(@This(), decl.name));
+    }
+} else void;
+
 pub const Common = struct {
     pub const DenseHash = @import("Common/DenseHash.zig");
     pub const Bytecode = @import("Common/Bytecode.zig");
@@ -104,6 +112,7 @@ test {
     _ = Common;
     _ = Compiler;
     _ = VM;
+    _ = Inliner;
     _ = cpp_std;
 }
 

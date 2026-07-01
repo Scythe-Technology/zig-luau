@@ -38,6 +38,7 @@ pub fn build(b: *Build) !void {
     };
     const build_Compiler = b.option(bool, "Compiler", "Build Luau Compiler") orelse true;
     const build_VM = b.option(bool, "VM", "Build Luau VM") orelse true;
+    const build_Inliner = b.option(bool, "Inliner", "Build Luau Inliner") orelse true;
 
     const use_zig_backend = b.option(bool, "use_zig_backend", "Build Luau with zig written backend") orelse true;
     const use_4_vector = b.option(bool, "use_4_vector", "Build Luau to use 4-vectors instead of the default 3-vector.") orelse false;
@@ -68,6 +69,7 @@ pub fn build(b: *Build) !void {
     config.addOption(bool, "buildAnalysis", build_Analysis);
     config.addOption(bool, "buildCompiler", build_Compiler);
     config.addOption(bool, "buildVM", build_VM);
+    config.addOption(bool, "buildInliner", build_Inliner);
 
     // Luau C Headers
     const headers = b.addTranslateC(.{
@@ -90,6 +92,7 @@ pub fn build(b: *Build) !void {
     try FLAGS.append(b.allocator, "-DLUA_API=extern\"C\"");
     try FLAGS.append(b.allocator, "-DLUACODE_API=extern\"C\"");
     try FLAGS.append(b.allocator, "-DLUACODEGEN_API=extern\"C\"");
+    try FLAGS.append(b.allocator, "-DLUAJITINLINER_API=extern\"C\"");
     if (hard_mem_tests > 0)
         try FLAGS.append(b.allocator, b.fmt("-DHARDMEMTESTS={d}", .{hard_mem_tests}));
     if (hard_stack_tests)
@@ -108,6 +111,7 @@ pub fn build(b: *Build) !void {
     const libBytecode = buildBytecode(b, target, luau_dep, optimize, version, compile_flags, libCommon);
     const libCompiler = buildCompiler(b, target, luau_dep, optimize, version, compile_flags, libAst, libBytecode);
     const libVM = buildVM(b, target, luau_dep, optimize, version, compile_flags, libCommon);
+    const libInliner = buildInliner(b, target, luau_dep, optimize, version, compile_flags, libVM, libBytecode);
     const libConfig = buildConfig(b, target, luau_dep, optimize, version, compile_flags, libCommon, libAst, libCompiler, libVM);
     const libCodeGen = buildCodeGen(b, target, luau_dep, optimize, version, compile_flags, libVM);
     const libAnalysis = try buildAnalysis(b, target, luau_dep, optimize, version, compile_flags, libAst, libConfig, libCompiler, libVM);
@@ -124,6 +128,7 @@ pub fn build(b: *Build) !void {
         if (build_CodeGen) libCodeGen else null,
         if (build_Compiler) libCompiler else null,
         if (build_VM) libVM else null,
+        if (build_Inliner) libInliner else null,
         .{ .type = .normal },
     );
     if (!no_bin)
@@ -149,6 +154,7 @@ pub fn build(b: *Build) !void {
         if (build_CodeGen) libCodeGen else null,
         if (build_Compiler) libCompiler else null,
         if (build_VM) libVM else null,
+        if (build_Inliner) libInliner else null,
         .{ .type = .@"test" },
     );
 
@@ -618,6 +624,46 @@ fn buildVM(
     return lib;
 }
 
+fn buildInliner(
+    b: *Build,
+    target: Build.ResolvedTarget,
+    dependency: *Build.Dependency,
+    optimize: std.builtin.OptimizeMode,
+    version: std.SemanticVersion,
+    flags: []const []const u8,
+    libVM: *Step.Compile,
+    libBytecode: *Step.Compile,
+) *Step.Compile {
+    const mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libcpp = true,
+    });
+
+    const lib = b.addLibrary(.{
+        .name = "Inliner",
+        .linkage = .static,
+        .root_module = mod,
+        .version = version,
+    });
+
+    linkIncludePath(lib, libVM);
+    linkIncludePath(lib, libBytecode);
+    mod.linkLibrary(libVM);
+    mod.linkLibrary(libBytecode);
+
+    for (LUAU_Inliner_HEADERS_DIRS) |dir|
+        mod.addIncludePath(dependency.path(dir));
+
+    mod.addCSourceFiles(.{
+        .root = dependency.path(""),
+        .files = &LUAU_Inliner_SOURCE_FILES,
+        .flags = flags,
+    });
+
+    return lib;
+}
+
 fn buildRequire(
     b: *Build,
     target: Build.ResolvedTarget,
@@ -697,6 +743,7 @@ fn buildLuau(
     libCodeGen: ?*Step.Compile,
     libCompiler: ?*Step.Compile,
     libVM: ?*Step.Compile,
+    libInliner: ?*Step.Compile,
     Mode: struct { type: enum { @"test", normal } = .normal },
 ) !*Step.Compile {
     const mod = b.createModule(.{
@@ -757,6 +804,10 @@ fn buildLuau(
             mod.addIncludePath(dependency.path("VM/src"));
         }
         linkIncludePath(lib, lib_vm);
+    }
+    if (libInliner) |lib_inliner| {
+        mod.linkLibrary(lib_inliner);
+        linkIncludePath(lib, lib_inliner);
     }
 
     // It may not be as likely that other software links against Luau, but might as well expose these anyway
@@ -873,6 +924,15 @@ const LUAU_Bytecode_HEADERS_DIRS = [_][]const u8{
 const LUAU_Bytecode_SOURCE_FILES = [_][]const u8{
     "Bytecode/src/BytecodeBuilder.cpp",
     "Bytecode/src/BytecodeGraph.cpp",
+};
+
+const LUAU_Inliner_HEADERS_DIRS = [_][]const u8{
+    "Inliner/include/",
+    "Inliner/src/",
+};
+const LUAU_Inliner_SOURCE_FILES = [_][]const u8{
+    "Inliner/src/JitInliner.cpp",
+    "Inliner/src/luajitinliner.cpp",
 };
 
 const LUAU_CodeGen_HEADERS_DIRS = [_][]const u8{

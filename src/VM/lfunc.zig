@@ -14,6 +14,9 @@ pub inline fn sizeCclosure(n: u8) usize {
 pub inline fn sizeLclosure(n: u8) usize {
     return @offsetOf(lobject.Closure, "d") + @offsetOf(lobject.Closure.ValueUnion.L, "uprefs") + (@sizeOf(lobject.TValue) * @as(usize, @intCast(n)));
 }
+pub inline fn getproto(cl: *lobject.Closure) *lobject.Proto {
+    return cl.d.l.p;
+}
 
 pub fn Fnewproto(L: *lua.State) !*lobject.Proto {
     const f = try lmem.Mnewgco(L, lobject.Proto, @sizeOf(lobject.Proto), L.activememcat);
@@ -62,6 +65,8 @@ pub fn Fnewproto(L: *lua.State) !*lobject.Proto {
     f.feedbackvec = null;
     f.feedbackvecsize = 0;
     f.funid = 0;
+    f.optimized = null;
+    f.deoptimized = null;
 
     return f;
 }
@@ -74,7 +79,6 @@ pub fn FnewLclosure(L: *lua.State, nelems: u8, e: *lobject.LuaTable, p: *lobject
     c.nupvalues = nelems;
     c.stacksize = p.maxstacksize;
     c.preload = 0;
-    c.usage = 0;
     c.d.l.p = p;
     for (0..nelems) |i|
         c.d.l.upreferences()[i].setnilvalue();
@@ -89,7 +93,6 @@ pub fn FnewCclosure(L: *lua.State, nelems: u8, e: *lobject.LuaTable) !*lobject.C
     c.nupvalues = nelems;
     c.stacksize = lua.config.MINSTACK;
     c.preload = 0;
-    c.usage = 0;
     c.d.c.f = null;
     c.d.c.cont = null;
     c.d.c.debugname = null;

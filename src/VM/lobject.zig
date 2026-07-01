@@ -413,6 +413,8 @@ pub const Proto = extern struct {
     feedbackvec: ?[*]FeedbackVectorSlot,
     feedbackvecsize: u32,
     funid: u32,
+    optimized: ?*Proto,
+    deoptimized: ?*Proto,
 
     pub inline fn obj2gco(obj: *Proto) *lstate.GCObject {
         return @ptrCast(@alignCast(obj));
@@ -475,7 +477,6 @@ pub const Closure = extern struct {
     stacksize: u8,
     preload: u8,
 
-    usage: u64,
     gclist: ?*lstate.GCObject,
     env: *LuaTable,
 

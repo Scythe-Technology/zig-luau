@@ -1380,6 +1380,8 @@ pub const StatLocalFunction = extern struct {
     name: *Local,
     func: *ExprFunction,
     isConst: bool = false,
+    /// Position of the `const` keyword; Position::missing() when isConst is false.
+    constKeywordBegin: Location.Position,
 
     pub const is = IsFn;
     pub const as = AsCastFn;

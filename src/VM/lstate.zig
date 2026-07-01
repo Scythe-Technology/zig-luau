@@ -95,6 +95,7 @@ pub const CallInfo = extern struct {
     func: lobject.StkId,
     /// top for this function
     top: lobject.StkId,
+    p: ?*lobject.Proto,
     savedpc: extern union {
         inst: ?*const lcommon.Instruction,
         errfunc: i32,
@@ -878,14 +879,6 @@ pub fn Efreethread(L: *lua_State, L1: *lua.State, page: *lmem.lua_Page) void {
     lmem.Mfreegco(L, @ptrCast(@alignCast(L1)), @sizeOf(lua.State), L1.header.memcat, page);
 }
 
-fn cleanupcistack(L: *lua_State) void {
-    var lastci = L.ci.?;
-    while (lastci != L.base_ci) : (lastci -= 1) {
-        std.debug.assert(lastci[0].func[0].clvalue().usage > 0);
-        lastci[0].func[0].clvalue().usage -= 1;
-    }
-}
-
 pub fn resetthread(L: *lua_State) Errorset.Memory!void {
     if (comptime !build_config.use_zig_backend) {
         return c.lua_resetthread(@ptrCast(L));
@@ -895,11 +888,10 @@ pub fn resetthread(L: *lua_State) Errorset.Memory!void {
 
     // close upvalues before clearing anything
     lfunc.Fclose(L, @ptrCast(L.stack));
-    // if (FFlag::LuauClosureUsageCounter)
-    //     cleanupcistack(L);
 
     // clear call frames
     const ci = &L.base_ci.?[0];
+    ci.p = null;
     ci.func = @ptrCast(L.stack);
     ci.base = ci.func[1..];
     ci.top = ci.base[lua.config.MINSTACK..];
