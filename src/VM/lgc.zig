@@ -708,6 +708,13 @@ fn markmt(g: *lstate.global_State) void {
     }
 }
 
+fn marktaggedmt(g: *lstate.global_State) void {
+    for (0..lua.config.UTAG_LIMIT) |i| {
+        if (g.udatamt[i]) |mt|
+            markobject(g, @ptrCast(@alignCast(mt)));
+    }
+}
+
 fn markroot(L: *lua.State) void {
     const g = L.global;
     g.gray = null;
@@ -732,6 +739,8 @@ fn markroot(L: *lua.State) void {
     }
 
     markmt(g);
+    marktaggedmt(g);
+
     g.gcstate = GCSpropagate;
 }
 

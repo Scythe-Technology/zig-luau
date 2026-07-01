@@ -13,7 +13,7 @@ pub const MEMERRMSG = "not enough memory";
 pub const ERRERRMSG = "error in error handling";
 
 pub fn currentpc(ci: *lstate.CallInfo) usize {
-    if (ci.savedpc) |pc| {
+    if (ci.savedpc.inst) |pc| {
         return (@divExact(@intFromPtr(pc) - @intFromPtr(ci.ci_func().d.l.p.code), @sizeOf(u32))) - 1;
     } else return 0;
 }

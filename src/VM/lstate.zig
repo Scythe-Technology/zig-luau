@@ -95,7 +95,10 @@ pub const CallInfo = extern struct {
     func: lobject.StkId,
     /// top for this function
     top: lobject.StkId,
-    savedpc: ?*const lcommon.Instruction,
+    savedpc: extern union {
+        inst: ?*const lcommon.Instruction,
+        errfunc: i32,
+    },
 
     /// expected number of results from this function
     nresults: c_int,

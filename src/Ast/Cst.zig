@@ -258,7 +258,6 @@ pub const StatReturn = extern struct {
 pub const StatLocal = extern struct {
     classIndex: Node.Kind = .stat_local,
 
-    declarationKeywordPosition: Location.Position = .missing,
     varsAnnotationColonPositions: Ast.Array(Location.Position),
     varsCommaPositions: Ast.Array(Location.Position),
     valuesCommaPositions: Ast.Array(Location.Position),

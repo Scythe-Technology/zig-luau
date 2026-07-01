@@ -191,6 +191,10 @@ pub fn Cvalidate(L: *lua.State) void {
         if (g.mt[i]) |mt|
             std.debug.assert(!lgc.isdead(g, mt.obj2gco()));
 
+    for (0..lua.config.UTAG_LIMIT) |i|
+        if (g.udatamt[i]) |mt|
+            std.debug.assert(!lgc.isdead(g, mt.obj2gco()));
+
     validategraylist(g, g.weak);
     validategraylist(g, g.gray);
     validategraylist(g, g.grayagain);

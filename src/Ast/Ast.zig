@@ -1201,6 +1201,7 @@ pub const StatLocal = extern struct {
     isConst: bool = false,
     isExported: bool = false,
 
+    keywordLocation: cpp_std.Optional(Location),
     equalsSignLocation: cpp_std.Optional(Location),
 
     pub const is = IsFn;
