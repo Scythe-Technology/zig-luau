@@ -138,7 +138,7 @@ pub fn build(b: *Build) !void {
         mod.addCSourceFiles(.{
             .flags = compile_flags,
             .root = b.path("src/Ast/"),
-            .files = if (optimize == .Debug) &.{
+            .files = if (optimize == .Debug or optimize == .ReleaseSafe) &.{
                 "Allocator.cpp",
                 "Lexer.cpp",
                 "Parser.cpp",
@@ -180,7 +180,7 @@ pub fn build(b: *Build) !void {
     if (build_VM) {
         linkIncludePath(mod, libVM);
         mod.linkLibrary(libVM);
-        if (optimize == .Debug) {
+        if (optimize == .Debug or optimize == .ReleaseSafe) {
             mod.addCSourceFile(.{
                 .file = b.path("src/VM/acc.cpp"),
                 .flags = compile_flags,
