@@ -20,23 +20,22 @@ pub fn Variant(comptime Ts: []const type) type {
     };
 
     const TaggedUnion = blk: {
-        var names: [Ts.len][]const u8 = undefined;
-        var field_types: [Ts.len]type = undefined;
-        var field_attributes: [Ts.len]std.builtin.Type.UnionField.Attributes = undefined;
+        var fields: [Ts.len]std.builtin.Type.UnionField = undefined;
         inline for (Ts, 0..) |T, i| {
-            names[i] = std.fmt.comptimePrint("{d}", .{i}); // becomes @"0", @"1", etc.
-            field_types[i] = T;
-            field_attributes[i] = .{
-                .@"align" = @alignOf(T),
+            fields[i] = .{
+                .name = std.fmt.comptimePrint("{d}", .{i}), // becomes @"0", @"1", etc.
+                .type = T,
+                .alignment = @alignOf(T),
             };
         }
-        break :blk @Union(
-            .auto,
-            null,
-            &names,
-            &field_types,
-            &field_attributes,
-        );
+        break :blk @Type(.{
+            .@"union" = .{
+                .layout = .auto,
+                .tag_type = null,
+                .fields = &fields,
+                .decls = &.{},
+            },
+        });
     };
 
     return extern struct {

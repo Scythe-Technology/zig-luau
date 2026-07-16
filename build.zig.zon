@@ -2,7 +2,7 @@
     .name = .luau,
     .fingerprint = 0x5e07e249a70630b8,
     .version = "0.0.0+729",
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.15.2",
     .dependencies = .{
         .luau = .{
             .url = "git+https://github.com/luau-lang/luau#0.729",
