@@ -627,7 +627,7 @@ test "CstValuesCheck" {
             const enum_value = @as(*const Cst.Node.Kind, @ptrCast(@alignCast(default_value_ptr))).*;
 
             std.testing.expectEqual(@field(CstValues, decl.name), @intFromEnum(enum_value)) catch |err| {
-                std.debug.print("error for {s}\n", .{name});
+                std.debug.print("index error for {s}\n", .{name});
                 return err;
             };
         } else if (comptime std.mem.endsWith(u8, decl.name, "Size")) {
@@ -636,7 +636,7 @@ test "CstValuesCheck" {
             const cst_node_type = @field(Cst, name);
 
             std.testing.expectEqual(@field(CstValues, decl.name), @sizeOf(cst_node_type)) catch |err| {
-                std.debug.print("error for {s}\n", .{name});
+                std.debug.print("size error for {s}\n", .{name});
                 return err;
             };
         }

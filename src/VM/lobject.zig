@@ -415,6 +415,7 @@ pub const Proto = extern struct {
     funid: u32,
     optimized: ?*Proto,
     deoptimized: ?*Proto,
+    cost: u64,
 
     pub inline fn obj2gco(obj: *Proto) *lstate.GCObject {
         return @ptrCast(@alignCast(obj));

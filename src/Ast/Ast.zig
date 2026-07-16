@@ -1684,6 +1684,7 @@ pub const TypeReference = extern struct {
     hasParameterList: bool,
     prefix: cpp_std.Optional(Name),
     prefixLocation: cpp_std.Optional(Location),
+    prefixLocal: ?*Local = null,
     name: Name,
     nameLocation: Location,
     parameters: Array(TypeOrPack),
@@ -2432,7 +2433,7 @@ test "AstValuesCheck" {
             const enum_value = @as(*const Ast.Node.Kind, @ptrCast(@alignCast(default_value_ptr))).*;
 
             std.testing.expectEqual(@field(AstValues, decl.name), @intFromEnum(enum_value)) catch |err| {
-                std.debug.print("error for {s}\n", .{name});
+                std.debug.print("index error for {s}\n", .{name});
                 return err;
             };
         } else if (comptime std.mem.endsWith(u8, decl.name, "Size")) {
@@ -2441,7 +2442,7 @@ test "AstValuesCheck" {
             const ast_node_type = @field(Ast, name);
 
             std.testing.expectEqual(@field(AstValues, decl.name), @sizeOf(ast_node_type)) catch |err| {
-                std.debug.print("error for {s}\n", .{name});
+                std.debug.print("size error for {s}\n", .{name});
                 return err;
             };
         } else @compileError("unknown exported constant");

@@ -67,6 +67,7 @@ pub fn Fnewproto(L: *lua.State) !*lobject.Proto {
     f.funid = 0;
     f.optimized = null;
     f.deoptimized = null;
+    f.cost = 0;
 
     return f;
 }

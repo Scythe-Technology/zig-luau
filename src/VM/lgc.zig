@@ -701,6 +701,13 @@ pub fn Cfreeall(L: *lua.State) void {
     std.debug.assert(L.global.strt.nuse == 0);
 }
 
+fn markudatadirectfields(g: *lstate.global_State) void {
+    for (0..ludata.UTAG_INTERNAL_LIMIT) |i| {
+        if (g.udatadirectfields[i]) |f|
+            markobject(g, f.obj2gco());
+    }
+}
+
 fn markmt(g: *lstate.global_State) void {
     for (0..lua.Type.T_COUNT) |i| {
         if (g.mt[i]) |mt|
@@ -733,10 +740,7 @@ fn markroot(L: *lua.State) void {
         markvalue(g, &udatadirect.namecalltm);
     }
 
-    for (0..ludata.UTAG_INTERNAL_LIMIT) |i| {
-        if (g.udatadirectfields[i]) |f|
-            markobject(g, f.obj2gco());
-    }
+    markudatadirectfields(g);
 
     markmt(g);
     marktaggedmt(g);
@@ -815,6 +819,11 @@ fn atomic(L: *lua.State) Errorset.Table!usize {
     std.debug.assert(!iswhite(@ptrCast(@alignCast(g.mainthread))));
     markobject(g, @ptrCast(@alignCast(L))); // mark running thread
     markmt(g); // mark basic metatables (again)
+
+    marktaggedmt(g); // mark tagged userdata metatables (again)
+
+    markudatadirectfields(g); // mark direct field dispatch tables (again)
+
     work += try propagateall(g);
 
     // TODO: LUAI_GCMETRICS
