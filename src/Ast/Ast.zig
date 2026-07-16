@@ -291,7 +291,8 @@ pub const Attr = extern struct {
         Checked = 0,
         Native = 1,
         Deprecated = 2,
-        Unknown = 3,
+        DebugNoinline = 3,
+        Unknown = 4,
     };
 
     pub const is = IsFn;
@@ -2430,7 +2431,7 @@ test "AstValuesCheck" {
             const default_value_ptr = field.?.default_value_ptr orelse @compileError("classIndex field does not have a default value");
             const enum_value = @as(*const Ast.Node.Kind, @ptrCast(@alignCast(default_value_ptr))).*;
 
-            std.testing.expectEqual(@intFromEnum(enum_value), @field(AstValues, decl.name)) catch |err| {
+            std.testing.expectEqual(@field(AstValues, decl.name), @intFromEnum(enum_value)) catch |err| {
                 std.debug.print("error for {s}\n", .{name});
                 return err;
             };
@@ -2439,7 +2440,7 @@ test "AstValuesCheck" {
 
             const ast_node_type = @field(Ast, name);
 
-            std.testing.expectEqual(@sizeOf(ast_node_type), @field(AstValues, decl.name)) catch |err| {
+            std.testing.expectEqual(@field(AstValues, decl.name), @sizeOf(ast_node_type)) catch |err| {
                 std.debug.print("error for {s}\n", .{name});
                 return err;
             };

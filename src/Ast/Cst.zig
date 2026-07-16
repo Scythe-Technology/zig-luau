@@ -626,7 +626,7 @@ test "CstValuesCheck" {
             const default_value_ptr = field.?.default_value_ptr orelse @compileError("classIndex field does not have a default value");
             const enum_value = @as(*const Cst.Node.Kind, @ptrCast(@alignCast(default_value_ptr))).*;
 
-            std.testing.expectEqual(@intFromEnum(enum_value), @field(CstValues, decl.name)) catch |err| {
+            std.testing.expectEqual(@field(CstValues, decl.name), @intFromEnum(enum_value)) catch |err| {
                 std.debug.print("error for {s}\n", .{name});
                 return err;
             };
@@ -635,7 +635,7 @@ test "CstValuesCheck" {
 
             const cst_node_type = @field(Cst, name);
 
-            std.testing.expectEqual(@sizeOf(cst_node_type), @field(CstValues, decl.name)) catch |err| {
+            std.testing.expectEqual(@field(CstValues, decl.name), @sizeOf(cst_node_type)) catch |err| {
                 std.debug.print("error for {s}\n", .{name});
                 return err;
             };

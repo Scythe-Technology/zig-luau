@@ -765,27 +765,35 @@ fn buildLuau(
 
     if (libAst) |lib_ast| {
         mod.linkLibrary(lib_ast);
-        mod.addCSourceFiles(.{ .flags = flags, .root = b.path("src/Ast/"), .files = if (Mode.type == .@"test") &.{
-            "Allocator.cpp",
-            "Lexer.cpp",
-            "Parser.cpp",
-            "Class.cpp",
-        } else &.{
-            "Allocator.cpp",
-            "Lexer.cpp",
-            "Parser.cpp",
-        } });
+        mod.addCSourceFiles(.{
+            .flags = flags,
+            .root = b.path("src/Ast/"),
+            .files = if (Mode.type == .@"test") &.{
+                "Allocator.cpp",
+                "Lexer.cpp",
+                "Parser.cpp",
+                "Class.cpp",
+            } else &.{
+                "Allocator.cpp",
+                "Lexer.cpp",
+                "Parser.cpp",
+            },
+        });
         linkIncludePath(lib, lib_ast);
     }
     if (libAnalysis) |lib_analysis| {
         mod.linkLibrary(lib_analysis);
-        mod.addCSourceFiles(.{ .flags = flags, .root = b.path("src/Analysis/"), .files = &.{
-            "FileUtils.cpp",
-            "AstJsonEncoder.cpp",
-            "Frontend.cpp",
-            "FileResolver.cpp",
-            "GenericConfigResolver.cpp",
-        } });
+        mod.addCSourceFiles(.{
+            .flags = flags,
+            .root = b.path("src/Analysis/"),
+            .files = &.{
+                "FileUtils.cpp",
+                "AstJsonEncoder.cpp",
+                "Frontend.cpp",
+                "FileResolver.cpp",
+                "GenericConfigResolver.cpp",
+            },
+        });
         linkIncludePath(lib, lib_analysis);
     }
     if (libCodeGen) |lib_code_gen| {
@@ -794,13 +802,19 @@ fn buildLuau(
     }
     if (libCompiler) |lib_compiler| {
         mod.linkLibrary(lib_compiler);
-        mod.addCSourceFile(.{ .file = b.path("src/Compiler/Compiler.cpp"), .flags = flags });
+        mod.addCSourceFile(.{
+            .file = b.path("src/Compiler/Compiler.cpp"),
+            .flags = flags,
+        });
         linkIncludePath(lib, lib_compiler);
     }
     if (libVM) |lib_vm| {
         mod.linkLibrary(lib_vm);
         if (Mode.type == .@"test") {
-            mod.addCSourceFile(.{ .file = b.path("src/VM/acc.cpp"), .flags = flags });
+            mod.addCSourceFile(.{
+                .file = b.path("src/VM/acc.cpp"),
+                .flags = flags,
+            });
             mod.addIncludePath(dependency.path("VM/src"));
         }
         linkIncludePath(lib, lib_vm);
@@ -896,6 +910,7 @@ const LUAU_Analysis_SOURCE_FILES = [_][]const u8{
     "Analysis/src/TypeOrPack.cpp",
     "Analysis/src/TypePack.cpp",
     "Analysis/src/TypePath.cpp",
+    "Analysis/src/TypeStateMap.cpp",
     "Analysis/src/TypeUtils.cpp",
     "Analysis/src/Unifiable.cpp",
     "Analysis/src/Unifier.cpp",
