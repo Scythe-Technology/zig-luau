@@ -1148,7 +1148,7 @@ pub fn setfenv(L: *lua.State, idx: i32) bool {
         @intFromEnum(lua.Type.Thread) => o.thvalue().gt = (L.top - 1)[0].hvalue(),
         else => return false,
     }
-    lgc.Cobjbarrier(L, @ptrCast(@alignCast(&o.gcvalue().gch)), @ptrCast(L.top - 1));
+    lgc.Cobjbarrier(L, @ptrCast(@alignCast(&o.gcvalue().gch)), @ptrCast(@alignCast(L.top - 1)));
     return true;
 }
 
