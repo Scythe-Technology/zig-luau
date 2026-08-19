@@ -768,7 +768,7 @@ pub const LuauClass = extern struct {
 
     /// Number of instance members that we expect instances of this class object
     /// to have.
-    numberofinstancemembers: c_int,
+    numberofinstancemembers: u32,
 
     // Total number of members that we expect this class object to have between
     // instance and static members.
@@ -778,7 +778,7 @@ pub const LuauClass = extern struct {
     // to reference the total number of members (for validating hot paths in
     // the interpreter) and the number of instance members (branching on
     // instance or static members, creating class instances).
-    numberofallmembers: c_int,
+    numberofallmembers: u32,
 
     pub inline fn obj2gco(obj: *LuauClass) *lstate.GCObject {
         return @ptrCast(@alignCast(obj));
@@ -796,7 +796,7 @@ pub const LuauObject = extern struct {
     /// The number of members that this instance contains. We need this in order
     /// to free ourselves if we got swept in the same GC cycle as our class
     /// pointer.
-    numberofmembers: c_int,
+    numberofmembers: u32,
 
     /// The fields of this instance.
     members: [*]TValue,

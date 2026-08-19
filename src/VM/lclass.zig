@@ -18,7 +18,7 @@ pub fn Rnewclass(
     name: *lobject.TString,
     memberstooffset: *lobject.LuaTable,
     offsettomember: [*]*lobject.TString,
-    numberofinstancemembers: usize,
+    numberofinstancemembers: u32,
     numberofstaticmembers: u32,
 ) !*lobject.LuauClass {
     std.debug.assert(L.global.GCthreshold == std.math.maxInt(usize)); // GC must be paused
@@ -26,7 +26,7 @@ pub fn Rnewclass(
     lgc.Cinit(L, @ptrCast(@alignCast(classobject)), @intFromEnum(lua.Type.Class));
     classobject.name = name;
 
-    classobject.staticmembers = try lmem.Mnewarray(L, lobject.TValue, numberofinstancemembers, classobject.header.memcat);
+    classobject.staticmembers = try lmem.Mnewarray(L, lobject.TValue, numberofstaticmembers, classobject.header.memcat);
     for (0..numberofstaticmembers) |i|
         classobject.staticmembers[i].setnilvalue();
 
@@ -45,8 +45,8 @@ pub fn Rnewclass(
     classobject.metatable.readonly = 1;
     classobject.instancemetatable = null;
 
-    classobject.numberofinstancemembers = @intCast(numberofinstancemembers);
-    classobject.numberofallmembers = @intCast(numberofinstancemembers + numberofstaticmembers);
+    classobject.numberofinstancemembers = numberofinstancemembers;
+    classobject.numberofallmembers = numberofinstancemembers + numberofstaticmembers;
 
     return classobject;
 }
@@ -54,11 +54,10 @@ pub fn Rnewclass(
 pub fn Raddclassmember(L: *lua.State, classobject: *lobject.LuauClass, name: *lobject.TString, value: *const lobject.TValue) !void {
     std.debug.assert(@as(?*anyopaque, @ptrCast(@alignCast(classobject.staticmembers))) != null);
     const offset = ltable.Hgetstr(classobject.memberstooffset, name);
-    std.debug.assert(offset.ttisnumber());
-    const offsetint: i32 = @intFromFloat(offset.nvalue());
+    const offsetint: u32 = @intFromFloat(offset.nvalue());
     std.debug.assert(offsetint >= classobject.numberofinstancemembers and offsetint < classobject.numberofallmembers);
     std.debug.assert(value.ttisfunction() and value.value.gc.?.gch.ttype() == @intFromEnum(lua.Type.Function));
-    classobject.staticmembers[@as(u32, @intCast(offsetint)) - @as(u32, @intCast(classobject.numberofinstancemembers))].setobj(L, value);
+    classobject.staticmembers[offsetint - classobject.numberofinstancemembers].setobj(L, value);
     lgc.Cbarrier(L, @ptrCast(@alignCast(classobject)), value);
 
     var isMetamethod: bool = name == lstring.Sassumelstr(L, "__tostring");
@@ -80,12 +79,12 @@ pub fn Raddclassmember(L: *lua.State, classobject: *lobject.LuauClass, name: *lo
 extern "c" fn zig_luaR_createobject(L: *lua.State) c_int;
 
 pub fn Rfreeclass(L: *lua.State, classobject: *lobject.LuauClass, page: *lmem.lua_Page) void {
-    lmem.Mfreearray(L, lobject.TValue, classobject.staticmembers, @intCast(classobject.numberofallmembers - classobject.numberofinstancemembers), classobject.header.memcat);
-    lmem.Mfreearray(L, *lobject.TString, classobject.offsettomember, @intCast(classobject.numberofallmembers), classobject.header.memcat);
+    lmem.Mfreearray(L, lobject.TValue, classobject.staticmembers, classobject.numberofallmembers - classobject.numberofinstancemembers, classobject.header.memcat);
+    lmem.Mfreearray(L, *lobject.TString, classobject.offsettomember, classobject.numberofallmembers, classobject.header.memcat);
     lmem.Mfreegco(L, @ptrCast(@alignCast(classobject)), @sizeOf(lobject.LuauClass), classobject.header.memcat, page);
 }
 
 pub fn Rfreeobject(L: *lua.State, classinstance: *lobject.LuauObject, page: *lmem.lua_Page) void {
-    lmem.Mfreearray(L, lobject.TValue, classinstance.members, @intCast(classinstance.numberofmembers), classinstance.header.memcat);
+    lmem.Mfreearray(L, lobject.TValue, classinstance.members, classinstance.numberofmembers, classinstance.header.memcat);
     lmem.Mfreegco(L, @ptrCast(@alignCast(classinstance)), @sizeOf(lobject.LuauObject), classinstance.header.memcat, page);
 }

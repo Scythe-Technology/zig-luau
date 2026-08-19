@@ -449,21 +449,21 @@ fn traversestack(g: *lstate.global_State, L: *lua.State) void {
     }
 }
 
-fn traverseclassobject(g: *lstate.global_State, classobject: *lobject.LuauClass) void {
+fn traverseclass(g: *lstate.global_State, classobject: *lobject.LuauClass) void {
     markobject(g, @ptrCast(@alignCast(classobject.name)));
     markobject(g, @ptrCast(@alignCast(classobject.memberstooffset)));
-    for (0..@intCast(classobject.numberofallmembers)) |i|
+    for (0..classobject.numberofallmembers) |i|
         markobject(g, @ptrCast(@alignCast(classobject.offsettomember[i])));
-    for (0..@intCast(classobject.numberofallmembers - classobject.numberofinstancemembers)) |i|
+    for (0..classobject.numberofallmembers - classobject.numberofinstancemembers) |i|
         markobject(g, @ptrCast(@alignCast(&classobject.staticmembers[i])));
     markobject(g, @ptrCast(@alignCast(classobject.metatable)));
     if (classobject.instancemetatable) |mt|
         markobject(g, @ptrCast(@alignCast(mt)));
 }
 
-fn traverseclassinstances(g: *lstate.global_State, classinst: *lobject.LuauObject) void {
+fn traverseobject(g: *lstate.global_State, classinst: *lobject.LuauObject) void {
     markobject(g, @ptrCast(@alignCast(classinst.lclass)));
-    for (0..@intCast(classinst.numberofmembers)) |i|
+    for (0..classinst.numberofmembers) |i|
         markobject(g, @ptrCast(@alignCast(&classinst.members[i])));
 }
 
@@ -561,17 +561,17 @@ fn propagatemark(g: *lstate.global_State) Errorset.Memory!usize {
         @intFromEnum(lua.Type.Class) => {
             const classobject = o.toclass();
             g.gray = classobject.gclist;
-            traverseclassobject(g, classobject);
+            traverseclass(g, classobject);
             return @sizeOf(lobject.LuauClass) +
-                (@as(u32, @intCast(classobject.numberofallmembers)) - @as(u32, @intCast(classobject.numberofinstancemembers))) * @sizeOf(lobject.TValue) +
-                @as(u32, @intCast(classobject.numberofallmembers)) * @sizeOf(*lobject.TString);
+                ((classobject.numberofallmembers - classobject.numberofinstancemembers) * @sizeOf(lobject.TValue)) +
+                (classobject.numberofallmembers * @sizeOf(*lobject.TString));
         },
         @intFromEnum(lua.Type.Object) => {
             const classinst = o.toobject();
             g.gray = classinst.gclist;
-            traverseclassinstances(g, classinst);
+            traverseobject(g, classinst);
             return @sizeOf(lobject.LuauObject) +
-                (@as(u32, @intCast(classinst.numberofmembers)) * @sizeOf(lobject.TValue));
+                (classinst.numberofmembers * @sizeOf(lobject.TValue));
         },
         else => unreachable,
     }
@@ -701,6 +701,16 @@ pub fn Cfreeall(L: *lua.State) void {
     std.debug.assert(L.global.strt.nuse == 0);
 }
 
+fn markudatadirectaccess(g: *lstate.global_State) void {
+    for (0..ludata.UTAG_INTERNAL_LIMIT) |i| {
+        const udatadirect = &g.udatadirect[i];
+
+        markvalue(g, &udatadirect.indextm);
+        markvalue(g, &udatadirect.newindextm);
+        markvalue(g, &udatadirect.namecalltm);
+    }
+}
+
 fn markudatadirectfields(g: *lstate.global_State) void {
     for (0..ludata.UTAG_INTERNAL_LIMIT) |i| {
         if (g.udatadirectfields[i]) |f|
@@ -732,14 +742,7 @@ fn markroot(L: *lua.State) void {
     markobject(g, @ptrCast(@alignCast(g.mainthread.gt)));
     markvalue(g, L.registry());
 
-    for (0..ludata.UTAG_INTERNAL_LIMIT) |i| {
-        const udatadirect = &L.global.udatadirect[i];
-
-        markvalue(g, &udatadirect.indextm);
-        markvalue(g, &udatadirect.newindextm);
-        markvalue(g, &udatadirect.namecalltm);
-    }
-
+    markudatadirectaccess(g);
     markudatadirectfields(g);
 
     markmt(g);
@@ -821,6 +824,8 @@ fn atomic(L: *lua.State) Errorset.Table!usize {
     markmt(g); // mark basic metatables (again)
 
     marktaggedmt(g); // mark tagged userdata metatables (again)
+
+    markudatadirectaccess(g); // mark tagged userdata direct access functions (again)
 
     markudatadirectfields(g); // mark direct field dispatch tables (again)
 

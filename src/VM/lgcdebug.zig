@@ -4,6 +4,7 @@ const lgc = @import("lgc.zig");
 const lua = @import("lua.zig");
 const lmem = @import("lmem.zig");
 const lstate = @import("lstate.zig");
+const ludata = @import("ludata.zig");
 const lobject = @import("lobject.zig");
 
 fn validateobjref(g: *const lstate.global_State, f: *lstate.GCObject, t: *lstate.GCObject) void {
@@ -117,7 +118,7 @@ fn validateclass(g: *const lstate.global_State, lco: *lobject.LuauClass) void {
     const obj = lco.obj2gco();
     validateobjref(g, obj, lco.name.obj2gco());
     validateobjref(g, obj, lco.memberstooffset.obj2gco());
-    for (0..@intCast(lco.numberofallmembers)) |i| {
+    for (0..lco.numberofallmembers) |i| {
         validateobjref(g, obj, lco.offsettomember[i].obj2gco());
         if (i >= lco.numberofinstancemembers)
             validateref(g, obj, &lco.staticmembers[i - @as(u32, @intCast(lco.numberofinstancemembers))]);
@@ -127,10 +128,10 @@ fn validateclass(g: *const lstate.global_State, lco: *lobject.LuauClass) void {
         validateobjref(g, obj, mt.obj2gco());
 }
 
-fn validateclassinstance(g: *const lstate.global_State, inst: *lobject.LuauObject) void {
+fn validateobject(g: *const lstate.global_State, inst: *lobject.LuauObject) void {
     const obj = inst.obj2gco();
     validateobjref(g, obj, inst.lclass.obj2gco());
-    for (0..@intCast(inst.numberofmembers)) |i|
+    for (0..inst.numberofmembers) |i|
         validateref(g, obj, &inst.members[i]);
 }
 
@@ -150,7 +151,7 @@ fn validateobj(g: *const lstate.global_State, o: *lstate.GCObject) void {
         @intFromEnum(lua.Type.Proto) => validateproto(g, o.top()),
         @intFromEnum(lua.Type.UpVal) => validateref(g, o, o.touv().v),
         @intFromEnum(lua.Type.Class) => validateclass(g, o.toclass()),
-        @intFromEnum(lua.Type.Object) => validateclassinstance(g, o.toobject()),
+        @intFromEnum(lua.Type.Object) => validateobject(g, o.toobject()),
         else => unreachable,
     }
 }
@@ -194,6 +195,15 @@ pub fn Cvalidate(L: *lua.State) void {
     for (0..lua.config.UTAG_LIMIT) |i|
         if (g.udatamt[i]) |mt|
             std.debug.assert(!lgc.isdead(g, mt.obj2gco()));
+
+    for (0..ludata.UTAG_INTERNAL_LIMIT) |i| {
+        g.udatadirect[i].indextm.checkliveness(g);
+        g.udatadirect[i].newindextm.checkliveness(g);
+        g.udatadirect[i].namecalltm.checkliveness(g);
+
+        if (g.udatadirectfields[i]) |f|
+            std.debug.assert(!lgc.isdead(g, f.obj2gco()));
+    }
 
     validategraylist(g, g.weak);
     validategraylist(g, g.gray);
