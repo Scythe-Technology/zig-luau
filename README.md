@@ -26,3 +26,8 @@ Thank you to the [Luau](https://luau-lang.org/) team for creating such a great l
 ## License
 - zig-luau is licensed under the [MIT License](LICENSE).
 - luau is licensed under the [MIT License](LUAU-LICENSE).
+
+---
+
+Luau is a trademark of Roblox Corporation.  
+This is an independent project and is not affiliated with or endorsed by Roblox or the Luau team.
