@@ -42,6 +42,7 @@ pub fn build(b: *Build) !void {
 
     const use_zig_backend = b.option(bool, "use_zig_backend", "Build Luau with zig written backend") orelse true;
     const use_4_vector = b.option(bool, "use_4_vector", "Build Luau to use 4-vectors instead of the default 3-vector.") orelse false;
+    const use_double_vector = b.option(bool, "use_double_vector", "Build Luau to use double/f64 vectors instead of the default float/f32.") orelse false;
 
     const use_longjmp = b.option(bool, "use_longjmp", "Build Luau with SJLJ instead of exceptions (applies to CodeGen and VM)") orelse true;
 
@@ -58,6 +59,7 @@ pub fn build(b: *Build) !void {
     // Expose build configuration to the zig-luau module
     const config = b.addOptions();
     config.addOption(bool, "use_4_vector", use_4_vector);
+    config.addOption(bool, "use_double_vector", use_double_vector);
     config.addOption(bool, "use_zig_backend", use_zig_backend);
     config.addOption(u8, "hard_mem_tests", hard_mem_tests);
     config.addOption(bool, "hard_stack_tests", hard_stack_tests);
@@ -99,6 +101,8 @@ pub fn build(b: *Build) !void {
         try FLAGS.append(b.allocator, "-DHARDSTACKTESTS");
     if (use_4_vector)
         try FLAGS.append(b.allocator, "-DLUA_VECTOR_SIZE=4");
+    if (use_double_vector)
+        try FLAGS.append(b.allocator, "-DLUA_VECTOR_DOUBLE=1");
 
     for (cxxflags) |flag| {
         try FLAGS.append(b.allocator, flag);
@@ -889,6 +893,7 @@ const LUAU_Inliner_HEADERS_DIRS = [_][]const u8{
 const LUAU_Inliner_SOURCE_FILES = [_][]const u8{
     "Inliner/src/JitInliner.cpp",
     "Inliner/src/luajitinliner.cpp",
+    "Inliner/src/TValueVmConstImpl.cpp",
 };
 
 const LUAU_CodeGen_HEADERS_DIRS = [_][]const u8{
@@ -1026,6 +1031,7 @@ const LUAU_VM_SOURCE_FILES = [_][]const u8{
     "VM/src/lutf8lib.cpp",
     "VM/src/lvmexecute.cpp",
     "VM/src/lveclib.cpp",
+    "VM/src/lvector.cpp",
     "VM/src/lvmload.cpp",
     "VM/src/lvmutils.cpp",
 };

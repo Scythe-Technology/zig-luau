@@ -4,6 +4,7 @@ const std = @import("std");
 const lgc = @import("lgc.zig");
 const lua = @import("lua.zig");
 const lstate = @import("lstate.zig");
+const lvector = @import("lvector.zig");
 const lcommon = @import("lcommon.zig");
 const lnumutils = @import("lnumutils.zig");
 
@@ -188,14 +189,27 @@ pub const TValue = extern struct {
         obj.value.l = x;
         obj.settype(.Integer);
     }
-    pub inline fn setvvalue(obj: *TValue, x: f32, y: f32, z: f32, w: ?f32) void {
-        const i_v: [*]f32 = @ptrCast(&obj.value.v);
-        i_v[0] = x;
-        i_v[1] = y;
-        i_v[2] = z;
-        if (comptime lua.config.VECTOR_SIZE == 4)
-            i_v[3] = w orelse 0;
-        obj.settype(.Vector);
+    pub inline fn setvvalue(
+        obj: *TValue,
+        L: *lua.State,
+        x: lua.config.VECTOR_TYPE,
+        y: lua.config.VECTOR_TYPE,
+        z: lua.config.VECTOR_TYPE,
+        w: ?lua.config.VECTOR_TYPE,
+    ) if (lua.config.VECTOR_DOUBLE) Errorset.Table!void else void {
+        if (comptime lua.config.VECTOR_DOUBLE) {
+            const i_vec = try lvector.Vecnewvector(L, x, y, z, w);
+            obj.value.gc = i_vec;
+            obj.checkliveness(L.global);
+        } else {
+            const i_v: [*]f32 = @ptrCast(&obj.value.v);
+            i_v[0] = x;
+            i_v[1] = y;
+            i_v[2] = z;
+            if (comptime lua.config.VECTOR_SIZE == 4)
+                i_v[3] = w orelse 0;
+            obj.settype(.Vector);
+        }
     }
     pub inline fn setpvalue(obj: *TValue, x: ?*anyopaque, tag: u32) void {
         obj.value.p = x;
@@ -280,6 +294,12 @@ pub const LU_TAG_ITERATOR = lua.config.UTAG_LIMIT;
 
 pub inline fn checkliveness() void {}
 
+// wrapper for returning userdata properties directly
+pub const DirectFieldResult = extern struct {
+    L: *lua.State,
+    slot: *TValue,
+};
+
 pub const StkId = [*]TValue;
 
 pub const TString = extern struct {
@@ -341,6 +361,16 @@ pub const Buffer = extern struct {
     data: [1]u8 align(8),
 
     pub inline fn obj2gco(obj: *Buffer) *lstate.GCObject {
+        return @ptrCast(@alignCast(obj));
+    }
+};
+
+pub const Vector = extern struct {
+    header: CommonHeader,
+
+    v: [lua.config.VECTOR_SIZE]lua.config.VECTOR_TYPE,
+
+    pub inline fn obj2gco(obj: *Vector) *lstate.GCObject {
         return @ptrCast(@alignCast(obj));
     }
 };
@@ -595,9 +625,9 @@ pub const TKey = extern struct {
         std.debug.assert(obj.ttisinteger());
         return obj.value.l;
     }
-    pub inline fn vvalue(obj: *const TKey) []const f32 {
+    pub inline fn vvalue(obj: *const TKey) []const lua.config.VECTOR_TYPE {
         std.debug.assert(obj.ttisvector());
-        return @as([*]const f32, @ptrCast(&obj.value.v))[0..lua.config.VECTOR_SIZE];
+        return @as([*]const lua.config.VECTOR_TYPE, @ptrCast(@alignCast(&obj.value.v)))[0..lua.config.VECTOR_SIZE];
     }
     pub inline fn tsvalue(obj: *const TKey) *TString {
         std.debug.assert(obj.ttisstring());

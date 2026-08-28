@@ -54,4 +54,8 @@ pub const I_USER_ALIGNMENT_T = extern union {
 /// The length of Luau vector values, either 3 or 4.
 pub const VECTOR_SIZE = if (config.use_4_vector) 4 else 3;
 
+pub const VECTOR_DOUBLE = config.use_double_vector;
+
+pub const VECTOR_TYPE = if (VECTOR_DOUBLE) f64 else f32;
+
 pub const EXTRA_SIZE = (VECTOR_SIZE - 2);

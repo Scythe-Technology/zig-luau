@@ -36,7 +36,7 @@ pub const TMS = enum {
 
 pub const N: comptime_int = @intFromEnum(TMS.TM_N);
 
-pub const typenames = [_][:0]const u8{
+pub const typenames = if (!lua.config.VECTOR_DOUBLE) [_][:0]const u8{
     // ORDER TYPE
     "nil",
     "boolean",
@@ -55,6 +55,25 @@ pub const typenames = [_][:0]const u8{
     "buffer",
     "class",
     "object",
+} else [_][:0]const u8{
+    // ORDER TYPE
+    "nil",
+    "boolean",
+
+    "userdata",
+    "number",
+    "integer",
+
+    "string",
+
+    "table",
+    "function",
+    "userdata",
+    "thread",
+    "buffer",
+    "class",
+    "object",
+    "vector",
 };
 
 pub const eventname = [_][:0]const u8{

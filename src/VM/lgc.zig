@@ -9,6 +9,7 @@ const lfunc = @import("lfunc.zig");
 const ltable = @import("ltable.zig");
 const ludata = @import("ludata.zig");
 const lclass = @import("lclass.zig");
+const lvector = @import("lvector.zig");
 const lstring = @import("lstring.zig");
 const lbuffer = @import("lbuffer.zig");
 const lcommon = @import("lcommon.zig");
@@ -102,12 +103,7 @@ const Errorset = @import("errorset.zig");
 // all objects are marked, we traverse all weak tables (that are linked into special weak table lists using `gclist` during marking),
 // and remove all entries that have white keys or values. If keys or values are strong, they are marked normally.
 //
-// The simplified scheme described above isn't fully accurate because of threads, upvalues and strings.
-//
-// Strings are semantically black (they are initially white, and when the mark stage reaches a string, it changes its color and never
-// touches the object again), but they are technically marked as gray - the black bit is never set on a string object. This behavior
-// is inherited from Lua 5.1 GC, but doesn't have a clear rationale - effectively, strings are marked as gray but are never part of
-// a gray list.
+// The simplified scheme described above isn't fully accurate because of threads and upvalues.
 //
 // Threads are hard to deal with because for them to fit into the white-gray-black scheme, writes to thread stacks need to have barriers
 // that turn the thread from black (already scanned) to gray - but this is very expensive because stack writes are very common. To
@@ -224,6 +220,7 @@ pub inline fn black2gray(x: *lstate.GCObject) void {
 
 pub inline fn stringmark(s: *lobject.TString) void {
     s.header.marked &= ~(bitmask(WHITE0BIT) | bitmask(WHITE1BIT));
+    s.header.marked |= bitmask(BLACKBIT);
 }
 
 pub inline fn markvalue(g: *lstate.global_State, o: anytype) void {
@@ -308,7 +305,9 @@ fn reallymarkobject(g: *lstate.global_State, o: *lstate.GCObject) void {
     std.debug.assert(iswhite(o) and !isdead(g, o));
     white2gray(o);
     switch (o.gch.ttype()) {
-        @intFromEnum(lua.Type.String) => return,
+        @intFromEnum(lua.Type.String) => {
+            gray2black(o); // strings are never gray
+        },
         @intFromEnum(lua.Type.Userdata) => {
             const mt = o.tou().metatable;
             gray2black(o); // udata are never gray
@@ -336,6 +335,9 @@ fn reallymarkobject(g: *lstate.global_State, o: *lstate.GCObject) void {
             o.toth().gclist = g.gray;
             g.gray = o;
             return;
+        },
+        @intFromEnum(lua.Type.Vector) => {
+            gray2black(o); // vectors are never gray
         },
         @intFromEnum(lua.Type.Buffer) => {
             gray2black(o); // buffers are never gray
@@ -660,6 +662,7 @@ fn freeobj(L: *lua.State, o: *lstate.GCObject, page: *lmem.lua_Page) void {
         },
         @intFromEnum(lua.Type.String) => lstring.Sfree(L, o.tots(), page),
         @intFromEnum(lua.Type.Userdata) => ludata.Ufreeudata(L, o.tou(), page),
+        @intFromEnum(lua.Type.Vector) => lvector.Vecfreevector(L, o.tovec(), page),
         @intFromEnum(lua.Type.Buffer) => lbuffer.Bfreebuffer(L, o.tobuf(), page),
         @intFromEnum(lua.Type.Class) => lclass.Rfreeclass(L, o.toclass(), page),
         @intFromEnum(lua.Type.Object) => lclass.Rfreeobject(L, o.toobject(), page),
@@ -1027,7 +1030,7 @@ fn getheaptrigger(g: *lstate.global_State, heapgoal: usize) usize {
 pub fn Cstep(L: *lua.State, assist: bool) Errorset.Table!usize {
     const g = L.global;
 
-    const lim = g.gcstepsize * @divTrunc(g.gcstepmul, 100);
+    const lim: usize = @as(usize, @intCast(g.gcstepsize)) * @divTrunc(@as(usize, @intCast(g.gcstepmul)), 100);
     std.debug.assert(g.totalbytes >= g.GCthreshold);
     const debt = g.totalbytes - g.GCthreshold;
 
@@ -1043,7 +1046,14 @@ pub fn Cstep(L: *lua.State, assist: bool) Errorset.Table!usize {
     const work = try gcstep(L, @intCast(lim));
 
     // TODO: LUAI_GCMETRICS
-    _ = assist;
+
+    // if allocations outpace the GC to require an assist, adjust step size to cover the difference
+    if (lua.config.VECTOR_DOUBLE and assist) {
+        const need = debt * g.gcstepmul / 100;
+
+        if (need > lim)
+            lim = need;
+    }
 
     const actualstepsize = @divTrunc(work * 100, @as(usize, @intCast(g.gcstepmul)));
     // at the end of the last cycle

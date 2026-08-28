@@ -4,6 +4,8 @@ pub const c = @import("c");
 const lstate = @import("lstate.zig");
 pub const config = @import("luaconf.zig");
 
+const lobject = @import("lobject.zig");
+
 pub const MULTRET = c.LUA_MULTRET;
 
 // pseudo-indices
@@ -72,14 +74,17 @@ pub const Alloc = *const fn (ud: ?*anyopaque, ptr: ?*anyopaque, osize: usize, ns
 pub const TNONE = c.LUA_TNONE;
 
 /// Must be a signed integer because LuaType.none is -1
-pub const Type = enum(i6) {
+pub const Type = if (!config.VECTOR_DOUBLE) enum(i6) {
     None = TNONE,
     Nil = c.LUA_TNIL, // must be 0 due to lua_isnoneornil
     Boolean = c.LUA_TBOOLEAN, // must be 1 due to l_isfalse
     LightUserdata = c.LUA_TLIGHTUSERDATA,
     Number = c.LUA_TNUMBER,
     Integer = c.LUA_TINTEGER,
+
+    // When vector components are 'float', vector fits into the TValue
     Vector = c.LUA_TVECTOR,
+
     String = c.LUA_TSTRING, // all types above this must be value types, all types below this must be GC types - see iscollectable
     Table = c.LUA_TTABLE,
     Function = c.LUA_TFUNCTION,
@@ -88,6 +93,44 @@ pub const Type = enum(i6) {
     Buffer = c.LUA_TBUFFER,
     Class = c.LUA_TCLASS,
     Object = c.LUA_TOBJECT,
+
+    // values below this line are used in GCObject tags but may never show up in TValue type tags
+
+    /// LUA_TDEADKEY is used in TKey to identify Luau table entries that have the value set to nil,
+    /// so that we can remove the strong reference to the key.
+    Deadkey = c.LUA_TDEADKEY,
+
+    // These values should never show up in TValue tag types.
+    Proto = c.LUA_TPROTO,
+    UpVal = c.LUA_TUPVAL,
+
+    // the count of TValue type tags
+    pub const T_COUNT = c.LUA_T_COUNT;
+
+    pub inline fn isnoneornil(t: Type) bool {
+        return t == .None or t == .Nil;
+    }
+    pub inline fn istypecollectable(comptime t: Type) bool {
+        return @intFromEnum(t) >= @intFromEnum(Type.String);
+    }
+} else enum(i6) {
+    None = TNONE,
+    Nil = c.LUA_TNIL, // must be 0 due to lua_isnoneornil
+    Boolean = c.LUA_TBOOLEAN, // must be 1 due to l_isfalse
+    LightUserdata = c.LUA_TLIGHTUSERDATA,
+    Number = c.LUA_TNUMBER,
+    Integer = c.LUA_TINTEGER,
+    String = c.LUA_TSTRING, // all types above this must be value types, all types below this must be GC types - see iscollectable
+    Table = c.LUA_TTABLE,
+    Function = c.LUA_TFUNCTION,
+    Userdata = c.LUA_TUSERDATA,
+    Thread = c.LUA_TTHREAD,
+    Buffer = c.LUA_TBUFFER,
+    Class = c.LUA_TCLASS,
+    Object = c.LUA_TOBJECT,
+
+    // When vector components are 'double', it is a GCObject with heap-allocated data
+    Vector = c.LUA_TVECTOR,
 
     // values below this line are used in GCObject tags but may never show up in TValue type tags
 
@@ -166,6 +209,9 @@ pub const GCOp = enum(u4) {
     SetGoal = c.LUA_GCSETGOAL,
     SetStepMul = c.LUA_GCSETSTEPMUL,
     SetStepSize = c.LUA_GCSETSTEPSIZE,
+
+    // return 1 if GC is in a paused state; making a GC step in a paused state will unpause the GC
+    IsPaused = c.LUA_GCISPAUSED,
 };
 
 ///
@@ -266,3 +312,24 @@ pub const Callbacks = extern struct {
     /// gets called when memory is allocated
     onallocate: ?*const fn (L: *State, osize: usize, nsize: usize) callconv(.c) void = null,
 };
+
+pub const UdataDirectAccessData = extern struct {
+    // NOTE: experimental API and is subject to breaking changes
+    // registration of callbacks for direct userdata __index, __newindex and __namecall access with string keys assigned with an atom
+    // cachedslot is initially 0 and can be set to a custom value to help with data lookup inside the userdata
+    // IMPORTANT: cachedslot values are shared between all userdata, callbacks function of one userdata tag has to correctly handle values set by another
+    pub const Access = fn (L: *State, data: *anyopaque, atom: c_int, cachedslot: *u16, utag: c_int) callconv(.c) void;
+    pub const Namecall = fn (L: *State, data: *anyopaque, atom: c_int, cachedslot: *u16, utag: c_int) callconv(.c) c_int;
+
+    indextm: lobject.TValue,
+    newindextm: lobject.TValue,
+    namecalltm: lobject.TValue,
+    index: ?*const Access,
+    newindex: ?*const Access,
+    namecall: ?*const Namecall,
+};
+
+pub const UserdataMark = *const fn (L: *State, ud: *anyopaque) callconv(.c) void;
+
+pub const EmbedderMark = *const fn (L: *State, ref: c_int) callconv(.c) void;
+pub const EmbedderGc = *const fn (L: *State, markref: *EmbedderMark) callconv(.c) void;

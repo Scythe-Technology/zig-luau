@@ -164,6 +164,7 @@ const GCCycleMetrics = extern struct {
     atomictimeupval: f64 = 0.0,
     atomictimeweak: f64 = 0.0,
     atomictimegray: f64 = 0.0,
+    atomictimeembedder: f64 = 0.0,
     atomictimeclear: f64 = 0.0,
 
     sweeptime: f64 = 0.0,
@@ -210,22 +211,6 @@ const ExecutionCallbacks = extern struct {
     getcounterdata: ?*const fn (L: *lua_State, proto: *anyopaque, count: *usize) callconv(.c) [*]const u8 = null,
     /// called when inlining threshold is reached
     inlinefunction: ?*const fn (L: *lua_State, caller: *lobject.Closure, target: *lobject.Closure, pc: u32) callconv(.c) *lobject.Proto = null,
-};
-
-const UdataDirectAccessData = extern struct {
-    // NOTE: experimental API and is subject to breaking changes
-    // registration of callbacks for direct userdata __index, __newindex and __namecall access with string keys assigned with an atom
-    // cachedslot is initially 0 and can be set to a custom value to help with data lookup inside the userdata
-    // IMPORTANT: cachedslot values are shared between all userdata, callbacks function of one userdata tag has to correctly handle values set by another
-    pub const Access = fn (L: *lua_State, data: *anyopaque, atom: c_int, cachedslot: *u16, utag: c_int) callconv(.c) void;
-    pub const Namecall = fn (L: *lua_State, data: *anyopaque, atom: c_int, cachedslot: *u16, utag: c_int) callconv(.c) c_int;
-
-    indextm: lobject.TValue,
-    newindextm: lobject.TValue,
-    namecalltm: lobject.TValue,
-    index: ?*const Access,
-    newindex: ?*const Access,
-    namecall: ?*const Namecall,
 };
 
 pub const global_State = extern struct {
@@ -303,13 +288,19 @@ pub const global_State = extern struct {
     ecbdata: [lua.config.EXECUTION_CALLBACK_STORAGE]u8 align(16),
 
     /// Set of userdata __index/__newindex/__namecall metamethods for a direct access
-    udatadirect: [ludata.UTAG_INTERNAL_LIMIT]UdataDirectAccessData,
+    udatadirect: [ludata.UTAG_INTERNAL_LIMIT]lua.UdataDirectAccessData,
 
     /// total amount of memory used by each memory category
     memcatbytes: [lua.config.MEMORY_CATEGORIES]usize,
 
     /// for each userdata tag, a gc callback to be called immediately before freeing memory
     udatagc: [lua.config.UTAG_LIMIT]?*const fn (*lua_State, ?*anyopaque) callconv(.c) void,
+    udatamark: [lua.config.UTAG_LIMIT]?lua.UserdataMark, // gc callbacks allowing the embedder to mark underlying native objects for the given userdata
+
+    weakregistry: lobject.TValue, // backing table for lua_weakref/lua_weakunref/lua_getweakref
+    weakregistryfree: c_int, // next free slot in weakregistry
+    embeddergc: ?lua.EmbedderGc, // embedder GC callback for keeping weak references alive
+
     /// metatables for tagged userdata
     udatamt: [lua.config.UTAG_LIMIT]?*lobject.LuaTable,
 
@@ -716,6 +707,7 @@ pub const GCObject = extern union {
     buf: lobject.Buffer,
     lclass: lobject.LuauClass,
     lobject: lobject.LuauObject,
+    vec: lobject.Vector,
 
     pub inline fn tots(o: *GCObject) *lobject.TString {
         std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.String));
@@ -756,6 +748,10 @@ pub const GCObject = extern union {
     pub inline fn toobject(o: *GCObject) *lobject.LuauObject {
         std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.Object));
         return &o.lobject;
+    }
+    pub inline fn tovec(o: *GCObject) *lobject.Vector {
+        std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.Vector));
+        return &o.vec;
     }
 };
 

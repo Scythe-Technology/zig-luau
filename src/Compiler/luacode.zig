@@ -10,6 +10,7 @@ extern "c" fn luau_set_compile_constant_nil(constant: *Compiler.CompileConstant)
 extern "c" fn luau_set_compile_constant_boolean(constant: *Compiler.CompileConstant, b: c_int) void;
 extern "c" fn luau_set_compile_constant_number(constant: *Compiler.CompileConstant, n: f64) void;
 extern "c" fn luau_set_compile_constant_vector(constant: *Compiler.CompileConstant, x: f32, y: f32, z: f32, w: f32) void;
+extern "c" fn luau_set_compile_constant_vectord(constant: *Compiler.CompileConstant, x: f64, y: f64, z: f64, w: f64) void;
 extern "c" fn luau_set_compile_constant_string(constant: *Compiler.CompileConstant, s: [*c]const u8, l: usize) void;
 
 /// Compile luau source into bytecode, return callee owned buffer allocated through the given allocator.
@@ -38,6 +39,10 @@ pub fn set_compile_constant_number(constant: *Compiler.CompileConstant, n: f64) 
 
 pub fn set_compile_constant_vector(constant: *Compiler.CompileConstant, x: f32, y: f32, z: f32, w: f32) void {
     luau_set_compile_constant_vector(constant, x, y, z, w);
+}
+
+pub fn set_compile_constant_vectord(constant: *Compiler.CompileConstant, x: f32, y: f32, z: f32, w: f32) void {
+    luau_set_compile_constant_vectord(constant, x, y, z, w);
 }
 
 pub fn set_compile_constant_string(constant: *Compiler.CompileConstant, s: []const u8) void {

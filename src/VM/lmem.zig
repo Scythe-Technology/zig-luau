@@ -383,7 +383,7 @@ fn newblock(L: *lua.State, sizeClass: u8) Error!*anyopaque {
     return @ptrFromInt(@intFromPtr(block) + kBlockHeader);
 }
 
-fn newgcoblock(L: *lua.State, sizeClass: u8) Error!*anyopaque {
+inline fn newgcoblock(L: *lua.State, sizeClass: u8) Error!*anyopaque {
     const g = L.global;
     const page = g.freegcopages[sizeClass] orelse blk: {
         // slow path: no page in the freelist, allocate a new one
@@ -456,7 +456,7 @@ fn freeblock(L: *lua.State, sizeClass: u8, iblock: *anyopaque) void {
         freeclasspage(L, &g.freepages, debugpageset(&g.allpages), page, sizeClass);
 }
 
-fn freegcoblock(L: *lua.State, sizeClass: u8, block: *anyopaque, page: *lua_Page) void {
+inline fn freegcoblock(L: *lua.State, sizeClass: u8, block: *anyopaque, page: *lua_Page) void {
     std.debug.assert(page.busyBlocks > 0);
     std.debug.assert(page.blockSize == kSizeClassConfig.sizeOfClass[sizeClass]);
     std.debug.assert(@intFromPtr(block) >= @intFromPtr(&page.data) and @intFromPtr(block) < @intFromPtr(page) + @as(usize, @intCast(page.pageSize)));
@@ -544,6 +544,25 @@ pub inline fn Mnewgco(L: *lua.State, comptime T: type, nsize: usize, memcat: u8)
     return @ptrCast(@alignCast(try Mnewgco_(L, nsize, memcat)));
 }
 
+pub fn Mnewgcofixed_(L: *lua.State, nsize: usize, memcat: u8) Error!*lstate.GCObject {
+    // we need to accommodate space for link for free blocks (freegcolink)
+    std.debug.assert(nsize >= kGCOLinkOffset + @sizeOf(*anyopaque));
+
+    const g = L.global;
+
+    const nclass = sizeclass(nsize);
+    std.debug.assert(nclass >= 0);
+
+    var block: *anyopaque = undefined;
+
+    block = try newgcoblock(L, @intCast(nclass));
+
+    g.totalbytes += nsize;
+    g.memcatbytes[memcat] += nsize;
+
+    return @ptrCast(@alignCast(block));
+}
+
 pub fn Mfree_(L: *lua.State, block: ?*anyopaque, osize: usize, memcat: u8) void {
     const g = L.global;
     std.debug.assert((osize == 0) == (block == null));
@@ -583,6 +602,20 @@ pub fn Mfreegco_(L: *lua.State, block: ?*lstate.GCObject, osize: usize, memcat: 
 pub inline fn Mfreegco(L: *lua.State, p: *lstate.GCObject, size: usize, memcat: u8, page: *lua_Page) void {
     std.debug.assert(p.gch.header.tt >= @intFromEnum(lua.Type.String));
     Mfreegco_(L, p, size, memcat, page);
+}
+
+pub fn Mfreegcofixed_(L: *lua.State, block: ?*lstate.GCObject, osize: usize, memcat: u8, page: *lua_Page) void {
+    const g = L.global;
+
+    const oclass = sizeclass(osize);
+    std.debug.assert(oclass >= 0);
+
+    block.?.gch.header.tt = @intFromEnum(lua.Type.Nil);
+
+    freegcoblock(L, @intCast(oclass), @ptrCast(@alignCast(block.?)), page);
+
+    g.totalbytes -= osize;
+    g.memcatbytes[memcat] -= osize;
 }
 
 pub fn Mrealloc_(L: *lua.State, block: ?*anyopaque, osize: usize, nsize: usize, memcat: u8) Error!?*anyopaque {

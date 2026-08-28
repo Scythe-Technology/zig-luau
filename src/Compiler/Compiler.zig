@@ -43,6 +43,10 @@ pub const CompileOptions = extern struct {
     /// alternative vector type name for type tables, in addition to default type 'vector'
     vectorType: [*c]const u8 = null,
 
+    // 0 - 32-bit float vector components
+    // 1 - 64-bit double vector components
+    vectorPrecision: c_int = 0,
+
     /// null-terminated array of globals that are mutable; disables the import optimization for fields accessed through these
     mutableGlobals: [*c]const [*c]const u8 = null,
 

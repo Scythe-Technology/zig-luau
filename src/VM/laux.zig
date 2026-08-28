@@ -204,12 +204,12 @@ pub fn Loptunsigned(L: *lua.State, narg: i32, d: u32) u32 {
     return OptionalValue(u32, L, Lcheckunsigned, narg, d);
 }
 
-pub fn Lcheckvector(L: *lua.State, narg: i32) []const f32 {
+pub fn Lcheckvector(L: *lua.State, narg: i32) []const lua.config.VECTOR_TYPE {
     return L.tovector(narg) orelse tag_error(L, narg, .Vector);
 }
 
-pub fn Loptvector(L: *lua.State, narg: i32, d: []const f32) []const f32 {
-    return OptionalValue([]const f32, L, Lcheckvector, narg, d);
+pub fn Loptvector(L: *lua.State, narg: i32, d: []const lua.config.VECTOR_TYPE) []const lua.config.VECTOR_TYPE {
+    return OptionalValue([]const lua.config.VECTOR_TYPE, L, Lcheckvector, narg, d);
 }
 
 pub fn Lgetmetafield(L: *lua.State, obj: i32, event: [:0]const u8) Errorset.Table!bool {

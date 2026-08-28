@@ -148,6 +148,7 @@ fn validateobj(g: *const lstate.global_State, o: *lstate.GCObject) void {
         @intFromEnum(lua.Type.Userdata) => if (o.tou().metatable) |mt|
             validateobjref(g, o, mt.obj2gco()),
         @intFromEnum(lua.Type.Thread) => validatestack(g, o.toth()),
+        @intFromEnum(lua.Type.Vector) => return,
         @intFromEnum(lua.Type.Proto) => validateproto(g, o.top()),
         @intFromEnum(lua.Type.UpVal) => validateref(g, o, o.touv().v),
         @intFromEnum(lua.Type.Class) => validateclass(g, o.toclass()),
