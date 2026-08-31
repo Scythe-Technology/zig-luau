@@ -12,7 +12,7 @@
 //     E - least-significant byte for the opcode, followed by E (24-bit integer). E is a signed integer that commonly specifies a jump offset
 //
 // Instruction word is sometimes followed by one extra word, indicated as AUX - this is just a 32-bit word and is decoded according to the specification for each opcode.
-// For each opcode the encoding is *static* - that is, based on the opcode you know a-priory how large the instruction is, with the exception of NEWCLOSURE
+// For each opcode the encoding is *static* - that is, based on the opcode you know apriori how large the instruction is, with the exception of NEWCLOSURE
 
 // # Bytecode indices
 // Bytecode instructions commonly refer to integer values that define offsets or indices for various entities. For each type, there's a maximum encodable value.
@@ -27,7 +27,7 @@
 
 // # Bytecode versions
 // Bytecode serialized format embeds a version number, that dictates both the serialized form as well as the allowed instructions. As long as the bytecode version falls into supported
-// range (indicated by BYTECODE_MIN / BYTECODE_MAX) and was produced by Luau compiler, it should load and execute correctly.
+// range (indicated by LBC_BYTECODE_MIN / LBC_BYTECODE_MAX) and was produced by Luau compiler, it should load and execute correctly.
 //
 // Note that Luau runtime doesn't provide indefinite bytecode compatibility: support for older versions gets removed over time. As such, bytecode isn't a durable storage format and it's expected
 // that Luau users can recompile bytecode from source on Luau version upgrades if necessary.
@@ -42,10 +42,21 @@
 // Version 4: Adds Proto::flags, typeinfo, and floor division opcodes IDIV/IDIVK. Currently supported.
 // Version 5: Adds SUBRK/DIVRK and vector constants. Currently supported.
 // Version 6: Adds FASTCALL3. Currently supported.
+// Version 7: Adds LBC_CONSTANT_TABLE_WITH_CONSTANTS for DUPTABLE with pre-filled constant values. Currently supported.
+// Version 8: Adds LBC_CONSTANT_INTEGER for 64-bit integer constants. Currently supported.
+// Version 9: Adds atom-based userdata field access acceleration. Currently supported.
+// Version 10: Adds LBC_CONSTANT_CLASS_SHAPE and NEWCLASSMEMBER for use with Luau Classes. Experimental.
+// Version 11: Adds CALLFB, CMPPROTO and feedback vector description. Experimental.
+// Version 12: Adds cost function serialized for proto and prepend each proto with size in bytes. Experimental.
+// Version 13: Adds support for double-precision vector constants. Experimental.
+
+// WIP Versions: Used for in-progress features that might require multiple changes to bytecode. Since these versions are higher than the non-WIP versions, they are responsible for maintaining compatibility with them. For example, tests exercising WIP bytecode versions may need to enable flags for unreleased but non-WIP bytecode versions.
+// Version 100: Adds NEWCLASS for use with Luau Classes. Future class-related bytecode changes should go in this version before release. Experimental.
 
 // # Bytecode type information history
 // Version 1: (from bytecode version 4) Type information for function signature. Currently supported.
 // Version 2: (from bytecode version 4) Type information for arguments, upvalues, locals and some temporaries. Currently supported.
+// Version 3: (from bytecode version 5) Type information for userdata type names and their index mapping. Currently supported.
 
 // Bytecode opcode, part of the instruction header
 pub const Opcode = enum(u32) {
@@ -292,6 +303,7 @@ pub const Opcode = enum(u32) {
 
     // FORGPREP_INEXT: prepare FORGLOOP with 2 output variables (no AUX encoding), assuming generator is luaB_inext, and jump to FORGLOOP
     // A: target register (see FORGLOOP for register layout)
+    // D: jump offset (-32768..32767)
     FORGPREP_INEXT,
 
     // FASTCALL3: perform a fast call of a built-in function using 3 register arguments
@@ -304,6 +316,7 @@ pub const Opcode = enum(u32) {
 
     // FORGPREP_NEXT: prepare FORGLOOP with 2 output variables (no AUX encoding), assuming generator is luaB_next, and jump to FORGLOOP
     // A: target register (see FORGLOOP for register layout)
+    // D: jump offset (-32768..32767)
     FORGPREP_NEXT,
 
     // NATIVECALL: start executing new function in native code
@@ -437,6 +450,13 @@ pub const Opcode = enum(u32) {
     // AUX: proto id
     CMPPROTO,
 
+    // NEWCLASS: reify a class object
+    // A: target register of class
+    // B: source register of superclass, or 0xFF if no superclass
+    // C: reserved
+    // AUX: constant table index of unreified class object
+    NEWCLASS,
+
     // Enum entry for number of opcodes, not a valid opcode by itself!
     _COUNT,
 };
@@ -489,8 +509,9 @@ pub const BytecodeTag = enum(u32) {
     // Type encoding version
     // Types of constant table entries
     pub const VERSION_MIN = 3;
-    pub const VERSION_MAX = 6;
+    pub const VERSION_MAX = 13;
     pub const VERSION_TARGET = 6;
+    pub const VERSION_CLASSES = 100;
     pub const TYPE_VERSION_MIN = 1;
     pub const TYPE_VERSION_MAX = 3;
     pub const TYPE_VERSION_TARGET = 3;
@@ -723,6 +744,8 @@ pub const ProtoFlag = enum(u32) {
     LPF_NATIVE_FUNCTION = 1 << 2,
     /// function can be inlined
     LPF_INLINABLE = 1 << 3,
+    // top-level function uses export statements and returns the export table
+    LPF_USES_EXPORT = 1 << 4,
 };
 
 pub const LuauFeedbackType = enum(u32) { LFT_CALLTARGET = 0 };

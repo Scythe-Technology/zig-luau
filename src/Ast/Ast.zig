@@ -1586,6 +1586,7 @@ pub const StatClass = extern struct {
     hasSemicolon: bool = false,
 
     name: Name,
+    super: ?*Expr = null,
     members: Array(ClassMember),
     exported: bool,
 

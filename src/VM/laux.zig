@@ -26,7 +26,7 @@ pub fn currfuncname(L: *lua.State) ?[:0]const u8 {
     else
         null;
     const debugname: ?[:0]const u8 = if (cl != null and cl.?.isC != 0)
-        std.mem.span(cl.?.d.c.debugname)
+        std.mem.span(cl.?.d.c.debugname_DEPRECATED)
     else
         null;
 

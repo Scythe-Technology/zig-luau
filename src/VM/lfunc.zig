@@ -97,6 +97,7 @@ pub fn FnewCclosure(L: *lua.State, nelems: u8, e: *lobject.LuaTable) !*lobject.C
     c.d.c.f = null;
     c.d.c.cont = null;
     c.d.c.debugname = null;
+    c.d.c.debugname_DEPRECATED = null;
     return c;
 }
 

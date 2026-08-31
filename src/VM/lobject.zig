@@ -520,7 +520,8 @@ pub const Closure = extern struct {
         pub const C = extern struct {
             f: ?lua.CFunction,
             cont: ?lua.Continuation,
-            debugname: ?[*:0]const u8,
+            debugname_DEPRECATED: ?[*:0]const u8,
+            debugname: ?*TString,
             upvals: [1]TValue,
 
             pub inline fn upvalues(cc: *C) [*]TValue {
@@ -783,9 +784,10 @@ pub const LuauClass = extern struct {
     staticmembers: [*]TValue,
 
     /// Mapping from member name to offset.
+    /// For static members, subtracting numberofinstancemembers from the offset gives the actual index into staticmembers.
     memberstooffset: *LuaTable,
 
-    /// Mapping from offset to member name.
+    /// Mapping from offset to member name. Instance member offsets are stored before static member offsets.
     offsettomember: [*]*TString,
 
     /// Metatable for this *class object*. At time of writing this only contains

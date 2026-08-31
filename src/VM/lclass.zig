@@ -37,7 +37,7 @@ pub fn Rnewclass(
 
     const constructor = try lfunc.FnewCclosure(L, 0, L.gt.?);
     constructor.d.c.f = zig_luaR_createobject;
-    constructor.d.c.debugname = "luaR_createobject";
+    constructor.d.c.debugname_DEPRECATED = "luaR_createobject";
     constructor.d.c.cont = null;
     const dest = try ltable.Hsetstr(L, classobject.metatable, L.global.tmname[@intFromEnum(ltm.TMS.TM_CALL)]);
     std.debug.assert(dest.ttisnil());

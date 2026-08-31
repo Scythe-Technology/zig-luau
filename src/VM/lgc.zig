@@ -432,6 +432,8 @@ fn traverseproto(g: *lstate.global_State, f: *lobject.Proto) void {
 fn traverseclosure(g: *lstate.global_State, cl: *lobject.Closure) void {
     markobject(g, @ptrCast(@alignCast(cl.env)));
     if (cl.isC != 0) {
+        if (cl.d.c.debugname) |str|
+            stringmark(str);
         for (cl.d.c.upvalues()[0..cl.nupvalues]) |*upval| // mark its upvalues
             markvalue(g, upval);
     } else {

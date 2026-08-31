@@ -3,6 +3,8 @@ const std = @import("std");
 
 const build_config = @import("config");
 
+const Bytecode = @import("../Common/Bytecode.zig");
+
 const lua = @import("lua.zig");
 
 const lstring = @import("lstring.zig");
@@ -818,7 +820,7 @@ pub fn pushcclosurek(
     const cl = try lfunc.FnewCclosure(L, nup, getcurrenv(L));
     cl.d.c.f = f;
     cl.d.c.cont = cont;
-    cl.d.c.debugname = debugname;
+    cl.d.c.debugname_DEPRECATED = debugname;
     L.top -= nup;
     var n: u8 = nup;
     while (n > 0) : (n -= 1) {
@@ -1601,6 +1603,17 @@ pub fn clonefunction(L: *lua.State, idx: i32) !void {
         newcl.d.l.upreferences()[i].setobj(L, &cl.d.l.upreferences()[i]);
     L.top[0].setclvalue(L, newcl);
     api_incr_top(L);
+}
+
+pub fn usesexport(L: *lua.State, idx: i32) bool {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_usesexport(@ptrCast(L), idx) != 0;
+    }
+    const o = index2addr(L, idx);
+    if (!o.isLfunction())
+        return false;
+    const cl = o.clvalue();
+    return (cl.d.l.p.flags & @intFromEnum(Bytecode.ProtoFlag.LPF_USES_EXPORT)) != 0;
 }
 
 pub fn cleartable(L: *lua.State, idx: i32) Errorset.Table!void {

@@ -31,6 +31,7 @@ pub inline fn getOpLength(op: Bytecode.Opcode) usize {
         .NEWCLASSMEMBER,
         .CALLFB,
         .CMPPROTO,
+        .NEWCLASS,
         => 2,
         else => 1,
     };
