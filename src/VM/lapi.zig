@@ -1185,6 +1185,27 @@ pub fn cpcall(L: *lua.State, func: lua.CFunction, ud: *anyopaque) lua.Status {
     return @enumFromInt(c.lua_cpcall(@ptrCast(L), @ptrCast(func), ud));
 }
 
+pub fn callyieldable(L: *lua.State, nargs: i32, nresults: i32) i32 {
+    if (comptime !build_config.use_zig_backend) {
+        return @enumFromInt(c.lua_callyieldable(@ptrCast(L), nargs, nresults));
+    }
+    api_check(L, L.ci.?[0].func[0].iscfunction());
+    const cl = L.ci.?[0].func[0].clvalue();
+    api_check(L, cl.d.c.cont != null);
+
+    call(L, nargs, nresults);
+
+    // yielding means we need to propagate yield; resume will call continuation function later
+    if (ldo.isyielded(L))
+        return ldo.C_CALL_YIELD;
+
+    return cl.d.c.cont.?(L, @intFromEnum(lua.Status.Ok));
+}
+
+pub fn pcallyieldable(L: *lua.State, nargs: i32, nresults: i32, errfunc: i32) i32 {
+    return c.lua_pcallyieldable(@ptrCast(L), nargs, nresults, errfunc);
+}
+
 pub fn status(L: *lua.State) lua.Status {
     return @enumFromInt(L.curr_status);
 }
@@ -1632,6 +1653,9 @@ pub fn clonetable(L: *lua.State, idx: i32) Errorset.Table!void {
     if (comptime !build_config.use_zig_backend) {
         return c.lua_clonetable(@ptrCast(L), idx);
     }
+    try lgc.CcheckGC(L);
+    lgc.Cthreadbarrier(L);
+
     const t = index2addr(L, idx);
     api_check(L, t.ttistable());
 

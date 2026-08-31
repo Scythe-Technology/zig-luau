@@ -50,6 +50,23 @@ pub inline fn expandstacklimit(L: *lua.State, p: *lobject.TValue) void {
         L.ci.?[0].top = @ptrCast(p);
 }
 
+pub inline fn isyielded(L: *lua.State) bool {
+    return L.curr_status == @intFromEnum(lua.Status.Yield) or L.curr_status == @intFromEnum(lua.Status.Break) or L.curr_status == SCHEDULED_REENTRY;
+}
+
+// results from luaD_precall
+pub const PCRLUA = 0; // initiated a call to a Lua function
+pub const PCRC = 1; // did a call to a C function
+pub const PCRYIELD = 2; // C function yielded
+
+/// return value for a yielded C call
+pub const C_CALL_YIELD = -1;
+
+/// luaD_call can 'yield' into an immediate reentry
+/// reentry will remove extra call frames from C call stack and continue execution
+/// this lua_State::status code is internal and should not be used by users
+pub const SCHEDULED_REENTRY = 0x7;
+
 fn correctstack(L: *lua.State, oldstack: [*]lobject.TValue) void {
     L.top = L.stack + (L.top - oldstack);
     var up: ?*lobject.UpVal = L.openupval;

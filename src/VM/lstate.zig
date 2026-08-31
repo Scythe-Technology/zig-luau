@@ -531,6 +531,8 @@ pub const lua_State = extern struct {
     pub const call = lapi.call;
     pub const pcall = lapi.pcall;
     pub const cpcall = lapi.cpcall;
+    pub const callyieldable = lapi.callyieldable;
+    pub const pcallyieldable = lapi.pcallyieldable;
 
     //
     // coroutine functions
