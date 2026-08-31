@@ -516,7 +516,7 @@ fn propagatemark(g: *lstate.global_State) Errorset.Memory!usize {
             g.gray = h.gclist;
             if (traversetable(g, h)) // table is weak?
                 black2gray(o); // keep it gray
-            return @sizeOf(lobject.LuaTable) + (@sizeOf(lobject.TValue) * @as(u32, @intCast(h.sizearray))) + (@sizeOf(lobject.LuaNode) * (if (h.node == ltable.dummynode) 0 else lobject.sizenode(h)));
+            return @sizeOf(lobject.LuaTable) + (@sizeOf(lobject.TValue) * @as(u32, @intCast(h.sizearray))) + (@sizeOf(lobject.LuaNode) * (if (@as(*lobject.LuaNode, @ptrCast(@alignCast(h.node))) == ltable.dummynode) 0 else lobject.sizenode(h)));
         },
         @intFromEnum(lua.Type.Function) => {
             const cl = o.tocl();
@@ -616,7 +616,7 @@ fn cleartable(L: *lua.State, il: ?*lstate.GCObject) Errorset.Table!usize {
     var ol: ?*lstate.GCObject = il;
     while (ol) |l| {
         const h = l.toh();
-        work += @sizeOf(lobject.LuaTable) + (@sizeOf(lobject.TValue) * @as(u32, @intCast(h.sizearray))) + (@sizeOf(lobject.LuaNode) * (if (h.node == ltable.dummynode) 0 else lobject.sizenode(h)));
+        work += @sizeOf(lobject.LuaTable) + (@sizeOf(lobject.TValue) * @as(u32, @intCast(h.sizearray))) + (@sizeOf(lobject.LuaNode) * (if (@as(*lobject.LuaNode, @ptrCast(@alignCast(h.node))) == ltable.dummynode) 0 else lobject.sizenode(h)));
 
         var i: usize = @intCast(h.sizearray);
         while (i > 0) : (i -= 1) {
