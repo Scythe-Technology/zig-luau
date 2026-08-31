@@ -107,30 +107,56 @@ fn hashint(t: *const LuaTable, n: i64) [*]LuaNode {
     return hashpow2(t, h2);
 }
 
-fn hashvec(t: *const LuaTable, v: []const f32) [*]LuaNode {
-    var i: [LUA_VECTOR_SIZE]u32 = undefined;
-    @memcpy(i[0..], (@as([*]const u32, @ptrCast(@alignCast(v.ptr))))[0..LUA_VECTOR_SIZE]);
+fn hashvec(t: *const LuaTable, v: []const lua.config.VECTOR_TYPE) [*]LuaNode {
+    if (comptime !lua.config.VECTOR_DOUBLE) {
+        var i: [LUA_VECTOR_SIZE]u32 = undefined;
+        @memcpy(i[0..], (@as([*]const u32, @ptrCast(@alignCast(v.ptr))))[0..LUA_VECTOR_SIZE]);
 
-    // convert -0 to 0 to make sure they hash to the same value
-    i[0] = if (i[0] == 0x80000000) 0 else i[0];
-    i[1] = if (i[1] == 0x80000000) 0 else i[1];
-    i[2] = if (i[2] == 0x80000000) 0 else i[2];
+        // convert -0 to 0 to make sure they hash to the same value
+        i[0] = if (i[0] == 0x80000000) 0 else i[0];
+        i[1] = if (i[1] == 0x80000000) 0 else i[1];
+        i[2] = if (i[2] == 0x80000000) 0 else i[2];
 
-    // scramble bits to make sure that integer coordinates have entropy in lower bits
-    i[0] ^= i[0] >> 17;
-    i[1] ^= i[1] >> 17;
-    i[2] ^= i[2] >> 17;
+        // scramble bits to make sure that integer coordinates have entropy in lower bits
+        i[0] ^= i[0] >> 17;
+        i[1] ^= i[1] >> 17;
+        i[2] ^= i[2] >> 17;
 
-    // Optimized Spatial Hashing for Collision Detection of Deformable Objects
-    var h: u32 = (i[0] * 73856093) ^ (i[1] * 19349663) ^ (i[2] * 83492791);
+        // Optimized Spatial Hashing for Collision Detection of Deformable Objects
+        var h: u32 = (i[0] * 73856093) ^ (i[1] * 19349663) ^ (i[2] * 83492791);
 
-    if (comptime LUA_VECTOR_SIZE == 4) {
-        i[3] = if (i[3] == 0x80000000) 0 else i[3];
-        i[3] ^= i[3] >> 17;
-        h ^= i[3] * 39916801;
+        if (comptime LUA_VECTOR_SIZE == 4) {
+            i[3] = if (i[3] == 0x80000000) 0 else i[3];
+            i[3] ^= i[3] >> 17;
+            h ^= i[3] * 39916801;
+        }
+
+        return hashpow2(t, h);
+    } else {
+        var i: [LUA_VECTOR_SIZE]u64 = undefined;
+        @memcpy(i[0..], (@as([*]const u64, @ptrCast(@alignCast(v.ptr))))[0..LUA_VECTOR_SIZE]);
+
+        // convert -0 to 0 to make sure they hash to the same value
+        i[0] = if (i[0] == 0x8000000000000000) 0 else i[0];
+        i[1] = if (i[1] == 0x8000000000000000) 0 else i[1];
+        i[2] = if (i[2] == 0x8000000000000000) 0 else i[2];
+
+        // scramble bits to make sure that integer coordinates have entropy in lower bits
+        i[0] ^= i[0] >> 32;
+        i[1] ^= i[1] >> 32;
+        i[2] ^= i[2] >> 32;
+
+        // Optimized Spatial Hashing for Collision Detection of Deformable Objects
+        var h: u32 = (@as(u32, @truncate(i[0] * 73856093))) ^ (@as(u32, @truncate(i[1] * 19349663))) ^ (@as(u32, @truncate(i[2] * 83492791)));
+
+        if (comptime LUA_VECTOR_SIZE == 4) {
+            i[3] = if (i[3] == 0x8000000000000000) 0 else i[3];
+            i[3] ^= i[3] >> 32;
+            h ^= @as(u32, @truncate(i[3] * 39916801));
+        }
+
+        return hashpow2(t, h);
     }
-
-    return hashpow2(t, h);
 }
 
 fn mainposition(t: *const LuaTable, key: *const TValue) [*]LuaNode {
