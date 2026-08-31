@@ -171,3 +171,33 @@ pub fn Pair(comptime First: type, comptime Second: type) type {
         second: Second,
     };
 }
+
+// from zig std.hash.CityHash64
+fn hashLen16(u: u64, v: u64) u64 {
+    return @call(.always_inline, hash128To64, .{ u, v });
+}
+
+fn hashLen16Mul(low: u64, high: u64, mul: u64) u64 {
+    var a: u64 = (low ^ high) *% mul;
+    a ^= (a >> 47);
+    var b: u64 = (high ^ a) *% mul;
+    b ^= (b >> 47);
+    b *%= mul;
+    return b;
+}
+
+fn hash128To64(low: u64, high: u64) u64 {
+    return @call(.always_inline, hashLen16Mul, .{ low, high, 0x9ddfea08eb382d69 });
+}
+
+// https://github.com/llvm/llvm-project/blob/9e48823b7b8ee9edaa3cd6e7ff9db3271787d48d/libcxx/include/__functional/hash.h#L57
+pub fn hash(key: usize) usize {
+    if (comptime @sizeOf(usize) == 8) {
+        const a: u32 = @truncate(key);
+        const b: u32 = @truncate(key >> 32);
+        return @intCast(hashLen16(8 +% @as(u64, a << 3), b));
+    }
+
+    // 32-bit libc++ std::hash<T*>: Murmur2_32
+    return std.hash.Murmur2_32.hashUint32WithSeed(@truncate(key), 0);
+}

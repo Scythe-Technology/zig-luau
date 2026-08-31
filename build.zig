@@ -143,13 +143,9 @@ pub fn build(b: *Build) !void {
             .flags = compile_flags,
             .root = b.path("src/Ast/"),
             .files = if (optimize == .Debug or optimize == .ReleaseSafe) &.{
-                "Allocator.cpp",
-                "Lexer.cpp",
                 "Parser.cpp",
                 "Class.cpp",
             } else &.{
-                "Allocator.cpp",
-                "Lexer.cpp",
                 "Parser.cpp",
             },
         });

@@ -460,12 +460,15 @@ fn traversestack(g: *lstate.global_State, L: *lua.State) void {
 
 fn traverseclass(g: *lstate.global_State, classobject: *lobject.LuauClass) void {
     markobject(g, @ptrCast(@alignCast(classobject.name)));
+    if (classobject.super) |super|
+        markobject(g, @ptrCast(@alignCast(super)));
     markobject(g, @ptrCast(@alignCast(classobject.memberstooffset)));
     for (0..classobject.numberofallmembers) |i|
         markobject(g, @ptrCast(@alignCast(classobject.offsettomember[i])));
     for (0..classobject.numberofallmembers - classobject.numberofinstancemembers) |i|
         markobject(g, @ptrCast(@alignCast(&classobject.staticmembers[i])));
-    markobject(g, @ptrCast(@alignCast(classobject.metatable)));
+    if (classobject.metatable) |mt|
+        markobject(g, @ptrCast(@alignCast(mt)));
     if (classobject.instancemetatable) |mt|
         markobject(g, @ptrCast(@alignCast(mt)));
 }

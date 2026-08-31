@@ -21,34 +21,44 @@ pub fn Rnewclass(
     numberofinstancemembers: u32,
     numberofstaticmembers: u32,
 ) !*lobject.LuauClass {
-    std.debug.assert(L.global.GCthreshold == std.math.maxInt(usize)); // GC must be paused
-    const classobject = try lmem.Mnewgco(L, lobject.LuauClass, @sizeOf(lobject.LuauClass), L.activememcat);
-    lgc.Cinit(L, @ptrCast(@alignCast(classobject)), @intFromEnum(lua.Type.Class));
-    classobject.name = name;
+    _ = L;
+    _ = name;
+    _ = memberstooffset;
+    _ = offsettomember;
+    _ = numberofinstancemembers;
+    _ = numberofstaticmembers;
+    @compileError("incomplete impl");
+    // std.debug.assert(L.global.GCthreshold == std.math.maxInt(usize)); // GC must be paused
+    // const classobject = try lmem.Mnewgco(L, lobject.LuauClass, @sizeOf(lobject.LuauClass), L.activememcat);
+    // lgc.Cinit(L, @ptrCast(@alignCast(classobject)), @intFromEnum(lua.Type.Class));
+    // classobject.name = name;
+    // classobject.super = null;
 
-    classobject.staticmembers = try lmem.Mnewarray(L, lobject.TValue, numberofstaticmembers, classobject.header.memcat);
-    for (0..numberofstaticmembers) |i|
-        classobject.staticmembers[i].setnilvalue();
+    // classobject.staticmembers = try lmem.Mnewarray(L, lobject.TValue, numberofstaticmembers, classobject.header.memcat);
+    // for (0..numberofstaticmembers) |i|
+    //     classobject.staticmembers[i].setnilvalue();
 
-    classobject.memberstooffset = memberstooffset;
-    classobject.offsettomember = offsettomember;
+    // classobject.memberstooffset = memberstooffset;
+    // classobject.offsettomember = offsettomember;
 
-    classobject.metatable = try ltable.Hnew(L, 0, 1);
+    // classobject.metatable = try ltable.Hnew(L, 0, 1);
 
-    const constructor = try lfunc.FnewCclosure(L, 0, L.gt.?);
-    constructor.d.c.f = zig_luaR_createobject;
-    constructor.d.c.debugname_DEPRECATED = "luaR_createobject";
-    constructor.d.c.cont = null;
-    const dest = try ltable.Hsetstr(L, classobject.metatable, L.global.tmname[@intFromEnum(ltm.TMS.TM_CALL)]);
-    std.debug.assert(dest.ttisnil());
-    dest.setclvalue(L, constructor);
-    classobject.metatable.readonly = 1;
-    classobject.instancemetatable = null;
+    // const constructor = try lfunc.FnewCclosure(L, 0, L.gt.?);
+    // constructor.d.c.f = zig_luaR_createobject;
+    // constructor.d.c.debugname_DEPRECATED = "luaR_createobject";
+    // constructor.d.c.cont = null;
+    // const dest = try ltable.Hsetstr(L, classobject.metatable, L.global.tmname[@intFromEnum(ltm.TMS.TM_CALL)]);
+    // std.debug.assert(dest.ttisnil());
+    // dest.setclvalue(L, constructor);
+    // classobject.metatable.readonly = 1;
+    // classobject.instancemetatable = null;
 
-    classobject.numberofinstancemembers = numberofinstancemembers;
-    classobject.numberofallmembers = numberofinstancemembers + numberofstaticmembers;
+    // classobject.numberofinstancemembers = numberofinstancemembers;
+    // classobject.numberofallmembers = numberofinstancemembers + numberofstaticmembers;
+    // classobject.isopen = false;
+    // classobject.hasuserinitinchain = false;
 
-    return classobject;
+    // return classobject;
 }
 
 pub fn Raddclassmember(L: *lua.State, classobject: *lobject.LuauClass, name: *lobject.TString, value: *const lobject.TValue) !void {
@@ -76,7 +86,7 @@ pub fn Raddclassmember(L: *lua.State, classobject: *lobject.LuauClass, name: *lo
     }
 }
 
-extern "c" fn zig_luaR_createobject(L: *lua.State) c_int;
+extern "c" fn zig_luaR_constructobject(L: *lua.State) c_int;
 
 pub fn Rfreeclass(L: *lua.State, classobject: *lobject.LuauClass, page: *lmem.lua_Page) void {
     lmem.Mfreearray(L, lobject.TValue, classobject.staticmembers, classobject.numberofallmembers - classobject.numberofinstancemembers, classobject.header.memcat);

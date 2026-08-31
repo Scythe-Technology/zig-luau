@@ -1415,16 +1415,16 @@ test "Luau JIT/CodeGen ParseResult" {
         \\
     ;
 
-    const luau_allocator = luau.Ast.Allocator.init();
+    var luau_allocator = try luau.Ast.Allocator.init();
     defer luau_allocator.deinit();
 
-    const astNameTable = luau.Ast.Lexer.AstNameTable.init(luau_allocator);
+    var astNameTable = try luau.Ast.Lexer.AstNameTable.init(&luau_allocator);
     defer astNameTable.deinit();
 
-    const parseResult = luau.Ast.Parser.parse(src, astNameTable, luau_allocator, .{});
+    const parseResult = luau.Ast.Parser.parse(src, &astNameTable, &luau_allocator, .{});
     defer parseResult.deinit();
 
-    try luau.Compiler.Compiler.compileLoadParseResult(lua, "module", parseResult, astNameTable, .{
+    try luau.Compiler.Compiler.compileLoadParseResult(lua, "module", parseResult, &astNameTable, .{
         .debugLevel = 2,
         .optimizationLevel = 2,
     }, 0);
@@ -1724,13 +1724,13 @@ test "Ast/Parser - HotComments" {
         \\--!optimize 2
     ;
 
-    const luau_allocator = luau.Ast.Allocator.init();
+    var luau_allocator = try luau.Ast.Allocator.init();
     defer luau_allocator.deinit();
 
-    const names = luau.Ast.Lexer.AstNameTable.init(luau_allocator);
+    var names = try luau.Ast.Lexer.AstNameTable.init(&luau_allocator);
     defer names.deinit();
 
-    var result = luau.Ast.Parser.parse(src, names, luau_allocator, .{});
+    var result = luau.Ast.Parser.parse(src, &names, &luau_allocator, .{});
     defer result.deinit();
 
     try testing.expectEqual(2, result.hotcomments.size());

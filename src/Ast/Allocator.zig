@@ -1,43 +1,40 @@
 const std = @import("std");
 
-// extern fn zig_delete_any(*Page) callconv(.c) void;
-
-extern "c" fn zig_Luau_Ast_Allocator_init() *This;
-extern "c" fn zig_Luau_Ast_Allocator_dtor(*This) void;
+const c_allocator = std.heap.c_allocator;
 
 const This = @This();
 
-root: [*c]Page,
+root: ?*Page,
 offset: usize = 0,
 
 pub const Page = extern struct {
-    next: [*c]Page = null,
+    next: ?*Page = null,
     data: [8192]u8 align(8),
 };
 
-// /// cleans up the luau allocator
-// /// frees all pages created by C++
-// pub fn destroy(self: This) void {
-//     var page = self.root;
-//     while (page != null) {
-//         const next = page.*.next;
-//         // pages are C++ allocated, so we need to use the C++ deallocator
-//         zig_delete_any(page);
-//         std.debug.print("clean page\n", .{});
-//         page = next;
-//     }
-// }
+pub fn destroy(self: This) void {
+    var page = self.root;
+    while (page) |p| {
+        const next = p.next;
 
-pub fn init() *This {
-    return zig_Luau_Ast_Allocator_init();
+        c_allocator.destroy(p);
+
+        page = next;
+    }
 }
 
-pub fn deinit(self: *This) void {
-    zig_Luau_Ast_Allocator_dtor(self);
+pub fn init() !This {
+    const page = try c_allocator.create(Page);
+    page.next = null;
+    return .{ .root = page };
+}
+
+pub fn deinit(self: This) void {
+    destroy(self);
 }
 
 test This {
-    const allocator = This.init();
+    var allocator = try This.init();
     defer allocator.deinit();
 }
 

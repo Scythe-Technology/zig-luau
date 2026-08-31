@@ -1,9 +1,13 @@
 #include <bridge.h>
 
+#include "Luau/ParseOptions.h"
 #include "Luau/Ast.h"
 #include "Luau/Cst.h"
 
 using namespace Luau;
+
+// Parser
+ZIG_EXPORT const size_t ParserOptionsSize = sizeof(ParseOptions);
 
 // AST
 ZIG_EXPORT const unsigned char AstAttrIndex = AstAttr::ClassIndex();

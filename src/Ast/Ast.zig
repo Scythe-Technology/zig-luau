@@ -10,6 +10,10 @@ const Ast = @This();
 
 pub const Name = extern struct {
     value: [*:0]const u8,
+
+    pub fn initK(name: [*:0]const u8) Name {
+        return .{ .value = name };
+    }
 };
 
 pub const Local = extern struct {
@@ -1589,6 +1593,7 @@ pub const StatClass = extern struct {
     super: ?*Expr = null,
     members: Array(ClassMember),
     exported: bool,
+    open: bool,
 
     pub const is = IsFn;
     pub const as = AsCastFn;
@@ -2188,10 +2193,10 @@ test Node {
     const Allocator = @import("Allocator.zig");
 
     {
-        const allocator = Allocator.init();
+        var allocator = try Allocator.init();
         defer allocator.deinit();
 
-        const table = Lexer.AstNameTable.init(allocator);
+        var table = try Lexer.AstNameTable.init(&allocator);
         defer table.deinit();
         const source =
             \\local x = 1;
@@ -2200,7 +2205,7 @@ test Node {
             \\
         ;
 
-        var parse_result = Parser.parse(source, table, allocator, .{});
+        var parse_result = Parser.parse(source, &table, &allocator, .{});
         defer parse_result.deinit();
 
         const root = parse_result.root;
@@ -2223,10 +2228,10 @@ test Node {
     }
 
     {
-        const allocator = Allocator.init();
+        var allocator = try Allocator.init();
         defer allocator.deinit();
 
-        const astNameTable = Lexer.AstNameTable.init(allocator);
+        var astNameTable = try Lexer.AstNameTable.init(&allocator);
         defer astNameTable.deinit();
         const source =
             \\@native
@@ -2235,7 +2240,7 @@ test Node {
             \\
         ;
 
-        const parseResult = Parser.parse(source, astNameTable, allocator, .{});
+        var parseResult = Parser.parse(source, &astNameTable, &allocator, .{});
         defer parseResult.deinit();
 
         {

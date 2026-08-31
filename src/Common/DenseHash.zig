@@ -2,24 +2,9 @@ const std = @import("std");
 
 const cpp_std = @import("../cpp_std.zig");
 
-extern fn zig_new_any(size: usize) callconv(.c) *anyopaque;
-extern fn zig_delete_any(*anyopaque) callconv(.c) void;
+const HashUtil = @import("HashUtil.zig");
 
-pub fn DenseHashPointer(key: *const anyopaque) usize {
-    // return (@intFromPtr(key) >> 4) ^ (@intFromPtr(key) >> 9);
-
-    // The idea to use this hash function was suggested here originally: https://maskray.me/blog/2026-06-07-recent-llvm-hash-table-improvements
-    // Hash function implementation is detailed here: https://github.com/MaskRay/llvm-project/blob/main/llvm/include/llvm/ADT/DenseMapInfo.h
-    // This hash produces better scattering for arena allocated types, because the pointers usually share the higher order bits.
-    // When inserting lots of keys, quadratic probing is not enough to save DenseHash, although it usually takes many more elements,
-    // before it becomes a problem
-    var u: u64 = @intFromPtr(key);
-    u *%= 0xbf58476d1ce4e5b9;
-    u ^= u >> 31;
-    // On 32-bit platforms uint64_t to size_t is a narrowing, so we need
-    // to static cast here.
-    return @truncate(u);
-}
+const c_allocator = std.heap.c_allocator;
 
 pub const detail = struct {
     pub fn DenseHashTable(
@@ -32,7 +17,7 @@ pub const detail = struct {
         const hash = if (@hasDecl(Hasher, "hash")) Hasher.hash else struct {
             pub fn hash(e: Key) usize {
                 if (comptime @typeInfo(Key) == .pointer) {
-                    return DenseHashPointer(@ptrCast(@alignCast(e)));
+                    return HashUtil.DenseHashPointer(@ptrCast(@alignCast(e)));
                 } else {
                     @compileError("Hasher must implement 'hash' function");
                 }
@@ -56,11 +41,11 @@ pub const detail = struct {
 
             const This = @This();
 
-            pub fn init(empty_key: Key, buckets: usize) This {
+            pub fn init(empty_key: Key, buckets: usize) !This {
                 var data: ?[*]Item = null;
                 var capacity: usize = 0;
                 if (buckets > 0) {
-                    data = @ptrCast(@alignCast(zig_new_any(@sizeOf(Item) * buckets)));
+                    data = (try c_allocator.alloc(Item, buckets)).ptr;
                     capacity = buckets;
 
                     ItemInterface.fill(data.?, buckets, empty_key);
@@ -109,7 +94,7 @@ pub const detail = struct {
                 if (self.data) |data| {
                     ItemInterface.destroy(data, self.capacity);
 
-                    zig_delete_any(@ptrCast(@alignCast(data)));
+                    c_allocator.destroy(@as(*Item, @ptrCast(@alignCast(data))));
                     self.data = null;
 
                     self.capacity = 0;

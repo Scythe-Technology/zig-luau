@@ -25,16 +25,6 @@ ZIG_EXPORT void ZIG_FN(luau_free)(void *ptr)
     free(ptr);
 }
 
-ZIG_EXPORT void ZIG_FN(delete_any)(void* value)
-{
-    operator delete(value);
-}
-
-ZIG_EXPORT void* ZIG_FN(new_any)(size_t size)
-{
-    return operator new(size);
-}
-
 ZIG_EXPORT size_t ZIG_FN(string_size)(std::string *str)
 {
     return str->size();
@@ -104,7 +94,7 @@ ZIG_EXPORT void zig_luau_catch_impl(TryCatchContext *context, const std::excepti
 
 #endif
 
-ZIG_EXPORT int ZIG_FN(luaR_createobject)(lua_State *L)
+ZIG_EXPORT int ZIG_FN(luaR_constructobject)(lua_State *L)
 {
-    return luaR_createobject(L);
+    return luaR_constructobject(L);
 }

@@ -117,13 +117,16 @@ fn validateproto(g: *const lstate.global_State, f: *lobject.Proto) void {
 fn validateclass(g: *const lstate.global_State, lco: *lobject.LuauClass) void {
     const obj = lco.obj2gco();
     validateobjref(g, obj, lco.name.obj2gco());
+    if (lco.super) |super|
+        validateobjref(g, obj, super.obj2gco());
     validateobjref(g, obj, lco.memberstooffset.obj2gco());
     for (0..lco.numberofallmembers) |i| {
         validateobjref(g, obj, lco.offsettomember[i].obj2gco());
         if (i >= lco.numberofinstancemembers)
             validateref(g, obj, &lco.staticmembers[i - @as(u32, @intCast(lco.numberofinstancemembers))]);
     }
-    validateobjref(g, obj, lco.metatable.obj2gco());
+    if (lco.metatable) |mt|
+        validateobjref(g, obj, mt.obj2gco());
     if (lco.instancemetatable) |mt|
         validateobjref(g, obj, mt.obj2gco());
 }

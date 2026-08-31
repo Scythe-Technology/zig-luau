@@ -296,13 +296,12 @@ pub const global_State = extern struct {
     /// for each userdata tag, a gc callback to be called immediately before freeing memory
     udatagc: [lua.config.UTAG_LIMIT]?*const fn (*lua_State, ?*anyopaque) callconv(.c) void,
     udatamark: [lua.config.UTAG_LIMIT]?lua.UserdataMark, // gc callbacks allowing the embedder to mark underlying native objects for the given userdata
+    /// metatables for tagged userdata
+    udatamt: [lua.config.UTAG_LIMIT]?*lobject.LuaTable,
 
     weakregistry: lobject.TValue, // backing table for lua_weakref/lua_weakunref/lua_getweakref
     weakregistryfree: c_int, // next free slot in weakregistry
     embeddergc: ?lua.EmbedderGc, // embedder GC callback for keeping weak references alive
-
-    /// metatables for tagged userdata
-    udatamt: [lua.config.UTAG_LIMIT]?*lobject.LuaTable,
 
     /// names for tagged lightuserdata
     lightuserdataname: [lua.config.LUTAG_LIMIT]?*lobject.TString,
@@ -968,10 +967,8 @@ pub fn newstate(f: lua.Alloc, ud: ?*anyopaque) Errorset.Table!*lua_State {
 
     @memset(g.mt[0..], null);
 
-    for (0..lua.Type.T_COUNT) |i|
-        g.mt[i] = null;
-
     @memset(g.udatagc[0..], null);
+    @memset(g.udatamark[0..], null);
     @memset(g.udatamt[0..], null);
 
     for (0..ludata.UTAG_INTERNAL_LIMIT) |i| {
@@ -985,9 +982,8 @@ pub fn newstate(f: lua.Alloc, ud: ?*anyopaque) Errorset.Table!*lua_State {
         udatadirect.namecall = null;
     }
 
-    @memset(g.udatadirectfields[0..], null);
-
     @memset(g.lightuserdataname[0..], null);
+    @memset(g.udatadirectfields[0..], null);
     @memset(g.memcatbytes[0..], 0);
 
     g.memcatbytes[0] = @sizeOf(LG);
@@ -996,7 +992,7 @@ pub fn newstate(f: lua.Alloc, ud: ?*anyopaque) Errorset.Table!*lua_State {
 
     g.ecb = .{};
 
-    g.ecbdata = std.mem.zeroes([lua.config.EXECUTION_CALLBACK_STORAGE]u8);
+    @memset(g.ecbdata[0..], 0);
 
     g.gcstats = .{};
     g.lastprotoid = 1;

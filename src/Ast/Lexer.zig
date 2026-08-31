@@ -2,10 +2,7 @@ const std = @import("std");
 
 const Ast = @import("Ast.zig");
 const Allocator = @import("Allocator.zig");
-const DenseHash = @import("../Common/DenseHash.zig");
-
-extern "c" fn zig_Luau_Ast_Lexer_AstNameTable_init(*Allocator) *AstNameTable;
-extern "c" fn zig_Luau_Ast_Lexer_AstNameTable_dtor(*AstNameTable) void;
+const DenseHash2 = @import("../Common/DenseHash2.zig");
 
 pub const Lexeme = struct {
     pub const Type = enum(c_int) {
@@ -84,8 +81,13 @@ pub const Lexeme = struct {
     };
 };
 
+pub const kReserved = [_][:0]const u8{
+    "and",   "break", "do",  "else", "elseif", "end",    "false", "for",  "function", "if",    "in",
+    "local", "nil",   "not", "or",   "repeat", "return", "then",  "true", "until",    "while",
+};
+
 pub const AstNameTable = extern struct {
-    data: DenseHash.DenseHashSet(Entry, EntryHash),
+    data: DenseHash2.DenseHashSet2(Entry, EntryHash),
     allocator: *Allocator,
 
     const Entry = extern struct {
@@ -95,11 +97,11 @@ pub const AstNameTable = extern struct {
     };
 
     const EntryHash = extern struct {
-        pub fn hash(e: *const Entry) usize {
+        pub fn hash(e: Entry) usize {
             var h: u32 = 2166136261;
             for (0..e.length) |i| {
-                h ^= @as(u8, e.value[i]);
-                h *= 16777619;
+                h ^= @as(u8, e.value.value[i]);
+                h *%= 16777619;
             }
             return h;
         }
@@ -108,20 +110,41 @@ pub const AstNameTable = extern struct {
         }
     };
 
-    pub fn init(allocator: *Allocator) *AstNameTable {
-        return zig_Luau_Ast_Lexer_AstNameTable_init(allocator);
+    pub fn init(allocator: *Allocator) !AstNameTable {
+        comptime std.debug.assert(kReserved.len == @intFromEnum(Lexeme.Type.Reserved_END) - @intFromEnum(Lexeme.Type.Reserved_BEGIN));
+        var ast: AstNameTable = .{
+            .data = try .init(128),
+            .allocator = allocator,
+        };
+        errdefer ast.data.deinit();
+        for (kReserved, 0..) |name, i|
+            _ = try ast.addStatic(name, @enumFromInt(@intFromEnum(Lexeme.Type.Reserved_BEGIN) + @as(c_int, @intCast(i))));
+
+        return ast;
     }
 
+    pub fn addStatic(self: *AstNameTable, name: [:0]const u8, @"type": Lexeme.Type) !Ast.Name {
+        const entry: Entry = .{
+            .value = .initK(name),
+            .length = @intCast(name.len),
+            .type = @"type",
+        };
+
+        std.debug.assert(!self.data.contains(entry));
+        _ = try self.data.insert(entry);
+
+        return entry.value;
+    }
     pub fn deinit(self: *AstNameTable) void {
-        zig_Luau_Ast_Lexer_AstNameTable_dtor(self);
+        self.data.deinit();
     }
 };
 
 test AstNameTable {
-    const allocator = Allocator.init();
+    var allocator = try Allocator.init();
     defer allocator.deinit();
 
-    const astNameTable = AstNameTable.init(allocator);
+    var astNameTable = try AstNameTable.init(&allocator);
     defer astNameTable.deinit();
 }
 

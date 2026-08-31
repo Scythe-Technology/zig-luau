@@ -7,7 +7,7 @@ const Cst = @import("Cst.zig");
 const Lexer = @import("Lexer.zig");
 const Location = @import("Location.zig").Location;
 const Allocator = @import("Allocator.zig");
-const DenseHash = @import("../Common/DenseHash.zig");
+const DenseHash2 = @import("../Common/DenseHash2.zig");
 
 pub const ParseError = cpp_std.Exception(extern struct {
     location: Location,
@@ -38,7 +38,7 @@ pub const ParseOptions = extern struct {
     noErrorLimit: bool = false,
 
     pub const FragmentParseResumeSettings = extern struct {
-        localMap: DenseHash.DenseHashMap(Ast.Name, *Ast.Local, struct {}) = .init(.{ .value = "" }, 0),
+        localMap: DenseHash2.DenseHashMap2(Ast.Name, *Ast.Local, struct {}) = .empty,
         localStack: cpp_std.Vector(*Ast.Local) = undefined,
         resumePosition: Location.Position,
     };
@@ -63,7 +63,7 @@ pub fn parseType(source: []const u8, nameTable: *Lexer.AstNameTable, allocator: 
     return zig_Luau_Ast_Parser_parseType(source.ptr, source.len, nameTable, allocator, &options);
 }
 
-pub const CstNodeMap = DenseHash.DenseHashMap(*Ast.Node, *Cst.Node, struct {});
+pub const CstNodeMap = DenseHash2.DenseHashMap2(*Ast.Node, *Cst.Node, struct {});
 
 pub const ParseResult = extern struct {
     root: *Ast.StatBlock,
@@ -106,12 +106,22 @@ pub fn ParseNodeResult(comptime T: type) type {
     };
 }
 
+test "Parse Options Check" {
+    if (@import("builtin").cpu.arch.isWasm() or @import("builtin").os.tag == .windows)
+        return error.SkipZigTest;
+    const c = struct {
+        pub extern "c" const ParserOptionsSize: usize;
+    };
+
+    try std.testing.expectEqual(c.ParserOptionsSize, @sizeOf(ParseOptions));
+}
+
 test ParseResult {
     {
-        const allocator = Allocator.init();
+        var allocator = try Allocator.init();
         defer allocator.deinit();
 
-        const astNameTable = Lexer.AstNameTable.init(allocator);
+        var astNameTable = try Lexer.AstNameTable.init(&allocator);
         defer astNameTable.deinit();
         const source =
             \\--!test
@@ -120,7 +130,7 @@ test ParseResult {
             \\
         ;
 
-        var parseResult = parse(source, astNameTable, allocator, .{});
+        var parseResult = parse(source, &astNameTable, &allocator, .{});
         defer parseResult.deinit();
 
         {

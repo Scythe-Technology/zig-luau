@@ -14,6 +14,11 @@ const Errorset = @import("errorset.zig");
 
 const Error = Errorset.Table;
 
+// Set this to 1 to change the hash function to something different (and possibly trivial). Useful
+// for checking if a Lua program's behavior depends on the hash function.
+const ALT_HASH_FUNCTION = false;
+
+// max size of both array and hash part is 2^MAXBIT
 const MAXBITS = 26;
 const MAXSIZE = 1 << MAXBITS;
 
@@ -38,10 +43,10 @@ pub inline fn hashpow2(t: *const LuaTable, n: u32) [*]LuaNode {
     return t.gnode(lobject.lmod(usize, n, lobject.sizenode(t)));
 }
 pub inline fn hashstr(t: *const LuaTable, str: *const lobject.TString) [*]LuaNode {
-    return hashpow2(t, str.hash);
+    return hashpow2(t, (if (ALT_HASH_FUNCTION) 0x87654321 else 0) ^ str.hash);
 }
 pub inline fn hashboolean(t: *const LuaTable, b: bool) [*]LuaNode {
-    return hashpow2(t, if (b) 1 else 0);
+    return hashpow2(t, @as(u32, if (ALT_HASH_FUNCTION) 0x87654321 else 0) ^ @as(u32, if (b) 1 else 0));
 }
 
 pub fn hashpointer(t: *const LuaTable, p: ?*const anyopaque) [*]LuaNode {
@@ -49,11 +54,13 @@ pub fn hashpointer(t: *const LuaTable, p: ?*const anyopaque) [*]LuaNode {
     var h: u32 = if (p) |ptr| @truncate(@intFromPtr(ptr)) else 0;
 
     // MurmurHash3 32-bit finalizer
-    h ^= h >> 16;
-    h *%= 0x85ebca6b;
-    h ^= h >> 13;
-    h *%= 0xc2b2ae35;
-    h ^= h >> 16;
+    if (comptime !ALT_HASH_FUNCTION) {
+        h ^= h >> 16;
+        h *%= 0x85ebca6b;
+        h ^= h >> 13;
+        h *%= 0xc2b2ae35;
+        h ^= h >> 16;
+    }
 
     return hashpow2(t, h);
 }
@@ -70,15 +77,16 @@ fn hashnum(t: *const LuaTable, n: f64) [*]LuaNode {
     // finalizer from MurmurHash64B
     const m: u32 = 0x5bd1e995;
 
-    h1 ^= h2 >> 18;
-    h1 *%= m;
-    h2 ^= h1 >> 22;
-    h2 *%= m;
-    h1 ^= h2 >> 17;
-    h1 *%= m;
-    h2 ^= h1 >> 19;
-    h2 *%= m;
-
+    if (comptime !ALT_HASH_FUNCTION) {
+        h1 ^= h2 >> 18;
+        h1 *%= m;
+        h2 ^= h1 >> 22;
+        h2 *%= m;
+        h1 ^= h2 >> 17;
+        h1 *%= m;
+        h2 ^= h1 >> 19;
+        h2 *%= m;
+    }
     // ... truncated to 32-bit output (normally hash is equal to (uint64_t(h1) << 32) | h2, but we only really need the lower 32-bit half)
     return hashpow2(t, h2);
 }
@@ -94,14 +102,16 @@ fn hashint(t: *const LuaTable, n: i64) [*]LuaNode {
     // finalizer from MurmurHash64B
     const m: u32 = 0x5bd1e995;
 
-    h1 ^= h2 >> 18;
-    h1 *%= m;
-    h2 ^= h1 >> 22;
-    h2 *%= m;
-    h1 ^= h2 >> 17;
-    h1 *%= m;
-    h2 ^= h1 >> 19;
-    h2 *%= m;
+    if (comptime !ALT_HASH_FUNCTION) {
+        h1 ^= h2 >> 18;
+        h1 *%= m;
+        h2 ^= h1 >> 22;
+        h2 *%= m;
+        h1 ^= h2 >> 17;
+        h1 *%= m;
+        h2 ^= h1 >> 19;
+        h2 *%= m;
+    }
 
     // ... truncated to 32-bit output (normally hash is equal to (uint64_t(h1) << 32) | h2, but we only really need the lower 32-bit half)
     return hashpow2(t, h2);
@@ -118,9 +128,11 @@ fn hashvec(t: *const LuaTable, v: []const lua.config.VECTOR_TYPE) [*]LuaNode {
         i[2] = if (i[2] == 0x80000000) 0 else i[2];
 
         // scramble bits to make sure that integer coordinates have entropy in lower bits
-        i[0] ^= i[0] >> 17;
-        i[1] ^= i[1] >> 17;
-        i[2] ^= i[2] >> 17;
+        if (comptime !ALT_HASH_FUNCTION) {
+            i[0] ^= i[0] >> 17;
+            i[1] ^= i[1] >> 17;
+            i[2] ^= i[2] >> 17;
+        }
 
         // Optimized Spatial Hashing for Collision Detection of Deformable Objects
         var h: u32 = (i[0] * 73856093) ^ (i[1] * 19349663) ^ (i[2] * 83492791);
@@ -142,9 +154,11 @@ fn hashvec(t: *const LuaTable, v: []const lua.config.VECTOR_TYPE) [*]LuaNode {
         i[2] = if (i[2] == 0x8000000000000000) 0 else i[2];
 
         // scramble bits to make sure that integer coordinates have entropy in lower bits
-        i[0] ^= i[0] >> 32;
-        i[1] ^= i[1] >> 32;
-        i[2] ^= i[2] >> 32;
+        if (comptime !ALT_HASH_FUNCTION) {
+            i[0] ^= i[0] >> 32;
+            i[1] ^= i[1] >> 32;
+            i[2] ^= i[2] >> 32;
+        }
 
         // Optimized Spatial Hashing for Collision Detection of Deformable Objects
         var h: u32 = (@as(u32, @truncate(i[0] * 73856093))) ^ (@as(u32, @truncate(i[1] * 19349663))) ^ (@as(u32, @truncate(i[2] * 83492791)));

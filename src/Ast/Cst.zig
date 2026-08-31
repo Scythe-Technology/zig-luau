@@ -470,10 +470,10 @@ test Node {
     const Allocator = @import("Allocator.zig");
 
     {
-        const allocator = Allocator.init();
+        var allocator = try Allocator.init();
         defer allocator.deinit();
 
-        const table = Lexer.AstNameTable.init(allocator);
+        var table = try Lexer.AstNameTable.init(&allocator);
         defer table.deinit();
         const source =
             \\local x: number = 1;
@@ -482,7 +482,7 @@ test Node {
             \\
         ;
 
-        var parse_result = Parser.parse(source, table, allocator, .{
+        var parse_result = Parser.parse(source, &table, &allocator, .{
             .storeCstData = true,
         });
         defer parse_result.deinit();
