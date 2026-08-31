@@ -1658,3 +1658,45 @@ pub fn getallocf(L: *lua.State, ud: ?*?*anyopaque) ?lua.Alloc {
         ptr.* = L.global.ud;
     return f;
 }
+
+pub fn registeruserdatadirectfieldget(
+    L: *lua.State,
+    comptime T: type,
+    tag: u8,
+    field: []const u8,
+    comptime callback: *const fn (ud: *T, result: *lobject.TValue) void,
+) Errorset.Table!void {
+    const @"fn" = struct {
+        fn inner(ud: ?*anyopaque, result: ?*anyopaque) callconv(.c) void {
+            @call(.always_inline, callback, .{
+                @as(*T, @ptrCast(@alignCast(ud.?))),
+                @as(*lobject.TValue, @ptrCast(@alignCast(result))),
+            });
+        }
+    }.inner;
+
+    if (comptime !build_config.use_zig_backend) {
+        // small static buffer for field because the 'field' type
+        // does not require a zero sentinel, but the C api does.
+        var static: [256:0]u8 = undefined;
+        if (field.len > static.len)
+            @panic("field too long, use zig backend");
+        @memcpy(static[0..field.len], field);
+        static[field.len] = 0;
+        return c.lua_registeruserdatadirectfieldget(@ptrCast(L), @intCast(tag), &static, @ptrCast(@alignCast(@"fn")));
+    }
+    api_check(L, tag < lua.config.UTAG_LIMIT);
+    api_check(L, field.len != 0);
+    api_check(L, callback != null);
+
+    const g = L.global;
+
+    if (g.udatadirectfields[tag] == null)
+        g.udatadirectfields[tag] = try ltable.Hnew(L, 0, 1);
+
+    const ts = try lstring.Snew(L, field);
+    lstring.Sfix(ts);
+
+    const slot = try ltable.Hsetstr(L, g.udatadirectfields[tag], ts);
+    slot.setpvalue(@ptrCast(@alignCast(@"fn")), 0);
+}

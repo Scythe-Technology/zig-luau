@@ -141,6 +141,52 @@ pub fn getcoverage(
     }.inner);
 }
 
+pub fn getcounters(
+    L: *lua.State,
+    comptime T: type,
+    context: *T,
+    funcindex: i32,
+    comptime functionvisit: *const fn (
+        ctx: *T,
+        func: ?[:0]const u8,
+        linedefined: i32,
+    ) void,
+    comptime countervisit: *const fn (
+        ctx: *T,
+        kind: i32,
+        line: i32,
+        hits: u64,
+    ) void,
+) void {
+    c.lua_getcounters(@ptrCast(L), funcindex, context, struct {
+        fn inner(
+            ctx: ?*anyopaque,
+            func: [*c]const u8,
+            linedefined: c_int,
+        ) callconv(.c) void {
+            @call(.always_inline, functionvisit, .{
+                @as(*T, @ptrCast(@alignCast(ctx.?))),
+                if (func != null) std.mem.span(func) else null,
+                linedefined,
+            });
+        }
+    }.inner, struct {
+        fn inner(
+            ctx: ?*anyopaque,
+            kind: c_int,
+            line: c_int,
+            hits: u64,
+        ) callconv(.c) void {
+            @call(.always_inline, countervisit, .{
+                @as(*T, @ptrCast(@alignCast(ctx.?))),
+                kind,
+                line,
+                hits,
+            });
+        }
+    }.inner);
+}
+
 pub inline fn debugtrace(L: *lua.State) [:0]const u8 {
     return std.mem.span(c.lua_debugtrace(@ptrCast(L)));
 }

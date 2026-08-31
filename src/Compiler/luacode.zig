@@ -9,6 +9,7 @@ extern "c" fn luau_compile(source: [*c]const u8, size: usize, options: ?*const C
 extern "c" fn luau_set_compile_constant_nil(constant: *Compiler.CompileConstant) void;
 extern "c" fn luau_set_compile_constant_boolean(constant: *Compiler.CompileConstant, b: c_int) void;
 extern "c" fn luau_set_compile_constant_number(constant: *Compiler.CompileConstant, n: f64) void;
+extern "c" fn luau_set_compile_constant_integer64(constant: *Compiler.CompileConstant, l: i64) void;
 extern "c" fn luau_set_compile_constant_vector(constant: *Compiler.CompileConstant, x: f32, y: f32, z: f32, w: f32) void;
 extern "c" fn luau_set_compile_constant_vectord(constant: *Compiler.CompileConstant, x: f64, y: f64, z: f64, w: f64) void;
 extern "c" fn luau_set_compile_constant_string(constant: *Compiler.CompileConstant, s: [*c]const u8, l: usize) void;
@@ -35,6 +36,10 @@ pub fn set_compile_constant_boolean(constant: *Compiler.CompileConstant, b: bool
 
 pub fn set_compile_constant_number(constant: *Compiler.CompileConstant, n: f64) void {
     luau_set_compile_constant_number(constant, n);
+}
+
+pub fn set_compile_constant_integer64(constant: *Compiler.CompileConstant, l: i64) void {
+    luau_set_compile_constant_integer64(constant, l);
 }
 
 pub fn set_compile_constant_vector(constant: *Compiler.CompileConstant, x: f32, y: f32, z: f32, w: f32) void {

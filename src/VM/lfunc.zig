@@ -14,8 +14,8 @@ pub inline fn sizeCclosure(n: u8) usize {
 pub inline fn sizeLclosure(n: u8) usize {
     return @offsetOf(lobject.Closure, "d") + @offsetOf(lobject.Closure.ValueUnion.L, "uprefs") + (@sizeOf(lobject.TValue) * @as(usize, @intCast(n)));
 }
-pub inline fn getproto(cl: *lobject.Closure) *lobject.Proto {
-    return cl.d.l.p;
+pub inline fn getproto(cl: *lobject.Closure) ?*lobject.Proto {
+    return if (cl.isC) null else cl.d.l.p;
 }
 
 pub fn Fnewproto(L: *lua.State) !*lobject.Proto {
@@ -161,4 +161,13 @@ pub fn Ffreeproto(L: *lua.State, f: *lobject.Proto, page: *lmem.lua_Page) void {
 pub fn Ffreeclosure(L: *lua.State, c: *lobject.Closure, page: *lmem.lua_Page) void {
     const size = if (c.isC != 0) sizeCclosure(c.nupvalues) else sizeLclosure(c.nupvalues);
     lmem.Mfreegco(L, c.obj2gco(), size, c.header.memcat, page);
+}
+
+pub inline fn luaF_promoteproto(cl: *lobject.Closure) *lobject.Proto {
+    std.debug.assert(!cl.isC);
+    while (cl.d.l.p.optimized) |o| {
+        cl.d.l.p = o;
+        cl.stacksize = cl.d.l.p.maxstacksize;
+    }
+    return cl.d.l.p;
 }

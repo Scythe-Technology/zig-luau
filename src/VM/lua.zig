@@ -320,6 +320,7 @@ pub const UdataDirectAccessData = extern struct {
     // IMPORTANT: cachedslot values are shared between all userdata, callbacks function of one userdata tag has to correctly handle values set by another
     pub const Access = fn (L: *State, data: *anyopaque, atom: c_int, cachedslot: *u16, utag: c_int) callconv(.c) void;
     pub const Namecall = fn (L: *State, data: *anyopaque, atom: c_int, cachedslot: *u16, utag: c_int) callconv(.c) c_int;
+    pub const FieldGet = fn (ud: *anyopaque, result: *lobject.TValue) callconv(.c) void;
 
     indextm: lobject.TValue,
     newindextm: lobject.TValue,

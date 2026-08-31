@@ -583,6 +583,7 @@ pub const lua_State = extern struct {
     pub const clonetable = lapi.clonetable;
     pub const callbacks = lapi.callbacks;
     pub const getallocf = lapi.getallocf;
+    pub const registeruserdatadirectfieldget = lapi.registeruserdatadirectfieldget;
 
     // lapi
     pub const Atoobject = lapi.Atoobject;
