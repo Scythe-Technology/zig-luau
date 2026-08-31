@@ -339,6 +339,12 @@ pub inline fn isnone(L: *lua.State, idx: i32) bool {
 pub inline fn isnoneornil(L: *lua.State, idx: i32) bool {
     return @"type"(L, idx) <= @intFromEnum(lua.Type.Nil);
 }
+pub inline fn isclass(L: *lua.State, idx: i32) bool {
+    return @"type"(L, idx) == @intFromEnum(lua.Type.Class);
+}
+pub inline fn isobject(L: *lua.State, idx: i32) bool {
+    return @"type"(L, idx) == @intFromEnum(lua.Type.Object);
+}
 
 pub fn typeOf(L: *lua.State, idx: i32) lua.Type {
     if (comptime !build_config.use_zig_backend) {
@@ -479,16 +485,15 @@ pub fn toboolean(L: *lua.State, idx: i32) bool {
 
 pub fn tointeger64(L: *lua.State, idx: i32) ?i64 {
     if (comptime !build_config.use_zig_backend) {
-        var isnum: i32 = 0;
-        const v = c.lua_tointeger64x(@ptrCast(L), idx, &isnum);
-        if (isnum != 0)
+        var isinteger: i32 = 0;
+        const v = c.lua_tointeger64(@ptrCast(L), idx, &isinteger);
+        if (isinteger != 0)
             return v;
         return null;
     }
-    var n: lobject.TValue = undefined;
     const o: *const lobject.TValue = index2addr(L, idx);
-    if (lvmutils.Vtonumber(o, &n)) |obj|
-        return @truncate(@as(i64, @intFromFloat(obj.nvalue())))
+    if (o.ttisinteger())
+        return o.lvalue()
     else
         return null;
 }

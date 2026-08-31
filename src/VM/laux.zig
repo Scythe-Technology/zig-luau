@@ -185,7 +185,7 @@ pub fn Lcheckinteger(L: *lua.State, narg: i32) i32 {
 }
 
 pub fn Lcheckinteger64(L: *lua.State, narg: i32) i64 {
-    return L.tointeger64(narg) orelse tag_error(L, narg, .Number);
+    return L.tointeger64(narg) orelse tag_error(L, narg, .Integer);
 }
 
 pub fn Loptinteger(L: *lua.State, narg: i32, d: i32) i32 {
