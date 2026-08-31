@@ -520,7 +520,7 @@ pub const Closure = extern struct {
         pub const C = extern struct {
             f: ?lua.CFunction,
             cont: ?lua.Continuation,
-            debugname: [*c]const u8,
+            debugname: ?[*:0]const u8,
             upvals: [1]TValue,
 
             pub inline fn upvalues(cc: *C) [*]TValue {
