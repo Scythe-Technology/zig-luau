@@ -493,7 +493,7 @@ pub fn Mnew_(L: *lua.State, nsize: usize, memcat: u8) Error!*anyopaque {
     const nclass = sizeclass(nsize);
 
     const block = if (nclass >= 0)
-        newblock(L, @intCast(nclass))
+        try newblock(L, @intCast(nclass))
     else
         (g.frealloc.?)(g.ud, null, 0, nsize) orelse return Error.OutOfMemory;
 
@@ -502,13 +502,13 @@ pub fn Mnew_(L: *lua.State, nsize: usize, memcat: u8) Error!*anyopaque {
 
     if (g.cb.onallocate) |onallocate| {
         @branchHint(.unlikely);
-        onallocate(L, 0, nsize);
+        onallocate(L, block, 0, nsize, memcat, @intFromEnum(lua.Type.All), 0);
     }
 
     return block;
 }
 
-pub fn Mnewgco_(L: *lua.State, nsize: usize, memcat: u8) Error!*lstate.GCObject {
+pub fn Mnewgco_(L: *lua.State, nsize: usize, memcat: u8, tt: i32, tag: i32) Error!*lstate.GCObject {
     // we need to accommodate space for link for free blocks (freegcolink)
     std.debug.assert(nsize >= kGCOLinkOffset + @sizeOf(*anyopaque));
 
@@ -535,16 +535,16 @@ pub fn Mnewgco_(L: *lua.State, nsize: usize, memcat: u8) Error!*lstate.GCObject 
 
     if (g.cb.onallocate) |onallocate| {
         @branchHint(.unlikely);
-        onallocate(L, 0, nsize);
+        onallocate(L, block, 0, nsize, memcat, tt, tag);
     }
 
     return @ptrCast(@alignCast(block));
 }
-pub inline fn Mnewgco(L: *lua.State, comptime T: type, nsize: usize, memcat: u8) !*T {
-    return @ptrCast(@alignCast(try Mnewgco_(L, nsize, memcat)));
+pub inline fn Mnewgco(L: *lua.State, comptime T: type, nsize: usize, memcat: u8, tt: i32) !*T {
+    return @ptrCast(@alignCast(try Mnewgco_(L, nsize, memcat, tt, 0)));
 }
 
-pub fn Mnewgcofixed_(L: *lua.State, nsize: usize, memcat: u8) Error!*lstate.GCObject {
+pub fn Mnewgcofixed_(L: *lua.State, nsize: usize, memcat: u8, tt: i32) Error!*lstate.GCObject {
     // we need to accommodate space for link for free blocks (freegcolink)
     std.debug.assert(nsize >= kGCOLinkOffset + @sizeOf(*anyopaque));
 
@@ -560,12 +560,22 @@ pub fn Mnewgcofixed_(L: *lua.State, nsize: usize, memcat: u8) Error!*lstate.GCOb
     g.totalbytes += nsize;
     g.memcatbytes[memcat] += nsize;
 
+    if (g.cb.onallocate) |onallocate| {
+        @branchHint(.unlikely);
+        onallocate(L, block, 0, nsize, memcat, tt, 0);
+    }
+
     return @ptrCast(@alignCast(block));
 }
 
 pub fn Mfree_(L: *lua.State, block: ?*anyopaque, osize: usize, memcat: u8) void {
     const g = L.global;
     std.debug.assert((osize == 0) == (block == null));
+
+    if (g.cb.onfree) |onfree| {
+        @branchHint(.unlikely);
+        onfree(L, block);
+    }
 
     const oclass = sizeclass(osize);
 
@@ -581,6 +591,11 @@ pub fn Mfree_(L: *lua.State, block: ?*anyopaque, osize: usize, memcat: u8) void 
 pub fn Mfreegco_(L: *lua.State, block: ?*lstate.GCObject, osize: usize, memcat: u8, page: *lua_Page) void {
     const g = L.global;
     std.debug.assert((osize == 0) == (block == null));
+
+    if (g.cb.onfree) |onfree| {
+        @branchHint(.unlikely);
+        onfree(L, @ptrCast(@alignCast(block)));
+    }
 
     const oclass = sizeclass(osize);
 
@@ -607,6 +622,11 @@ pub inline fn Mfreegco(L: *lua.State, p: *lstate.GCObject, size: usize, memcat: 
 pub fn Mfreegcofixed_(L: *lua.State, block: ?*lstate.GCObject, osize: usize, memcat: u8, page: *lua_Page) void {
     const g = L.global;
 
+    if (g.cb.onfree) |onfree| {
+        @branchHint(.unlikely);
+        onfree(L, @ptrCast(@alignCast(block)));
+    }
+
     const oclass = sizeclass(osize);
     std.debug.assert(oclass >= 0);
 
@@ -625,6 +645,11 @@ pub fn Mrealloc_(L: *lua.State, block: ?*anyopaque, osize: usize, nsize: usize, 
     const nclass = sizeclass(nsize);
     const oclass = sizeclass(osize);
     var result: ?*anyopaque = undefined;
+
+    if (g.cb.onfree != null and block != null) {
+        @branchHint(.unlikely);
+        g.cb.onfree.?(L, block);
+    }
 
     // if either block needs to be allocated using a block allocator, we can't use realloc directly
     if (nclass >= 0 or oclass >= 0) {
@@ -658,7 +683,7 @@ pub fn Mrealloc_(L: *lua.State, block: ?*anyopaque, osize: usize, nsize: usize, 
 
     if (g.cb.onallocate) |onallocate| {
         @branchHint(.unlikely);
-        onallocate(L, osize, nsize);
+        onallocate(L, result.?, osize, nsize, memcat, @intFromEnum(lua.Type.All), 0);
     }
 
     return result;

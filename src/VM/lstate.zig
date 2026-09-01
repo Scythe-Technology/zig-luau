@@ -869,9 +869,15 @@ fn close_state(L: *lua_State) void {
 }
 
 pub fn Enewthread(L: *lua_State) Errorset.Table!*lua_State {
-    const L1 = try lmem.Mnewgco(L, lua_State, @sizeOf(lua_State), L.activememcat);
+    const L1 = try lmem.Mnewgco(L, lua_State, @sizeOf(lua_State), L.activememcat, @intFromEnum(lua.Type.Thread));
+
+    @memset(std.mem.asBytes(L1), 0);
+
     lgc.Cinit(L, @ptrCast(@alignCast(L1)), @intFromEnum(lua.Type.Thread));
-    preinit_state(L1, L.global);
+
+    L1.global = L.global;
+
+    // preinit_state(L1, L.global);
     L1.activememcat = L.activememcat; // inherit the active memory category
     try stack_init(L1, L); // init stack
     L1.gt = L.gt; // share table of globals
@@ -929,95 +935,137 @@ pub fn isthreadreset(L: *lua_State) bool {
     return L.ci == L.base_ci and L.base == L.top and L.curr_status == @intFromEnum(lua.Status.Ok);
 }
 
-pub fn newstate(f: lua.Alloc, ud: ?*anyopaque) Errorset.Table!*lua_State {
+pub fn newstate(allocator: lua.Alloc, ud: ?*anyopaque) Errorset.Table!*lua_State {
     if (comptime !build_config.use_zig_backend) {
-        return @ptrCast(@alignCast(c.lua_newstate(@ptrCast(@alignCast(f)), ud) orelse return error.OutOfMemory));
+        return @ptrCast(@alignCast(c.lua_newstate(@ptrCast(@alignCast(allocator)), ud) orelse return error.OutOfMemory));
     }
-    const l = f(ud, null, 0, @sizeOf(LG)) orelse return error.OutOfMemory;
+
+    const l = allocator(ud, null, 0, @sizeOf(LG)) orelse return error.OutOfMemory;
+
+    @memset(std.mem.asBytes(@as(*LG, @ptrCast(@alignCast(l)))), 0);
+
     const L: *lua_State = @ptrCast(@alignCast(l));
     const g: *global_State = &(@as(*LG, @ptrCast(@alignCast(L)))).g;
+
     L.header.tt = @intFromEnum(lua.Type.Thread);
     L.header.marked = lgc.bit2mask(lgc.WHITE0BIT, lgc.FIXEDBIT);
     g.currentwhite = L.header.marked;
-    L.header.memcat = 0;
-    preinit_state(L, g);
-    g.frealloc = f;
+
+    g.frealloc = allocator;
     g.ud = ud;
+
+    L.global = g;
     g.mainthread = L;
+
     g.uvhead.u.open.prev = &g.uvhead;
     g.uvhead.u.open.next = &g.uvhead;
-    g.GCthreshold = 0; // mark it as unfinished state
-    g.registryfree = 0;
-    g.errorjmp = null;
-    g.rngstate = 0;
+
     g.ptrenckey[0] = 1;
-    g.ptrenckey[1] = 0;
-    g.ptrenckey[2] = 0;
-    g.ptrenckey[3] = 0;
-    @memset(g.ptrenckeynew[0..8], 0);
-    g.ptrencactive = false;
-    g.strt.size = 0;
-    g.strt.nuse = 0;
-    g.strt.hash = null;
-    g.pseudotemp.setnilvalue();
-    L.registry().setnilvalue();
-    g.gcstate = lgc.GCSpause;
-    g.gray = null;
-    g.grayagain = null;
-    g.weak = null;
+
     g.totalbytes = @sizeOf(LG);
+    g.memcatbytes[0] = @sizeOf(LG);
+
+    g.gcstate = lgc.GCSpause;
     g.gcgoal = lgc.I_GCGOAL;
     g.gcstepmul = lgc.I_GCSTEPMUL;
     g.gcstepsize = @as(c_int, lgc.I_GCSTEPSIZE) << 10;
 
-    for (0..@intCast(lua.config.SIZECLASSES)) |i| {
-        g.freepages[i] = null;
-        g.freegcopages[i] = null;
-    }
-
-    g.allpages = null;
-    g.allgcopages = null;
-    g.sweepgcopage = null;
-
-    @memset(g.mt[0..], null);
-
-    @memset(g.udatagc[0..], null);
-    @memset(g.udatamark[0..], null);
-    @memset(g.udatamt[0..], null);
-
-    for (0..ludata.UTAG_INTERNAL_LIMIT) |i| {
-        const udatadirect = &g.udatadirect[i];
-
-        udatadirect.indextm.setnilvalue();
-        udatadirect.newindextm.setnilvalue();
-        udatadirect.namecalltm.setnilvalue();
-        udatadirect.index = null;
-        udatadirect.newindex = null;
-        udatadirect.namecall = null;
-    }
-
-    @memset(g.lightuserdataname[0..], null);
-    @memset(g.udatadirectfields[0..], null);
-    @memset(g.memcatbytes[0..], 0);
-
-    g.memcatbytes[0] = @sizeOf(LG);
-
     g.cb = .{};
-
     g.ecb = .{};
-
-    @memset(g.ecbdata[0..], 0);
-
     g.gcstats = .{};
-    g.lastprotoid = 1;
 
-    g.builtinPcall = null;
-    g.builtinXpcall = null;
+    g.lastprotoid = 1;
 
     // TODO: LUAI_GCMETRICS
 
     errdefer L.close();
     try f_luaopen(L);
+
+    // const l = allocator(ud, null, 0, @sizeOf(LG)) orelse return error.OutOfMemory;
+    // const L: *lua_State = @ptrCast(@alignCast(l));
+    // const g: *global_State = &(@as(*LG, @ptrCast(@alignCast(L)))).g;
+    // L.header.tt = @intFromEnum(lua.Type.Thread);
+    // L.header.marked = lgc.bit2mask(lgc.WHITE0BIT, lgc.FIXEDBIT);
+    // g.currentwhite = L.header.marked;
+    // L.header.memcat = 0;
+    // preinit_state(L, g);
+    // g.frealloc = allocator;
+    // g.ud = ud;
+    // g.mainthread = L;
+    // g.uvhead.u.open.prev = &g.uvhead;
+    // g.uvhead.u.open.next = &g.uvhead;
+    // g.GCthreshold = 0; // mark it as unfinished state
+    // g.registryfree = 0;
+    // g.errorjmp = null;
+    // g.rngstate = 0;
+    // g.ptrenckey[0] = 1;
+    // g.ptrenckey[1] = 0;
+    // g.ptrenckey[2] = 0;
+    // g.ptrenckey[3] = 0;
+    // @memset(g.ptrenckeynew[0..8], 0);
+    // g.ptrencactive = false;
+    // g.strt.size = 0;
+    // g.strt.nuse = 0;
+    // g.strt.hash = null;
+    // g.pseudotemp.setnilvalue();
+    // L.registry().setnilvalue();
+    // g.gcstate = lgc.GCSpause;
+    // g.gray = null;
+    // g.grayagain = null;
+    // g.weak = null;
+    // g.totalbytes = @sizeOf(LG);
+    // g.gcgoal = lgc.I_GCGOAL;
+    // g.gcstepmul = lgc.I_GCSTEPMUL;
+    // g.gcstepsize = @as(c_int, lgc.I_GCSTEPSIZE) << 10;
+
+    // for (0..@intCast(lua.config.SIZECLASSES)) |i| {
+    //     g.freepages[i] = null;
+    //     g.freegcopages[i] = null;
+    // }
+
+    // g.allpages = null;
+    // g.allgcopages = null;
+    // g.sweepgcopage = null;
+
+    // @memset(g.mt[0..], null);
+
+    // @memset(g.udatagc[0..], null);
+    // @memset(g.udatamark[0..], null);
+    // @memset(g.udatamt[0..], null);
+
+    // for (0..ludata.UTAG_INTERNAL_LIMIT) |i| {
+    //     const udatadirect = &g.udatadirect[i];
+
+    //     udatadirect.indextm.setnilvalue();
+    //     udatadirect.newindextm.setnilvalue();
+    //     udatadirect.namecalltm.setnilvalue();
+    //     udatadirect.index = null;
+    //     udatadirect.newindex = null;
+    //     udatadirect.namecall = null;
+    // }
+
+    // @memset(g.lightuserdataname[0..], null);
+    // @memset(g.udatadirectfields[0..], null);
+    // @memset(g.memcatbytes[0..], 0);
+
+    // g.memcatbytes[0] = @sizeOf(LG);
+
+    // g.cb = .{};
+
+    // g.ecb = .{};
+
+    // @memset(g.ecbdata[0..], 0);
+
+    // g.gcstats = .{};
+    // g.lastprotoid = 1;
+
+    // g.builtinPcall = null;
+    // g.builtinXpcall = null;
+
+    // // TODO: LUAI_GCMETRICS
+
+    // errdefer L.close();
+    // try f_luaopen(L);
 
     return L;
 }

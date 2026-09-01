@@ -104,6 +104,9 @@ pub const Type = if (!config.VECTOR_DOUBLE) enum(i6) {
     Proto = c.LUA_TPROTO,
     UpVal = c.LUA_TUPVAL,
 
+    // the count of all Luau types (including those that are never TValue type tags)
+    All = c.LUA_T_ALL,
+
     // the count of TValue type tags
     pub const T_COUNT = c.LUA_T_COUNT;
 
@@ -315,13 +318,16 @@ pub const Callbacks = extern struct {
     /// gets called when protected call results in an error
     debugprotectederror: ?*const fn (L: *State) callconv(.c) void = null,
 
-    /// gets called when memory is allocated
-    onallocate: ?*const fn (L: *State, osize: usize, nsize: usize) callconv(.c) void = null,
+    /// gets called after a heap object (or array) is allocated
+    onallocate: ?*const fn (L: *State, block: *anyopaque, osize: usize, nsize: usize, memcat: u8, tt: i32, tag: i32) callconv(.c) void = null,
 
     /// gets called before lua_resume runs a (co)routine
     preresume: ?*const fn (L: *State) callconv(.c) void = null,
     /// gets called after lua_resume returns (yield, return, or error)
     postresume: ?*const fn (L: *State) callconv(.c) void = null,
+
+    // gets called before a heap object (or array) is freed
+    onfree: ?*const fn (L: *State, block: ?*anyopaque) callconv(.c) void = null,
 };
 
 pub const UdataDirectAccessData = extern struct {

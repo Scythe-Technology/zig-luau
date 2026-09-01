@@ -878,6 +878,7 @@ const LUAU_Bytecode_HEADERS_DIRS = [_][]const u8{
 };
 const LUAU_Bytecode_SOURCE_FILES = [_][]const u8{
     "Bytecode/src/BytecodeBuilder.cpp",
+    "Bytecode/src/BytecodeDump.cpp",
     "Bytecode/src/BytecodeGraph.cpp",
     "Bytecode/src/Sccp.cpp",
 };

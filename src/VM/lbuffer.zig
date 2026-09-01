@@ -21,7 +21,7 @@ pub fn Bnewbuffer(L: *lua.State, s: usize) Errorset.Memory!*lobject.Buffer {
     if (s > MAX_BUFFER_SIZE)
         return error.BlockTooBig;
 
-    const b = try lmem.Mnewgco(L, lobject.Buffer, sizebuffer(s), L.activememcat);
+    const b = try lmem.Mnewgco(L, lobject.Buffer, sizebuffer(s), L.activememcat, @intFromEnum(lua.Type.Buffer));
     lgc.Cinit(L, @ptrCast(@alignCast(b)), @intFromEnum(lua.Type.Buffer));
     b.len = @intCast(s);
     @memset(@as([*]u8, @ptrCast(@alignCast(&b.data)))[0..s], 0);

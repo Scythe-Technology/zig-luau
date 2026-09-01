@@ -437,7 +437,7 @@ fn rehash(L: *lua.State, t: *LuaTable, ek: *const TValue) Error!void {
 }
 
 pub fn Hnew(L: *lua.State, narray: u32, nhash: u32) Error!*LuaTable {
-    const t = try lmem.Mnewgco(L, LuaTable, @sizeOf(LuaTable), L.header.memcat);
+    const t = try lmem.Mnewgco(L, LuaTable, @sizeOf(LuaTable), L.header.memcat, @intFromEnum(lua.Type.Table));
     lgc.Cinit(L, @ptrCast(@alignCast(t)), @intFromEnum(lua.Type.Table));
     t.metatable = null;
     t.tmcache = ~(@as(u8, 0));
@@ -683,7 +683,7 @@ pub fn Hgetn(t: *LuaTable) usize {
 }
 
 pub fn Hclone(L: *lua.State, tt: *LuaTable) Error!*LuaTable {
-    const t = try lmem.Mnewgco(L, LuaTable, @sizeOf(LuaTable), L.activememcat);
+    const t = try lmem.Mnewgco(L, LuaTable, @sizeOf(LuaTable), L.activememcat, @intFromEnum(lua.Type.Table));
     lgc.Cinit(L, @ptrCast(@alignCast(t)), @intFromEnum(lua.Type.Table));
     t.metatable = tt.metatable;
     t.tmcache = tt.tmcache;

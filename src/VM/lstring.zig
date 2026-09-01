@@ -95,7 +95,7 @@ fn newlstr(L: *lua.State, str: []const u8, hash: u32) Errorset.Memory!*lobject.T
     if (l > MAXSSIZE)
         return error.BlockTooBig;
 
-    const ts = try lmem.Mnewgco(L, lobject.TString, sizestring(l), L.activememcat);
+    const ts = try lmem.Mnewgco(L, lobject.TString, sizestring(l), L.activememcat, @intFromEnum(lua.Type.String));
     lgc.Cinit(L, @ptrCast(@alignCast(ts)), @intFromEnum(lua.Type.String));
     ts.atom = ATOM_UNDEF;
     ts.hash = hash;
@@ -120,7 +120,7 @@ pub fn Sbufstart(L: *lua.State, size: usize) Errorset.Memory!*lobject.TString {
     if (size > MAXSSIZE)
         return error.BlockTooBig;
 
-    const ts = try lmem.Mnewgco(L, lobject.TString, sizestring(size), L.activememcat);
+    const ts = try lmem.Mnewgco(L, lobject.TString, sizestring(size), L.activememcat, @intFromEnum(lua.Type.String));
     lgc.Cinit(L, @ptrCast(@alignCast(ts)), @intFromEnum(lua.Type.String));
     ts.atom = ATOM_UNDEF;
     ts.hash = 0; // computed in Sbuffinish

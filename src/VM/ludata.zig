@@ -27,7 +27,7 @@ pub fn Unewudata(L: *lua.State, s: usize, tag: u8) Errorset.Memory!*lobject.Udat
     if (s > std.math.maxInt(i32) - @sizeOf(lobject.Udata))
         return error.BlockTooBig;
 
-    const u = try lmem.Mnewgco(L, lobject.Udata, sizeudata(s), L.activememcat);
+    const u = try lmem.Mnewgco(L, lobject.Udata, sizeudata(s), L.activememcat, @intFromEnum(lua.Type.Userdata));
     lgc.Cinit(L, @ptrCast(@alignCast(u)), @intFromEnum(lua.Type.Userdata));
     u.metatable = null;
     u.len = @intCast(s);

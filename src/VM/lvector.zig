@@ -19,7 +19,7 @@ pub fn sizevector() usize {
 }
 
 pub fn Vecnewvector(L: *lua.State, x: lua.config.VECTOR_TYPE, y: lua.config.VECTOR_TYPE, z: lua.config.VECTOR_TYPE, w: ?lua.config.VECTOR_TYPE) !*lstate.GCObject {
-    const v = try lmem.Mnewgcofixed_(L, lobject.Vector, sizevector(), L.activememcat);
+    const v = try lmem.Mnewgcofixed_(L, lobject.Vector, sizevector(), L.activememcat, @intFromEnum(lua.Type.Vector));
     lgc.Cinit(L, v, @intFromEnum(lua.Type.Vector));
     v.v[0] = @as(f32, x);
     v.v[1] = @as(f32, y);
