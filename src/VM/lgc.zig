@@ -467,8 +467,6 @@ fn traverseclass(g: *lstate.global_State, classobject: *lobject.LuauClass) void 
         markobject(g, @ptrCast(@alignCast(classobject.offsettomember[i])));
     for (0..classobject.numberofallmembers - classobject.numberofinstancemembers) |i|
         markobject(g, @ptrCast(@alignCast(&classobject.staticmembers[i])));
-    if (classobject.metatable) |mt|
-        markobject(g, @ptrCast(@alignCast(mt)));
     if (classobject.instancemetatable) |mt|
         markobject(g, @ptrCast(@alignCast(mt)));
 }
@@ -745,6 +743,14 @@ fn marktaggedmt(g: *lstate.global_State) void {
     }
 }
 
+fn markfastpcalls(g: *lstate.global_State) void {
+    if (g.builtinPcall) |pcall|
+        markobject(g, @ptrCast(@alignCast(pcall)));
+
+    if (g.builtinXpcall) |xpcall|
+        markobject(g, @ptrCast(@alignCast(xpcall)));
+}
+
 fn markroot(L: *lua.State) void {
     const g = L.global;
     g.gray = null;
@@ -756,9 +762,13 @@ fn markroot(L: *lua.State) void {
     markvalue(g, L.registry());
 
     markudatadirectaccess(g);
+
     markudatadirectfields(g);
 
+    markfastpcalls(g);
+
     markmt(g);
+
     marktaggedmt(g);
 
     g.gcstate = GCSpropagate;
@@ -841,6 +851,8 @@ fn atomic(L: *lua.State) Errorset.Table!usize {
     markudatadirectaccess(g); // mark tagged userdata direct access functions (again)
 
     markudatadirectfields(g); // mark direct field dispatch tables (again)
+
+    markfastpcalls(g);
 
     work += try propagateall(g);
 

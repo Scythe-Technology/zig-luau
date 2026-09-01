@@ -793,10 +793,6 @@ pub const LuauClass = extern struct {
     /// Mapping from offset to member name. Instance member offsets are stored before static member offsets.
     offsettomember: [*]*TString,
 
-    /// Metatable for this *class object*. At time of writing this only contains
-    /// __call, but we may add more metamethods to class objects in the future.
-    metatable: ?*LuaTable,
-
     /// Metatable for instances of this class. NULL until the first metamethod
     /// is added via luaR_addclassmember.
     instancemetatable: ?*LuaTable,
@@ -821,7 +817,7 @@ pub const LuauClass = extern struct {
     // True if this class or any of its ancestors defines an __init method.
     // If a class's ancestors define an __init method, it must itself also define an __init method.
     // We cannot determine this statically, so we track it here to error at runtime if the invariant is violated.
-    // The default constructor errors if this is true, which works because the default constructor is overriden if a class defines an __init method.
+    // The default constructor errors if this is true, which works because the default constructor is overridden if a class defines an __init method.
     hasuserinitinchain: bool,
 
     pub inline fn obj2gco(obj: *LuauClass) *lstate.GCObject {

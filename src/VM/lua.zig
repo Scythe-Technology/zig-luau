@@ -229,6 +229,8 @@ pub const Debug = struct {
     short_src: ?[]u8 = null,
     linedefined: ?u32 = null,
     currentline: ?u32 = null,
+    protoid: i32 = 0,
+    bytecodeid: i32 = 0,
     nupvals: u8 = 0,
     nparams: u8 = 0,
     isvararg: u8 = 0,
@@ -278,6 +280,10 @@ pub const Debug = struct {
             self.nparams = ar.nparams;
             self.isvararg = ar.isvararg;
         }
+        if (std.mem.indexOf(u8, options, "p")) |_| {
+            self.protoid = ar.protoid;
+            self.bytecodeid = ar.bytecodeid;
+        }
     }
 };
 
@@ -311,6 +317,11 @@ pub const Callbacks = extern struct {
 
     /// gets called when memory is allocated
     onallocate: ?*const fn (L: *State, osize: usize, nsize: usize) callconv(.c) void = null,
+
+    /// gets called before lua_resume runs a (co)routine
+    preresume: ?*const fn (L: *State) callconv(.c) void = null,
+    /// gets called after lua_resume returns (yield, return, or error)
+    postresume: ?*const fn (L: *State) callconv(.c) void = null,
 };
 
 pub const UdataDirectAccessData = extern struct {

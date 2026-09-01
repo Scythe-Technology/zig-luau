@@ -125,8 +125,6 @@ fn validateclass(g: *const lstate.global_State, lco: *lobject.LuauClass) void {
         if (i >= lco.numberofinstancemembers)
             validateref(g, obj, &lco.staticmembers[i - @as(u32, @intCast(lco.numberofinstancemembers))]);
     }
-    if (lco.metatable) |mt|
-        validateobjref(g, obj, mt.obj2gco());
     if (lco.instancemetatable) |mt|
         validateobjref(g, obj, mt.obj2gco());
 }

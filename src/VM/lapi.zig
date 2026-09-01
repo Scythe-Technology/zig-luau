@@ -1457,11 +1457,12 @@ pub fn setupvalue(L: *lua.State, funcidx: i32, n: u32) ?[:0]const u8 {
 }
 
 pub fn encodepointer(L: *lua.State, p: usize) usize {
-    if (comptime !build_config.use_zig_backend) {
-        return c.lua_encodepointer(@ptrCast(L), p);
-    }
-    const g = L.global;
-    return @intCast(g.ptrenckey[0] * p + g.ptrenckey[2] ^ (g.ptrenckey[1] * p + g.ptrenckey[3]));
+    // TODO: reimplement zig backend when after fflag encoder is stable
+    // if (comptime !build_config.use_zig_backend) {
+    return c.lua_encodepointer(@ptrCast(L), p);
+    // }
+    // const g = L.global;
+    // return @intCast(g.ptrenckey[0] * p + g.ptrenckey[2] ^ (g.ptrenckey[1] * p + g.ptrenckey[3]));
 }
 
 pub fn ref(L: *lua.State, idx: i32) Errorset.Table!?i32 {

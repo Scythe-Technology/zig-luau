@@ -125,6 +125,10 @@ pub const CALLINFO_RETURN = 1 << 0;
 pub const CALLINFO_HANDLE = 1 << 1;
 // should this function be executed using execution callback for native code
 pub const CALLINFO_NATIVE = 1 << 2;
+// call frame has yielded on a non-call opcode and requires luau_finishop
+pub const LUA_CALLINFO_OPYIELD = 1 << 3;
+// call frame was setup by a synthetic protected call and requires luau_pospcallsuccess
+pub const LUA_CALLINFO_PCALL = 1 << 4;
 
 const GCStats = extern struct {
     // data for proportional-integral controller of heap trigger value
@@ -278,7 +282,7 @@ pub const global_State = extern struct {
 
     /// PCG random number generator state
     rngstate: u64,
-    /// pointer encoding key for display
+    /// pointer encoding key for display (remove when unreferenced)
     ptrenckey: [4]u64,
 
     cb: lua.Callbacks,
@@ -308,6 +312,14 @@ pub const global_State = extern struct {
 
     // per-tag direct field dispatch tables; NULL until first field is registered for that tag
     udatadirectfields: [ludata.UTAG_INTERNAL_LIMIT]?*lobject.LuaTable,
+
+    // cached closures for fast protected calls
+    builtinPcall: ?*lobject.Closure,
+    builtinXpcall: ?*lobject.Closure,
+
+    // pointer encoding key for display
+    ptrenckeynew: [8]u64,
+    ptrencactive: bool,
 
     gcstats: GCStats,
     lastprotoid: u32,
@@ -942,6 +954,8 @@ pub fn newstate(f: lua.Alloc, ud: ?*anyopaque) Errorset.Table!*lua_State {
     g.ptrenckey[1] = 0;
     g.ptrenckey[2] = 0;
     g.ptrenckey[3] = 0;
+    @memset(g.ptrenckeynew[0..8], 0);
+    g.ptrencactive = false;
     g.strt.size = 0;
     g.strt.nuse = 0;
     g.strt.hash = null;
@@ -996,6 +1010,9 @@ pub fn newstate(f: lua.Alloc, ud: ?*anyopaque) Errorset.Table!*lua_State {
 
     g.gcstats = .{};
     g.lastprotoid = 1;
+
+    g.builtinPcall = null;
+    g.builtinXpcall = null;
 
     // TODO: LUAI_GCMETRICS
 
