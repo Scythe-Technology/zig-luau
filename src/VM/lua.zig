@@ -145,6 +145,9 @@ pub const Type = if (!config.VECTOR_DOUBLE) enum(i6) {
     Proto = c.LUA_TPROTO,
     UpVal = c.LUA_TUPVAL,
 
+    // the count of all Luau types (including those that are never TValue type tags)
+    All = c.LUA_T_ALL,
+
     // the count of TValue type tags
     pub const T_COUNT = c.LUA_T_COUNT;
 
