@@ -11,8 +11,8 @@ pub const Analysis = if (build_config.buildAnalysis) struct {
     pub const AstJsonEncoder = @import("Analysis/AstJsonEncoder.zig");
     pub const GenericConfigResolver = @import("Analysis/GenericConfigResolver.zig");
     test {
-        inline for (@typeInfo(@This()).@"struct".decls) |decl|
-            std.testing.refAllDecls(@field(@This(), decl.name));
+        inline for (@typeInfo(@This()).@"struct".decl_names) |decl_name|
+            std.testing.refAllDecls(@field(@This(), decl_name));
     }
 } else void;
 
@@ -24,16 +24,16 @@ pub const Ast = if (build_config.buildAst) struct {
     pub const Parser = @import("Ast/Parser.zig");
     pub const Location = @import("Ast/Location.zig");
     test {
-        inline for (@typeInfo(@This()).@"struct".decls) |decl|
-            std.testing.refAllDecls(@field(@This(), decl.name));
+        inline for (@typeInfo(@This()).@"struct".decl_names) |decl_name|
+            std.testing.refAllDecls(@field(@This(), decl_name));
     }
 } else void;
 
 pub const Inliner = if (build_config.buildInliner) struct {
     pub const luajitinliner = @import("Inliner/luajitinliner.zig");
     test {
-        inline for (@typeInfo(@This()).@"struct".decls) |decl|
-            std.testing.refAllDecls(@field(@This(), decl.name));
+        inline for (@typeInfo(@This()).@"struct".decl_names) |decl_name|
+            std.testing.refAllDecls(@field(@This(), decl_name));
     }
 } else void;
 
@@ -44,8 +44,8 @@ pub const Common = struct {
     pub const ExperimentalFlags = @import("Common/ExperimentalFlags.zig");
     pub const Variant = @import("Common/Variant.zig");
     test {
-        inline for (@typeInfo(@This()).@"struct".decls) |decl|
-            std.testing.refAllDecls(@field(@This(), decl.name));
+        inline for (@typeInfo(@This()).@"struct".decl_names) |decl_name|
+            std.testing.refAllDecls(@field(@This(), decl_name));
     }
 };
 
@@ -53,8 +53,8 @@ pub const Compiler = if (build_config.buildCompiler) struct {
     pub const luacode = @import("Compiler/luacode.zig");
     pub const Compiler = @import("Compiler/Compiler.zig");
     test {
-        inline for (@typeInfo(@This()).@"struct".decls) |decl|
-            std.testing.refAllDecls(@field(@This(), decl.name));
+        inline for (@typeInfo(@This()).@"struct".decl_names) |decl_name|
+            std.testing.refAllDecls(@field(@This(), decl_name));
     }
 } else void;
 
@@ -99,8 +99,8 @@ pub const VM = if (build_config.buildVM) struct {
     // extra
     pub const Errorset = @import("VM/errorset.zig");
     test {
-        inline for (@typeInfo(@This()).@"struct".decls) |decl|
-            std.testing.refAllDecls(@field(@This(), decl.name));
+        inline for (@typeInfo(@This()).@"struct".decl_names) |decl_name|
+            std.testing.refAllDecls(@field(@This(), decl_name));
     }
 } else void;
 

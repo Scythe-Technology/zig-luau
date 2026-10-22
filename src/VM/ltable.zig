@@ -400,7 +400,7 @@ pub fn Hresizehash(L: *lua.State, t: *LuaTable, nhsize: usize) Error!void {
 }
 
 fn rehash(L: *lua.State, t: *LuaTable, ek: *const TValue) Error!void {
-    var nums: [MAXBITS + 1]u32 = [_]u32{0} ** (MAXBITS + 1);
+    var nums: [MAXBITS + 1]u32 = @splat(0);
     var nasize = numusearray(t, nums[0..]); // count keys in array part
     var totaluse: usize = nasize; // all those keys are integer keys
     totaluse += numusehash(t, nums[0..], &nasize); // count keys in hash part

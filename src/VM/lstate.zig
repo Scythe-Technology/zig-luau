@@ -724,47 +724,47 @@ pub const GCObject = extern union {
     vec: lobject.Vector,
 
     pub inline fn tots(o: *GCObject) *lobject.TString {
-        std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.String));
+        std.debug.assert(o.gch.ttype() == @backingInt(lua.Type.String));
         return &o.ts;
     }
     pub inline fn tou(o: *GCObject) *lobject.Udata {
-        std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.Userdata));
+        std.debug.assert(o.gch.ttype() == @backingInt(lua.Type.Userdata));
         return &o.u;
     }
     pub inline fn tocl(o: *GCObject) *lobject.Closure {
-        std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.Function));
+        std.debug.assert(o.gch.ttype() == @backingInt(lua.Type.Function));
         return &o.cl;
     }
     pub inline fn toh(o: *GCObject) *lobject.LuaTable {
-        std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.Table));
+        std.debug.assert(o.gch.ttype() == @backingInt(lua.Type.Table));
         return &o.h;
     }
     pub inline fn top(o: *GCObject) *lobject.Proto {
-        std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.Proto));
+        std.debug.assert(o.gch.ttype() == @backingInt(lua.Type.Proto));
         return &o.p;
     }
     pub inline fn touv(o: *GCObject) *lobject.UpVal {
-        std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.UpVal));
+        std.debug.assert(o.gch.ttype() == @backingInt(lua.Type.UpVal));
         return &o.uv;
     }
     pub inline fn toth(o: *GCObject) *state.lua_State {
-        std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.Thread));
+        std.debug.assert(o.gch.ttype() == @backingInt(lua.Type.Thread));
         return &o.th;
     }
     pub inline fn tobuf(o: *GCObject) *lobject.Buffer {
-        std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.Buffer));
+        std.debug.assert(o.gch.ttype() == @backingInt(lua.Type.Buffer));
         return &o.buf;
     }
     pub inline fn toclass(o: *GCObject) *lobject.LuauClass {
-        std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.Class));
+        std.debug.assert(o.gch.ttype() == @backingInt(lua.Type.Class));
         return &o.lclass;
     }
     pub inline fn toobject(o: *GCObject) *lobject.LuauObject {
-        std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.Object));
+        std.debug.assert(o.gch.ttype() == @backingInt(lua.Type.Object));
         return &o.lobject;
     }
     pub inline fn tovec(o: *GCObject) *lobject.Vector {
-        std.debug.assert(o.gch.ttype() == @intFromEnum(lua.Type.Vector));
+        std.debug.assert(o.gch.ttype() == @backingInt(lua.Type.Vector));
         return &o.vec;
     }
 };
@@ -869,11 +869,11 @@ fn close_state(L: *lua_State) void {
 }
 
 pub fn Enewthread(L: *lua_State) Errorset.Table!*lua_State {
-    const L1 = try lmem.Mnewgco(L, lua_State, @sizeOf(lua_State), L.activememcat, @intFromEnum(lua.Type.Thread));
+    const L1 = try lmem.Mnewgco(L, lua_State, @sizeOf(lua_State), L.activememcat, @backingInt(lua.Type.Thread));
 
     @memset(std.mem.asBytes(L1), 0);
 
-    lgc.Cinit(L, @ptrCast(@alignCast(L1)), @intFromEnum(lua.Type.Thread));
+    lgc.Cinit(L, @ptrCast(@alignCast(L1)), @backingInt(lua.Type.Thread));
 
     L1.global = L.global;
 
@@ -916,7 +916,7 @@ pub fn resetthread(L: *lua_State) Errorset.Memory!void {
     if (L.size_ci != BASIC_CI_SIZE)
         try ldo.DreallocCI(L, BASIC_CI_SIZE);
     // clear thread state
-    L.curr_status = @intFromEnum(lua.Status.Ok);
+    L.curr_status = @backingInt(lua.Status.Ok);
     L.base = L.ci.?[0].base;
     L.top = L.ci.?[0].base;
     L.nCcalls = 0;
@@ -932,7 +932,7 @@ pub fn isthreadreset(L: *lua_State) bool {
     if (comptime !build_config.use_zig_backend) {
         return c.lua_isthreadreset(@ptrCast(L)) != 0;
     }
-    return L.ci == L.base_ci and L.base == L.top and L.curr_status == @intFromEnum(lua.Status.Ok);
+    return L.ci == L.base_ci and L.base == L.top and L.curr_status == @backingInt(lua.Status.Ok);
 }
 
 pub fn newstate(allocator: lua.Alloc, ud: ?*anyopaque) Errorset.Table!*lua_State {
@@ -947,7 +947,7 @@ pub fn newstate(allocator: lua.Alloc, ud: ?*anyopaque) Errorset.Table!*lua_State
     const L: *lua_State = @ptrCast(@alignCast(l));
     const g: *global_State = &(@as(*LG, @ptrCast(@alignCast(L)))).g;
 
-    L.header.tt = @intFromEnum(lua.Type.Thread);
+    L.header.tt = @backingInt(lua.Type.Thread);
     L.header.marked = lgc.bit2mask(lgc.WHITE0BIT, lgc.FIXEDBIT);
     g.currentwhite = L.header.marked;
 

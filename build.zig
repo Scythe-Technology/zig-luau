@@ -142,7 +142,7 @@ pub fn build(b: *Build) !void {
         mod.addCSourceFiles(.{
             .flags = compile_flags,
             .root = b.path("src/Ast/"),
-            .files = if (optimize == .Debug or optimize == .ReleaseSafe) &.{
+            .files = if (optimize == .debug or optimize == .safe) &.{
                 "Parser.cpp",
                 "Class.cpp",
             } else &.{
@@ -180,7 +180,7 @@ pub fn build(b: *Build) !void {
     if (build_VM) {
         linkIncludePath(mod, libVM);
         mod.linkLibrary(libVM);
-        if (optimize == .Debug or optimize == .ReleaseSafe) {
+        if (optimize == .debug or optimize == .safe) {
             mod.addCSourceFile(.{
                 .file = b.path("src/VM/acc.cpp"),
                 .flags = compile_flags,
@@ -263,8 +263,7 @@ pub fn build(b: *Build) !void {
 
         const run_cmd = b.addRunArtifact(exe);
         run_cmd.step.dependOn(b.getInstallStep());
-        if (b.args) |args|
-            run_cmd.addArgs(args);
+        run_cmd.addPassthruArgs();
 
         const run_step = b.step(b.fmt("run-example-{s}", .{example[0]}), b.fmt("Run {s} example", .{example[0]}));
         run_step.dependOn(&run_cmd.step);

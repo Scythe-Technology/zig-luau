@@ -305,45 +305,45 @@ fn reallymarkobject(g: *lstate.global_State, o: *lstate.GCObject) void {
     std.debug.assert(iswhite(o) and !isdead(g, o));
     white2gray(o);
     switch (o.gch.ttype()) {
-        @intFromEnum(lua.Type.String) => {
+        @backingInt(lua.Type.String) => {
             gray2black(o); // strings are never gray
         },
-        @intFromEnum(lua.Type.Userdata) => {
+        @backingInt(lua.Type.Userdata) => {
             const mt = o.tou().metatable;
             gray2black(o); // udata are never gray
             if (mt) |t|
                 markobject(g, @ptrCast(@alignCast(t)));
         },
-        @intFromEnum(lua.Type.UpVal) => {
+        @backingInt(lua.Type.UpVal) => {
             const uv = o.touv();
             markvalue(g, uv.v);
             if (!uv.upisopen()) // closed?
                 gray2black(o); // open upvalues are never black
             return;
         },
-        @intFromEnum(lua.Type.Function) => {
+        @backingInt(lua.Type.Function) => {
             o.tocl().gclist = g.gray;
             g.gray = o;
             return;
         },
-        @intFromEnum(lua.Type.Table) => {
+        @backingInt(lua.Type.Table) => {
             o.toh().gclist = g.gray;
             g.gray = o;
             return;
         },
-        @intFromEnum(lua.Type.Thread) => {
+        @backingInt(lua.Type.Thread) => {
             o.toth().gclist = g.gray;
             g.gray = o;
             return;
         },
-        @intFromEnum(lua.Type.Vector) => {
+        @backingInt(lua.Type.Vector) => {
             gray2black(o); // vectors are never gray
         },
-        @intFromEnum(lua.Type.Buffer) => {
+        @backingInt(lua.Type.Buffer) => {
             gray2black(o); // buffers are never gray
             return;
         },
-        @intFromEnum(lua.Type.Proto) => {
+        @backingInt(lua.Type.Proto) => {
             o.top().gclist = g.gray;
             g.gray = o;
             return;
@@ -387,7 +387,7 @@ fn traversetable(g: *lstate.global_State, h: *lobject.LuaTable) bool {
     i = lobject.sizenode(h);
     while (i > 0) : (i -= 1) {
         const n: *lobject.LuaNode = @ptrCast(h.gnode(i - 1));
-        std.debug.assert(n.gkey().ttype() != @intFromEnum(lua.Type.Deadkey) or n.gval().ttisnil());
+        std.debug.assert(n.gkey().ttype() != @backingInt(lua.Type.Deadkey) or n.gval().ttisnil());
         if (n.gval().ttisnil())
             removeentry(@ptrCast(n)) // remove empty entries
         else {
@@ -514,20 +514,20 @@ fn propagatemark(g: *lstate.global_State) Errorset.Memory!usize {
     std.debug.assert(isgray(o));
     gray2black(o);
     switch (o.gch.ttype()) {
-        @intFromEnum(lua.Type.Table) => {
+        @backingInt(lua.Type.Table) => {
             const h = o.toh();
             g.gray = h.gclist;
             if (traversetable(g, h)) // table is weak?
                 black2gray(o); // keep it gray
             return @sizeOf(lobject.LuaTable) + (@sizeOf(lobject.TValue) * @as(u32, @intCast(h.sizearray))) + (@sizeOf(lobject.LuaNode) * (if (@as(*lobject.LuaNode, @ptrCast(@alignCast(h.node))) == ltable.dummynode) 0 else lobject.sizenode(h)));
         },
-        @intFromEnum(lua.Type.Function) => {
+        @backingInt(lua.Type.Function) => {
             const cl = o.tocl();
             g.gray = cl.gclist;
             traverseclosure(g, cl);
             return if (cl.isC != 0) lfunc.sizeCclosure(cl.nupvalues) else lfunc.sizeLclosure(cl.nupvalues);
         },
-        @intFromEnum(lua.Type.Thread) => {
+        @backingInt(lua.Type.Thread) => {
             const th = o.toth();
             g.gray = th.gclist;
             const active = th.isactive or th == th.global.mainthread;
@@ -555,7 +555,7 @@ fn propagatemark(g: *lstate.global_State) Errorset.Memory!usize {
                 (@sizeOf(lobject.TValue) * @as(u32, @intCast(th.stacksize))) +
                 (@sizeOf(lstate.CallInfo) * @as(u32, @intCast(th.size_ci)));
         },
-        @intFromEnum(lua.Type.Proto) => {
+        @backingInt(lua.Type.Proto) => {
             const p = o.top();
             g.gray = p.gclist;
             traverseproto(g, p);
@@ -568,7 +568,7 @@ fn propagatemark(g: *lstate.global_State) Errorset.Memory!usize {
                 (@sizeOf(lobject.UpVal) * @as(u32, @intCast(p.sizeupvalues))) +
                 @as(u32, @intCast(p.sizetypeinfo));
         },
-        @intFromEnum(lua.Type.Class) => {
+        @backingInt(lua.Type.Class) => {
             const classobject = o.toclass();
             g.gray = classobject.gclist;
             traverseclass(g, classobject);
@@ -576,7 +576,7 @@ fn propagatemark(g: *lstate.global_State) Errorset.Memory!usize {
                 ((classobject.numberofallmembers - classobject.numberofinstancemembers) * @sizeOf(lobject.TValue)) +
                 (classobject.numberofallmembers * @sizeOf(*lobject.TString));
         },
-        @intFromEnum(lua.Type.Object) => {
+        @backingInt(lua.Type.Object) => {
             const classinst = o.toobject();
             g.gray = classinst.gclist;
             traverseobject(g, classinst);
@@ -602,7 +602,7 @@ fn propagateall(g: *lstate.global_State) Errorset.Memory!usize {
 /// other objects: if really collected, cannot keep them.
 ///
 fn isobjcleared(o: *lstate.GCObject) bool {
-    if (o.gch.ttype() == @intFromEnum(lua.Type.String)) {
+    if (o.gch.ttype() == @backingInt(lua.Type.String)) {
         stringmark(&o.ts); // strings are `values', so are never weak
         return false;
     }
@@ -660,20 +660,20 @@ fn cleartable(L: *lua.State, il: ?*lstate.GCObject) Errorset.Table!usize {
 
 fn freeobj(L: *lua.State, o: *lstate.GCObject, page: *lmem.lua_Page) void {
     switch (o.gch.header.tt) {
-        @intFromEnum(lua.Type.Proto) => lfunc.Ffreeproto(L, o.top(), page),
-        @intFromEnum(lua.Type.Function) => lfunc.Ffreeclosure(L, o.tocl(), page),
-        @intFromEnum(lua.Type.UpVal) => lfunc.Ffreeupval(L, o.touv(), page),
-        @intFromEnum(lua.Type.Table) => ltable.Hfree(L, o.toh(), page),
-        @intFromEnum(lua.Type.Thread) => {
+        @backingInt(lua.Type.Proto) => lfunc.Ffreeproto(L, o.top(), page),
+        @backingInt(lua.Type.Function) => lfunc.Ffreeclosure(L, o.tocl(), page),
+        @backingInt(lua.Type.UpVal) => lfunc.Ffreeupval(L, o.touv(), page),
+        @backingInt(lua.Type.Table) => ltable.Hfree(L, o.toh(), page),
+        @backingInt(lua.Type.Thread) => {
             std.debug.assert(o.toth() != L and o.toth() != L.global.mainthread);
             lstate.Efreethread(L, o.toth(), page);
         },
-        @intFromEnum(lua.Type.String) => lstring.Sfree(L, o.tots(), page),
-        @intFromEnum(lua.Type.Userdata) => ludata.Ufreeudata(L, o.tou(), page),
-        @intFromEnum(lua.Type.Vector) => lvector.Vecfreevector(L, o.tovec(), page),
-        @intFromEnum(lua.Type.Buffer) => lbuffer.Bfreebuffer(L, o.tobuf(), page),
-        @intFromEnum(lua.Type.Class) => lclass.Rfreeclass(L, o.toclass(), page),
-        @intFromEnum(lua.Type.Object) => lclass.Rfreeobject(L, o.toobject(), page),
+        @backingInt(lua.Type.String) => lstring.Sfree(L, o.tots(), page),
+        @backingInt(lua.Type.Userdata) => ludata.Ufreeudata(L, o.tou(), page),
+        @backingInt(lua.Type.Vector) => lvector.Vecfreevector(L, o.tovec(), page),
+        @backingInt(lua.Type.Buffer) => lbuffer.Bfreebuffer(L, o.tobuf(), page),
+        @backingInt(lua.Type.Class) => lclass.Rfreeclass(L, o.toclass(), page),
+        @backingInt(lua.Type.Object) => lclass.Rfreeobject(L, o.toobject(), page),
         else => unreachable,
     }
 }
@@ -906,7 +906,7 @@ fn sweepgcopage(L: *lua.State, page: *lmem.lua_Page) usize {
         const gco: *lstate.GCObject = @ptrCast(@alignCast(pos));
 
         // skip memory blocks that are already freed
-        if (gco.gch.header.tt == @intFromEnum(lua.Type.Nil))
+        if (gco.gch.header.tt == @backingInt(lua.Type.Nil))
             continue;
 
         // is the object alive?

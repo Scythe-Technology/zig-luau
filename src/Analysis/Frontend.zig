@@ -75,7 +75,7 @@ pub const Frontend = opaque {
         const T = @TypeOf(context);
         if (@typeInfo(T) != .pointer and T != void)
             @compileError("context must be a pointer type or void");
-        if (T != void and @typeInfo(T).pointer.is_const)
+        if (T != void and @typeInfo(T).pointer.attrs.@"const")
             @compileError("context must be a mutable pointer type or void");
         return zig_Luau_Analysis_Frontend_checkQueuedModules(
             self,

@@ -149,8 +149,8 @@ const SizeClassConfig = extern struct {
 
     fn generateSizeOfClass() struct { [kSizeClasses]c_int, [kMaxSmallSize + 1]i8, comptime_int } {
         var classCount: comptime_int = 0;
-        var sizeOfClass: [kSizeClasses]c_int = [_]c_int{0} ** kSizeClasses;
-        var classForSize: [kMaxSmallSize + 1]i8 = [_]i8{-1} ** (kMaxSmallSize + 1);
+        var sizeOfClass: [kSizeClasses]c_int = @splat(0);
+        var classForSize: [kMaxSmallSize + 1]i8 = @splat(-1);
 
         // we use a progressive size class scheme:
         // - all size classes are aligned by 8b to satisfy pointer alignment requirements

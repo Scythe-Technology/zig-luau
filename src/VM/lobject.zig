@@ -47,53 +47,53 @@ pub const TValue = extern struct {
     }
 
     pub inline fn typeOf(obj: *const TValue) lua.Type {
-        return @enumFromInt(obj.ttype());
+        return @fromBackingInt(@intCast(obj.ttype()));
     }
 
     pub inline fn ttisnil(obj: *const TValue) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.Nil);
+        return obj.ttype() == @backingInt(lua.Type.Nil);
     }
     pub inline fn ttisnumber(obj: *const TValue) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.Number);
+        return obj.ttype() == @backingInt(lua.Type.Number);
     }
     pub inline fn ttisinteger(obj: *const TValue) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.Integer);
+        return obj.ttype() == @backingInt(lua.Type.Integer);
     }
     pub inline fn ttisstring(obj: *const TValue) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.String);
+        return obj.ttype() == @backingInt(lua.Type.String);
     }
     pub inline fn ttistable(obj: *const TValue) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.Table);
+        return obj.ttype() == @backingInt(lua.Type.Table);
     }
     pub inline fn ttisfunction(obj: *const TValue) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.Function);
+        return obj.ttype() == @backingInt(lua.Type.Function);
     }
     pub inline fn ttisboolean(obj: *const TValue) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.Boolean);
+        return obj.ttype() == @backingInt(lua.Type.Boolean);
     }
     pub inline fn ttisuserdata(obj: *const TValue) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.Userdata);
+        return obj.ttype() == @backingInt(lua.Type.Userdata);
     }
     pub inline fn ttisthread(obj: *const TValue) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.Thread);
+        return obj.ttype() == @backingInt(lua.Type.Thread);
     }
     pub inline fn ttisbuffer(obj: *const TValue) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.Buffer);
+        return obj.ttype() == @backingInt(lua.Type.Buffer);
     }
     pub inline fn ttislightuserdata(obj: *const TValue) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.LightUserdata);
+        return obj.ttype() == @backingInt(lua.Type.LightUserdata);
     }
     pub inline fn ttisvector(obj: *const TValue) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.Vector);
+        return obj.ttype() == @backingInt(lua.Type.Vector);
     }
     pub inline fn ttisupval(obj: *const TValue) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.UpVal);
+        return obj.ttype() == @backingInt(lua.Type.UpVal);
     }
     pub inline fn ttisclass(obj: *const TValue) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.Class);
+        return obj.ttype() == @backingInt(lua.Type.Class);
     }
     pub inline fn ttisobject(obj: *const TValue) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.Object);
+        return obj.ttype() == @backingInt(lua.Type.Object);
     }
 
     pub inline fn obj2gco(obj: *TValue) *lstate.GCObject {
@@ -276,17 +276,17 @@ pub const TValue = extern struct {
     }
 
     pub inline fn settype(obj: *TValue, t: lua.Type) void {
-        obj.tt = @intFromEnum(t);
+        obj.tt = @backingInt(t);
     }
     pub inline fn iscollectable(o: *const TValue) bool {
-        return o.ttype() >= @intFromEnum(lua.Type.String);
+        return o.ttype() >= @backingInt(lua.Type.String);
     }
 
     pub inline fn iscfunction(o: *const TValue) bool {
-        return o.ttype() == @intFromEnum(lua.Type.Function) and o.clvalue().isC != 0;
+        return o.ttype() == @backingInt(lua.Type.Function) and o.clvalue().isC != 0;
     }
     pub inline fn isLfunction(o: *const TValue) bool {
-        return o.ttype() == @intFromEnum(lua.Type.Function) and o.clvalue().isC == 0;
+        return o.ttype() == @backingInt(lua.Type.Function) and o.clvalue().isC == 0;
     }
 };
 
@@ -563,51 +563,51 @@ pub const TKey = extern struct {
     }
 
     pub inline fn typeOf(obj: *const TKey) lua.Type {
-        return @enumFromInt(obj.ttype());
+        return @fromBackingInt(@intCast(obj.ttype()));
     }
 
     pub inline fn setttype(this: *TKey, t: lua.Type) void {
-        this.pi.tt = @intFromEnum(t);
+        this.pi.tt = @backingInt(t);
     }
 
     pub inline fn ttisnil(obj: *const TKey) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.Nil);
+        return obj.ttype() == @backingInt(lua.Type.Nil);
     }
     pub inline fn ttisnumber(obj: *const TKey) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.Number);
+        return obj.ttype() == @backingInt(lua.Type.Number);
     }
     pub inline fn ttisinteger(obj: *const TKey) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.Integer);
+        return obj.ttype() == @backingInt(lua.Type.Integer);
     }
     pub inline fn ttisstring(obj: *const TKey) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.String);
+        return obj.ttype() == @backingInt(lua.Type.String);
     }
     pub inline fn ttistable(obj: *const TKey) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.Table);
+        return obj.ttype() == @backingInt(lua.Type.Table);
     }
     pub inline fn ttisfunction(obj: *const TKey) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.Function);
+        return obj.ttype() == @backingInt(lua.Type.Function);
     }
     pub inline fn ttisboolean(obj: *const TKey) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.Boolean);
+        return obj.ttype() == @backingInt(lua.Type.Boolean);
     }
     pub inline fn ttisuserdata(obj: *const TKey) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.Userdata);
+        return obj.ttype() == @backingInt(lua.Type.Userdata);
     }
     pub inline fn ttisthread(obj: *const TKey) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.Thread);
+        return obj.ttype() == @backingInt(lua.Type.Thread);
     }
     pub inline fn ttisbuffer(obj: *const TKey) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.Buffer);
+        return obj.ttype() == @backingInt(lua.Type.Buffer);
     }
     pub inline fn ttislightuserdata(obj: *const TKey) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.LightUserdata);
+        return obj.ttype() == @backingInt(lua.Type.LightUserdata);
     }
     pub inline fn ttisvector(obj: *const TKey) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.Vector);
+        return obj.ttype() == @backingInt(lua.Type.Vector);
     }
     pub inline fn ttisupval(obj: *const TKey) bool {
-        return obj.ttype() == @intFromEnum(lua.Type.UpVal);
+        return obj.ttype() == @backingInt(lua.Type.UpVal);
     }
 
     pub inline fn gcvalue(obj: *const TKey) *lstate.GCObject {
@@ -672,11 +672,11 @@ pub const TKey = extern struct {
     }
 
     pub inline fn iscollectable(o: *const TKey) bool {
-        return o.ttype() >= @intFromEnum(lua.Type.String);
+        return o.ttype() >= @backingInt(lua.Type.String);
     }
 
     pub inline fn setnilvalue(obj: *TKey) void {
-        obj.pi.tt = @intFromEnum(lua.Type.Nil);
+        obj.pi.tt = @backingInt(lua.Type.Nil);
     }
 
     pub inline fn next(this: *TKey) i28 {

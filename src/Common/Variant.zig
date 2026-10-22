@@ -22,7 +22,7 @@ pub fn Variant(comptime Ts: []const type) type {
     const TaggedUnion = blk: {
         var names: [Ts.len][]const u8 = undefined;
         var field_types: [Ts.len]type = undefined;
-        var field_attributes: [Ts.len]std.builtin.Type.UnionField.Attributes = undefined;
+        var field_attributes: [Ts.len]std.builtin.Type.Union.FieldAttributes = undefined;
         inline for (Ts, 0..) |T, i| {
             names[i] = std.fmt.comptimePrint("{d}", .{i}); // becomes @"0", @"1", etc.
             field_types[i] = T;

@@ -292,9 +292,9 @@ pub fn Zpushvalue(L: *lua.State, value: anytype) !void {
             switch (@typeInfo(e.tag_type)) {
                 .int => |int| {
                     if (int.signedness == .unsigned)
-                        L.pushunsigned(@intFromEnum(value))
+                        L.pushunsigned(@backingInt(value))
                     else
-                        L.pushinteger(@intFromEnum(value));
+                        L.pushinteger(@backingInt(value));
                 },
                 else => @compileError("Unsupported enum type " ++ @tagName(e.tag_type)),
             }
@@ -520,26 +520,27 @@ pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32, comptime msg: ?[]
                     if (pointer.sentinel_ptr) |sentinel| {
                         const s: *const pointer.child = @ptrCast(sentinel);
                         if (s.* == 0) {
-                            if (!pointer.is_const)
+                            if (!pointer.attrs.@"const")
                                 @compileError("Pointer must be [:0]const u8 when using a sentinel, string only");
                             if (L.typeOf(narg) != .String)
                                 return tag_error(L, narg, .String, msg);
                             return L.tostring(narg) orelse unreachable;
                         } else @compileError("Unsupported pointer sentinel [:?]" ++ @typeName(pointer.child));
                     } else {
-                        if (pointer.is_const)
-                            switch (L.typeOf(narg)) {
-                                .String => return L.tolstring(narg) orelse unreachable,
-                                .Buffer => return L.tobuffer(narg) orelse unreachable,
+                        const o = lapi.index2addr(L, narg);
+                        if (pointer.attrs.@"const")
+                            switch (o.tt) {
+                                @backingInt(lua.Type.String) => return o.tsvalue().toSlice(),
+                                @backingInt(lua.Type.Buffer) => return o.bufvalue().toSlice(),
                                 else => return tag_error(L, narg, .String, msg),
                             }
-                        else switch (L.typeOf(narg)) {
-                            .Buffer => return L.tobuffer(narg) orelse unreachable,
+                        else switch (o.tt) {
+                            @backingInt(lua.Type.Buffer) => return o.bufvalue().toSlice(),
                             else => return tag_error(L, narg, .Buffer, msg),
                         }
                     }
                 } else if (pointer.child == f32) {
-                    if (pointer.is_const and pointer.sentinel_ptr == null) {
+                    if (pointer.attrs.@"const" and pointer.sentinel_ptr == null) {
                         if (L.isvector(narg))
                             return L.tovector(narg) orelse unreachable
                         else
@@ -558,27 +559,27 @@ pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32, comptime msg: ?[]
                     if (int.signedness == .unsigned) {
                         const value = L.tounsigned(narg) orelse unreachable;
                         comptime var can_cast = true;
-                        comptime for (e.fields, 0..) |field, order| {
-                            if (field.value != order) {
+                        comptime for (e.field_values, 0..) |field_value, order| {
+                            if (field_value != order) {
                                 can_cast = false;
                                 break;
                             }
                         };
                         if (comptime can_cast) {
-                            if (value < e.fields.len)
-                                return @enumFromInt(value);
+                            if (value < e.field_values.len)
+                                return @fromBackingInt(@intCast(value));
                         } else {
-                            inline for (e.fields) |field| {
-                                if (field.value == value)
-                                    return @enumFromInt(value);
+                            inline for (e.field_values) |field_value| {
+                                if (field_value == value)
+                                    return @fromBackingInt(@intCast(value));
                             }
                         }
                         return Zerror(L, "Invalid enum value");
                     } else {
                         const value = L.tointeger(narg) orelse unreachable;
-                        inline for (e.fields) |field| {
-                            if (field.value == value)
-                                return @enumFromInt(value);
+                        inline for (e.field_values) |field_value| {
+                            if (field_value == value)
+                                return @fromBackingInt(@intCast(value));
                         }
                         return Zerror(L, "Invalid enum value");
                     }
@@ -590,11 +591,11 @@ pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32, comptime msg: ?[]
             if (!L.istable(narg))
                 return tag_error(L, narg, .Table, msg);
             var val: T = std.mem.zeroes(T);
-            inline for (s.fields) |field| {
-                @field(val, field.name) = if (comptime field.defaultValue()) |default|
-                    try Zcheckfield(L, ?field.type, narg, field.name) orelse default
+            inline for (s.field_names, s.field_types, s.field_attrs) |field_name, field_type, field_attr| {
+                @field(val, field_name) = if (comptime field_attr.defaultValue(field_type)) |default|
+                    try Zcheckfield(L, ?field_type, narg, field_name) orelse default
                 else
-                    try Zcheckfield(L, field.type, narg, field.name);
+                    try Zcheckfield(L, field_type, narg, field_name);
                 L.pop(1);
             }
             return val;

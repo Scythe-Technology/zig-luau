@@ -306,57 +306,57 @@ pub fn @"type"(L: *lua.State, idx: i32) i32 {
         return c.lua_type(@ptrCast(L), idx);
     }
     const o: *const lobject.TValue = index2addr(L, idx);
-    return if (o == lobject.Onilobject) @intFromEnum(lua.Type.None) else o.ttype();
+    return if (o == lobject.Onilobject) @backingInt(lua.Type.None) else o.ttype();
 }
 pub inline fn isfunction(L: *lua.State, idx: i32) bool {
-    return @"type"(L, idx) == @intFromEnum(lua.Type.Function);
+    return @"type"(L, idx) == @backingInt(lua.Type.Function);
 }
 pub inline fn istable(L: *lua.State, idx: i32) bool {
-    return @"type"(L, idx) == @intFromEnum(lua.Type.Table);
+    return @"type"(L, idx) == @backingInt(lua.Type.Table);
 }
 pub inline fn islightuserdata(L: *lua.State, idx: i32) bool {
-    return @"type"(L, idx) == @intFromEnum(lua.Type.LightUserdata);
+    return @"type"(L, idx) == @backingInt(lua.Type.LightUserdata);
 }
 pub inline fn isnil(L: *lua.State, idx: i32) bool {
-    return @"type"(L, idx) == @intFromEnum(lua.Type.Nil);
+    return @"type"(L, idx) == @backingInt(lua.Type.Nil);
 }
 pub inline fn isboolean(L: *lua.State, idx: i32) bool {
-    return @"type"(L, idx) == @intFromEnum(lua.Type.Boolean);
+    return @"type"(L, idx) == @backingInt(lua.Type.Boolean);
 }
 pub inline fn isinteger64(L: *lua.State, idx: i32) bool {
-    return @"type"(L, idx) == @intFromEnum(lua.Type.Integer);
+    return @"type"(L, idx) == @backingInt(lua.Type.Integer);
 }
 pub inline fn isvector(L: *lua.State, idx: i32) bool {
-    return @"type"(L, idx) == @intFromEnum(lua.Type.Vector);
+    return @"type"(L, idx) == @backingInt(lua.Type.Vector);
 }
 pub inline fn isthread(L: *lua.State, idx: i32) bool {
-    return @"type"(L, idx) == @intFromEnum(lua.Type.Thread);
+    return @"type"(L, idx) == @backingInt(lua.Type.Thread);
 }
 pub inline fn isbuffer(L: *lua.State, idx: i32) bool {
-    return @"type"(L, idx) == @intFromEnum(lua.Type.Buffer);
+    return @"type"(L, idx) == @backingInt(lua.Type.Buffer);
 }
 pub inline fn isnone(L: *lua.State, idx: i32) bool {
-    return @"type"(L, idx) == @intFromEnum(lua.Type.None);
+    return @"type"(L, idx) == @backingInt(lua.Type.None);
 }
 pub inline fn isnoneornil(L: *lua.State, idx: i32) bool {
-    return @"type"(L, idx) <= @intFromEnum(lua.Type.Nil);
+    return @"type"(L, idx) <= @backingInt(lua.Type.Nil);
 }
 pub inline fn isclass(L: *lua.State, idx: i32) bool {
-    return @"type"(L, idx) == @intFromEnum(lua.Type.Class);
+    return @"type"(L, idx) == @backingInt(lua.Type.Class);
 }
 pub inline fn isobject(L: *lua.State, idx: i32) bool {
-    return @"type"(L, idx) == @intFromEnum(lua.Type.Object);
+    return @"type"(L, idx) == @backingInt(lua.Type.Object);
 }
 
 pub fn typeOf(L: *lua.State, idx: i32) lua.Type {
     if (comptime !build_config.use_zig_backend) {
-        return @enumFromInt(c.lua_type(@ptrCast(L), idx));
+        return @fromBackingInt(@intCast(c.lua_type(@ptrCast(L), idx)));
     }
     return index2addr(L, idx).typeOf();
 }
 
 pub fn typename(t: lua.Type) [:0]const u8 {
-    return if (t == .None) "no value" else ltm.typenames[@intCast(@intFromEnum(t))];
+    return if (t == .None) "no value" else ltm.typenames[@intCast(@backingInt(t))];
 }
 
 pub fn iscfunction(L: *lua.State, idx: i32) bool {
@@ -389,7 +389,7 @@ pub fn isstring(L: *lua.State, idx: i32) bool {
         return c.lua_isstring(@ptrCast(L), idx) != 0;
     }
     const t = @"type"(L, idx);
-    return t == @intFromEnum(lua.Type.String) or t == @intFromEnum(lua.Type.Number);
+    return t == @backingInt(lua.Type.String) or t == @backingInt(lua.Type.Number);
 }
 
 pub fn isuserdata(L: *lua.State, idx: i32) bool {
@@ -588,10 +588,10 @@ pub fn objlen(L: *lua.State, idx: i32) usize {
     }
     const o = index2addr(L, idx);
     switch (o.ttype()) {
-        @intFromEnum(lua.Type.String) => return @intCast(o.tsvalue().len),
-        @intFromEnum(lua.Type.Userdata) => return @intCast(o.uvalue().len),
-        @intFromEnum(lua.Type.Buffer) => return @intCast(o.bufvalue().len),
-        @intFromEnum(lua.Type.Table) => return ltable.Hgetn(o.hvalue()),
+        @backingInt(lua.Type.String) => return @intCast(o.tsvalue().len),
+        @backingInt(lua.Type.Userdata) => return @intCast(o.uvalue().len),
+        @backingInt(lua.Type.Buffer) => return @intCast(o.bufvalue().len),
+        @backingInt(lua.Type.Table) => return ltable.Hgetn(o.hvalue()),
         else => return 0,
     }
 }
@@ -709,8 +709,8 @@ pub fn topointer(L: *lua.State, idx: i32) ?*const anyopaque {
     }
     const o: *const lobject.TValue = index2addr(L, idx);
     switch (o.tt) {
-        @intFromEnum(lua.Type.Userdata) => return @ptrCast(&o.uvalue().data),
-        @intFromEnum(lua.Type.LightUserdata) => return @ptrCast(o.pvalue()),
+        @backingInt(lua.Type.Userdata) => return @ptrCast(&o.uvalue().data),
+        @backingInt(lua.Type.LightUserdata) => return @ptrCast(o.pvalue()),
         else => return if (o.iscollectable())
             @ptrCast(o.gcvalue())
         else
@@ -873,11 +873,11 @@ pub fn pushthread(L: *lua.State) bool {
 //
 
 pub inline fn gettable(L: *lua.State, idx: i32) !lua.Type {
-    return @enumFromInt(c.lua_gettable(@ptrCast(L), idx));
+    return @fromBackingInt(@intCast(c.lua_gettable(@ptrCast(L), idx)));
 }
 
 pub inline fn getfield(L: *lua.State, idx: i32, k: [:0]const u8) !lua.Type {
-    return @enumFromInt(c.lua_getfield(@ptrCast(L), idx, k.ptr));
+    return @fromBackingInt(@intCast(c.lua_getfield(@ptrCast(L), idx, k.ptr)));
 }
 pub inline fn getglobal(L: *lua.State, k: [:0]const u8) !lua.Type {
     return getfield(L, lua.GLOBALSINDEX, k);
@@ -892,7 +892,7 @@ pub fn rawgetfield(L: *lua.State, idx: i32, k: []const u8) lua.Type {
             @panic("key too long, use zig backend");
         @memcpy(static[0..k.len], k);
         static[k.len] = 0;
-        return @enumFromInt(c.lua_rawgetfield(@ptrCast(L), idx, &static));
+        return @fromBackingInt(@intCast(c.lua_rawgetfield(@ptrCast(L), idx, &static)));
     }
     lgc.Cthreadbarrier(L);
     const t = index2addr(L, idx);
@@ -916,7 +916,7 @@ pub inline fn rawgetglobal(L: *lua.State, k: []const u8) lua.Type {
 /// * expects value at `idx` to be *table*
 pub fn rawget(L: *lua.State, idx: i32) lua.Type {
     if (comptime !build_config.use_zig_backend) {
-        return @enumFromInt(c.lua_rawget(@ptrCast(L), idx));
+        return @fromBackingInt(@intCast(c.lua_rawget(@ptrCast(L), idx)));
     }
     lgc.Cthreadbarrier(L);
     const t = index2addr(L, idx);
@@ -930,7 +930,7 @@ pub fn rawget(L: *lua.State, idx: i32) lua.Type {
 /// * expects value at `idx` to be *table*
 pub fn rawgeti(L: *lua.State, idx: i32, n: i32) lua.Type {
     if (comptime !build_config.use_zig_backend) {
-        return @enumFromInt(c.lua_rawgeti(@ptrCast(L), idx, n));
+        return @fromBackingInt(@intCast(c.lua_rawgeti(@ptrCast(L), idx, n)));
     }
     lgc.Cthreadbarrier(L);
     const t = index2addr(L, idx);
@@ -1001,9 +1001,9 @@ pub fn getmetatable(L: *lua.State, idx: i32) bool {
     var mt: ?*lobject.LuaTable = null;
     const o: *const lobject.TValue = index2addr(L, idx);
     switch (o.tt) {
-        @intFromEnum(lua.Type.Table) => mt = o.hvalue().metatable,
-        @intFromEnum(lua.Type.Userdata) => mt = o.uvalue().metatable,
-        @intFromEnum(lua.Type.Object) => mt = o.objectvalue().lclass.instancemetatable,
+        @backingInt(lua.Type.Table) => mt = o.hvalue().metatable,
+        @backingInt(lua.Type.Userdata) => mt = o.uvalue().metatable,
+        @backingInt(lua.Type.Object) => mt = o.objectvalue().lclass.instancemetatable,
         else => mt = L.global.mt[@intCast(o.tt)],
     }
     if (mt) |ptr| {
@@ -1021,8 +1021,8 @@ pub fn getfenv(L: *lua.State, idx: i32) void {
     const o: *const lobject.TValue = index2addr(L, idx);
     api_checkvalidindex(L, o);
     switch (o.tt) {
-        @intFromEnum(lua.Type.Function) => L.top[0].sethvalue(L, o.clvalue().env),
-        @intFromEnum(lua.Type.Thread) => L.top[0].sethvalue(L, o.thvalue().gt.?),
+        @backingInt(lua.Type.Function) => L.top[0].sethvalue(L, o.clvalue().env),
+        @backingInt(lua.Type.Thread) => L.top[0].sethvalue(L, o.thvalue().gt.?),
         else => L.top[0].setnilvalue(),
     }
     api_incr_top(L);
@@ -1133,14 +1133,14 @@ pub fn setmetatable(L: *lua.State, idx: i32) Errorset.Table!u1 {
         mt = (L.top - 1)[0].hvalue();
     }
     switch (obj.ttype()) {
-        @intFromEnum(lua.Type.Table) => {
+        @backingInt(lua.Type.Table) => {
             if (obj.hvalue().readonly != 0)
                 return Errorset.TableReadonly;
             obj.hvalue().metatable = mt;
             if (mt) |m|
                 lgc.Cobjbarrier(L, @ptrCast(@alignCast(obj.hvalue())), @ptrCast(@alignCast(m)));
         },
-        @intFromEnum(lua.Type.Userdata) => {
+        @backingInt(lua.Type.Userdata) => {
             obj.uvalue().metatable = mt;
             if (mt) |m|
                 lgc.Cobjbarrier(L, @ptrCast(@alignCast(obj.uvalue())), @ptrCast(@alignCast(m)));
@@ -1161,8 +1161,8 @@ pub fn setfenv(L: *lua.State, idx: i32) bool {
     api_check(L, (L.top - 1)[0].ttistable());
     defer L.top -= 1;
     switch (o.tt) {
-        @intFromEnum(lua.Type.Function) => o.clvalue().env = (L.top - 1)[0].hvalue(),
-        @intFromEnum(lua.Type.Thread) => o.thvalue().gt = (L.top - 1)[0].hvalue(),
+        @backingInt(lua.Type.Function) => o.clvalue().env = (L.top - 1)[0].hvalue(),
+        @backingInt(lua.Type.Thread) => o.thvalue().gt = (L.top - 1)[0].hvalue(),
         else => return false,
     }
     lgc.Cobjbarrier(L, @ptrCast(@alignCast(&o.gcvalue().gch)), @ptrCast(@alignCast(L.top - 1)));
@@ -1178,16 +1178,16 @@ pub inline fn call(L: *lua.State, nargs: i32, nresults: i32) void {
 }
 
 pub fn pcall(L: *lua.State, nargs: i32, nresults: i32, msgh: i32) lua.Status {
-    return @enumFromInt(c.lua_pcall(@ptrCast(L), nargs, nresults, msgh));
+    return @fromBackingInt(@intCast(c.lua_pcall(@ptrCast(L), nargs, nresults, msgh)));
 }
 
 pub fn cpcall(L: *lua.State, func: lua.CFunction, ud: *anyopaque) lua.Status {
-    return @enumFromInt(c.lua_cpcall(@ptrCast(L), @ptrCast(func), ud));
+    return @fromBackingInt(@intCast(c.lua_cpcall(@ptrCast(L), @ptrCast(func), ud)));
 }
 
 pub fn callyieldable(L: *lua.State, nargs: i32, nresults: i32) i32 {
     if (comptime !build_config.use_zig_backend) {
-        return @enumFromInt(c.lua_callyieldable(@ptrCast(L), nargs, nresults));
+        return @fromBackingInt(@intCast(c.lua_callyieldable(@ptrCast(L), nargs, nresults)));
     }
     api_check(L, L.ci.?[0].func[0].iscfunction());
     const cl = L.ci.?[0].func[0].clvalue();
@@ -1199,7 +1199,7 @@ pub fn callyieldable(L: *lua.State, nargs: i32, nresults: i32) i32 {
     if (ldo.isyielded(L))
         return ldo.C_CALL_YIELD;
 
-    return cl.d.c.cont.?(L, @intFromEnum(lua.Status.Ok));
+    return cl.d.c.cont.?(L, @backingInt(lua.Status.Ok));
 }
 
 pub fn pcallyieldable(L: *lua.State, nargs: i32, nresults: i32, errfunc: i32) i32 {
@@ -1207,7 +1207,7 @@ pub fn pcallyieldable(L: *lua.State, nargs: i32, nresults: i32, errfunc: i32) i3
 }
 
 pub fn status(L: *lua.State) lua.Status {
-    return @enumFromInt(L.curr_status);
+    return @fromBackingInt(@intCast(L.curr_status));
 }
 
 pub fn costatus(L: *lua.State, co: *lua.State) lua.CoStatus {
@@ -1263,7 +1263,7 @@ pub fn setthreaddata(L: *lua.State, comptime T: type, data: T) void {
 //
 
 pub inline fn gc(L: *lua.State, what: lua.GCOp, data: i32) i32 {
-    return c.lua_gc(@ptrCast(L), @intFromEnum(what), data);
+    return c.lua_gc(@ptrCast(L), @backingInt(what), data);
 }
 
 pub fn @"error"(L: *lua.State) noreturn {
@@ -1635,7 +1635,7 @@ pub fn usesexport(L: *lua.State, idx: i32) bool {
     if (!o.isLfunction())
         return false;
     const cl = o.clvalue();
-    return (cl.d.l.p.flags & @intFromEnum(Bytecode.ProtoFlag.LPF_USES_EXPORT)) != 0;
+    return (cl.d.l.p.flags & @backingInt(Bytecode.ProtoFlag.LPF_USES_EXPORT)) != 0;
 }
 
 pub fn cleartable(L: *lua.State, idx: i32) Errorset.Table!void {

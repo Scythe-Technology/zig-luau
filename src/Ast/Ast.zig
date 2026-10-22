@@ -2419,35 +2419,35 @@ test "AstValuesCheck" {
     };
 
     @setEvalBranchQuota(2000);
-    inline for (@typeInfo(AstValues).@"struct".decls) |decl| {
-        if (comptime std.mem.endsWith(u8, decl.name, "Index")) {
-            const name = decl.name[3 .. decl.name.len - 5];
+    inline for (@typeInfo(AstValues).@"struct".decl_names) |decl_name| {
+        if (comptime std.mem.endsWith(u8, decl_name, "Index")) {
+            const name = decl_name[3 .. decl_name.len - 5];
 
             const ast_node_type = @field(Ast, name);
             const info = @typeInfo(ast_node_type).@"struct";
 
-            comptime var field: ?std.builtin.Type.StructField = null;
-            inline for (info.fields) |f| {
-                if (comptime std.mem.eql(u8, f.name, "classIndex")) {
-                    field = f;
+            comptime var field_attrs: ?std.builtin.Type.Struct.FieldAttributes = null;
+            inline for (info.field_names, info.field_attrs) |field_name, attrs| {
+                if (comptime std.mem.eql(u8, field_name, "classIndex")) {
+                    field_attrs = attrs;
                     break;
                 }
             }
-            if (field == null)
+            if (field_attrs == null)
                 @compileError("classIndex field not found");
-            const default_value_ptr = field.?.default_value_ptr orelse @compileError("classIndex field does not have a default value");
+            const default_value_ptr = field_attrs.?.default_value_ptr orelse @compileError("classIndex field does not have a default value");
             const enum_value = @as(*const Ast.Node.Kind, @ptrCast(@alignCast(default_value_ptr))).*;
 
-            std.testing.expectEqual(@field(AstValues, decl.name), @intFromEnum(enum_value)) catch |err| {
+            std.testing.expectEqual(@field(AstValues, decl_name), @intFromEnum(enum_value)) catch |err| {
                 std.debug.print("index error for {s}\n", .{name});
                 return err;
             };
-        } else if (comptime std.mem.endsWith(u8, decl.name, "Size")) {
-            const name = decl.name[3 .. decl.name.len - 4];
+        } else if (comptime std.mem.endsWith(u8, decl_name, "Size")) {
+            const name = decl_name[3 .. decl_name.len - 4];
 
             const ast_node_type = @field(Ast, name);
 
-            std.testing.expectEqual(@field(AstValues, decl.name), @sizeOf(ast_node_type)) catch |err| {
+            std.testing.expectEqual(@field(AstValues, decl_name), @sizeOf(ast_node_type)) catch |err| {
                 std.debug.print("size error for {s}\n", .{name});
                 return err;
             };
