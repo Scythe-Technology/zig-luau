@@ -90,7 +90,7 @@ test "Zig allocator access" {
     defer lua.deinit();
 
     const inner = struct {
-        fn inner(l: *State) i32 {
+        fn inner(l: *State) callconv(.c) i32 {
             const allocator = luau.getallocator(l);
 
             const num = l.tointeger(1) orelse @panic("expected integer");
@@ -179,7 +179,7 @@ test "compare" {
 }
 
 const add = struct {
-    fn addInner(l: *State) i32 {
+    fn addInner(l: *State) callconv(.c) i32 {
         const a = l.tointeger(1) orelse 0;
         const b = l.tointeger(2) orelse 0;
         l.pushinteger(a + b);
@@ -243,7 +243,7 @@ test "type of and getting values" {
     try expectEqual(.Function, lua.typeOf(-1));
     try expect(lua.iscfunction(-1));
     try expect(lua.isfunction(-1));
-    try expectEqual(luau.VM.zapi.toCFn(add), lua.tocfunction(-1).?);
+    try expectEqual(add, lua.tocfunction(-1).?);
 
     try lua.pushstring("hello world");
     try expectEqualStrings("hello world", lua.tostring(-1) orelse @panic("bad"));
@@ -437,7 +437,7 @@ test "function registration" {
     defer lua.deinit();
 
     const funcs = [_]luau.VM.laux.Reg{
-        .{ .name = "add", .func = luau.VM.zapi.toCFn(add) },
+        .{ .name = "add", .func = add },
     };
     try lua.newtable();
     try lua.Lregister(null, &funcs);
@@ -466,10 +466,11 @@ test "warn fn" {
     defer lua.deinit();
 
     const warnFn = struct {
-        fn inner(L: *State) void {
+        fn inner(L: *State) callconv(.c) i32 {
             const msg = L.tostring(1) orelse @panic("bad");
             if (!std.mem.eql(u8, msg, "this will be caught by the warnFn"))
                 std.debug.panic("test failed", .{});
+            return 0;
         }
     }.inner;
 
@@ -588,7 +589,7 @@ test "upvalues" {
 
     // counter from PIL
     const counter = struct {
-        fn inner(l: *State) i32 {
+        fn inner(l: *State) callconv(.c) i32 {
             var counter = l.tointeger(luau.VM.lua.upvalueindex(1)) orelse 0;
             counter += 1;
             l.pushinteger(counter);
@@ -600,7 +601,7 @@ test "upvalues" {
 
     // Initialize the counter at 0
     lua.pushinteger(0);
-    try lua.pushcclosure(luau.VM.zapi.toCFn(counter), "counter", 1);
+    try lua.pushcclosure(counter, "counter", 1);
     try lua.setglobal("counter");
 
     // call the function repeatedly, each time ensuring the result increases by one
@@ -621,8 +622,8 @@ test "raise error" {
     defer lua.deinit();
 
     const makeError = struct {
-        fn inner(l: *State) !i32 {
-            _ = try l.pushstring("makeError made an error");
+        fn inner(l: *State) callconv(.c) i32 {
+            _ = l.pushstring("makeError made an error") catch @panic("OOM");
             l.raiseerror();
             return 0;
         }
@@ -666,9 +667,9 @@ test "yielding no continuation" {
 
     const thread = try lua.newthread();
     const func = struct {
-        fn inner(l: *State) !i32 {
+        fn inner(l: *State) callconv(.c) i32 {
             l.pushinteger(1);
-            return try l.yield(1);
+            return l.yield(1) catch @panic("OOM");
         }
     }.inner;
     try thread.Zpushfunction(func, "func");
@@ -692,8 +693,8 @@ test "aux check functions" {
     defer lua.deinit();
 
     const function = struct {
-        fn inner(l: *State) !i32 {
-            try l.Lcheckany(1);
+        fn inner(l: *State) callconv(.c) i32 {
+            l.Lcheckany(1) catch @panic("OOM");
             _ = l.Lcheckinteger(2);
             _ = l.Lchecknumber(3);
             _ = l.Lcheckstring(4);
@@ -757,7 +758,7 @@ test "aux opt functions" {
     defer lua.deinit();
 
     const function = struct {
-        fn inner(l: *State) i32 {
+        fn inner(l: *State) callconv(.c) i32 {
             expectEqual(10, l.Loptinteger(1, 10)) catch unreachable;
             expectEqualStrings("zig", l.Loptstring(2, "zig")) catch unreachable;
             expectEqual(1.23, l.Loptnumber(3, 1.23)) catch unreachable;
@@ -860,8 +861,8 @@ test "args and errors" {
     defer lua.deinit();
 
     const argCheck = struct {
-        fn inner(l: *State) !i32 {
-            try l.Largcheck(false, 1, "error!");
+        fn inner(l: *State) callconv(.c) i32 {
+            l.Largcheck(false, 1, "error!") catch @panic("OOM");
             return 0;
         }
     }.inner;
@@ -870,8 +871,8 @@ test "args and errors" {
     try expectError(error.Runtime, lua.pcall(0, 0, 0).check());
 
     const raisesError = struct {
-        fn inner(l: *State) !i32 {
-            try l.LerrorL("some error {s}!", .{"zig"});
+        fn inner(l: *State) callconv(.c) i32 {
+            l.LerrorL("some error {s}!", .{"zig"}) catch @panic("OOM");
             unreachable;
         }
     }.inner;
@@ -881,8 +882,8 @@ test "args and errors" {
     try expectEqualStrings("some error zig!", lua.tostring(-1) orelse @panic("bad"));
 
     const raisesFmtError = struct {
-        fn inner(l: *State) !i32 {
-            try l.LerrorL("some fmt error {s}!", .{"zig"});
+        fn inner(l: *State) callconv(.c) i32 {
+            l.LerrorL("some fmt error {s}!", .{"zig"}) catch @panic("OOM");
             unreachable;
         }
     }.inner;
@@ -892,8 +893,9 @@ test "args and errors" {
     try expectEqualStrings("some fmt error zig!", lua.tostring(-1) orelse @panic("bad"));
 
     const FmtError = struct {
-        fn inner(l: *State) !i32 {
-            return l.Zerrorf("some err fmt error {s}!", .{"zig"});
+        fn inner(l: *State) callconv(.c) i32 {
+            l.Zerrorf("some err fmt error {s}!", .{"zig"}) catch {};
+            l.raiseerror();
         }
     }.inner;
 
@@ -902,8 +904,9 @@ test "args and errors" {
     try expectEqualStrings("some err fmt error zig!", lua.tostring(-1) orelse @panic("bad"));
 
     const Error = struct {
-        fn inner(l: *State) !i32 {
-            return l.Zerror("some error");
+        fn inner(l: *State) callconv(.c) i32 {
+            l.Zerror("some error") catch {};
+            l.raiseerror();
         }
     }.inner;
 
@@ -1005,8 +1008,8 @@ test "debug stacktrace" {
     defer lua.deinit();
 
     const stackTrace = struct {
-        fn inner(l: *State) !i32 {
-            try l.pushstring(l.debugtrace());
+        fn inner(l: *State) callconv(.c) i32 {
+            l.pushstring(l.debugtrace()) catch @panic("OOM");
             return 1;
         }
     }.inner;
@@ -1034,8 +1037,8 @@ test "debug stacktrace luau" {
     defer testing.allocator.free(bc);
 
     const stackTrace = struct {
-        fn inner(l: *State) !i32 {
-            try l.pushstring(l.debugtrace());
+        fn inner(l: *State) callconv(.c) i32 {
+            l.pushstring(l.debugtrace()) catch @panic("OOM");
             return 1;
         }
     }.inner;
@@ -1113,7 +1116,7 @@ test "Set Api" {
     lua.openstring();
 
     const vectorFn = struct {
-        fn inner(l: *State) i32 {
+        fn inner(l: *State) callconv(.c) i32 {
             const x: f32 = @floatCast(l.Loptnumber(1, 0.0));
             const y: f32 = @floatCast(l.Loptnumber(2, 0.0));
             const z: f32 = @floatCast(l.Loptnumber(3, 0.0));
@@ -1139,14 +1142,6 @@ test "Set Api" {
         \\  assert(type(api.e) == "string" and api.e == "Api");
         \\  assert(type(api.f) == "string" and api.f == string.char(65, 0, 66) and api.f ~= "AB" and #api.f == 3);
         \\  assert(type(api.pos) == "vector" and api.pos.X == 1 and api.pos.Y == 2 and api.pos.Z == 3);
-        \\
-        \\  assert(type(_a) == "function"); _a()
-        \\  assert(type(_b) == "boolean" and _b == true);
-        \\  assert(type(_c) == "number" and _c == 1.1);
-        \\  assert(type(_d) == "number" and _d == 2);
-        \\  assert(type(_e) == "string" and _e == "Api");
-        \\  assert(type(_f) == "string" and _f == string.char(65, 0, 66) and _f ~= "AB" and #_f == 3);
-        \\  assert(type(_pos) == "vector" and _pos.X == 1 and _pos.Y == 2 and _pos.Z == 3);
         \\  
         \\  assert(type(gl_a) == "function"); gl_a()
         \\  assert(type(gl_b) == "boolean" and gl_b == true);
@@ -1170,36 +1165,24 @@ test "Set Api" {
     defer testing.allocator.free(bc);
 
     const tempFn = struct {
-        fn inner(l: *State) !i32 {
-            _ = try l.getglobal("count");
+        fn inner(l: *State) callconv(.c) i32 {
+            _ = l.getglobal("count") catch @panic("OOM");
             l.pushinteger((l.tointeger(-1) orelse 0) + 1);
-            try l.setglobal("count");
+            l.setglobal("count") catch @panic("OOM");
             return 0;
         }
     }.inner;
     try lua.newtable();
-    try lua.Zsetfieldfn(-1, "a", tempFn);
-    try lua.Zsetfield(-1, "b", true);
-    try lua.Zsetfield(-1, "c", 1.1);
-    try lua.Zsetfield(-1, "d", 2);
-    try lua.Zsetfield(-1, "e", "Api");
-    try lua.Zsetfield(-1, "f", &[_]u8{ 'A', 0, 'B' });
+    try lua.Zsetfieldfn("a", tempFn);
+    try lua.Zsetfield("b", true);
+    try lua.Zsetfield("c", 1.1);
+    try lua.Zsetfield("d", 2);
+    try lua.Zsetfield("e", "Api");
+    try lua.Zsetfield("f", &[_]u8{ 'A', 0, 'B' });
     if (luau.VECTOR_SIZE == 3) {
-        try lua.Zsetfield(-1, "pos", @Vector(3, f32){ 1.0, 2.0, 3.0 });
+        try lua.Zsetfield("pos", @Vector(3, f32){ 1.0, 2.0, 3.0 });
     } else {
-        try lua.Zsetfield(-1, "pos", @Vector(4, f32){ 1.0, 2.0, 3.0, 4.0 });
-    }
-
-    try lua.Zsetfieldfn(luau.VM.lua.GLOBALSINDEX, "_a", tempFn);
-    try lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_b", true);
-    try lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_c", @as(f64, 1.1));
-    try lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_d", @as(i32, 2));
-    try lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_e", "Api");
-    try lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_f", &[_]u8{ 'A', 0, 'B' });
-    if (luau.VECTOR_SIZE == 3) {
-        try lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_pos", @Vector(3, f32){ 1.0, 2.0, 3.0 });
-    } else {
-        try lua.Zsetfield(luau.VM.lua.GLOBALSINDEX, "_pos", @Vector(4, f32){ 1.0, 2.0, 3.0, 4.0 });
+        try lua.Zsetfield("pos", @Vector(4, f32){ 1.0, 2.0, 3.0, 4.0 });
     }
 
     try lua.Zsetglobalfn("gl_a", tempFn);
@@ -1226,7 +1209,7 @@ test "Set Api" {
     }
 
     _ = try lua.getglobal("count");
-    try expectEqual(3, lua.tointeger(-1) orelse @panic("bad"));
+    try expectEqual(2, lua.tointeger(-1) orelse @panic("bad"));
 }
 
 test "Vectors" {
@@ -1238,7 +1221,7 @@ test "Vectors" {
     lua.openmath();
 
     const vectorFn = struct {
-        fn inner(l: *State) i32 {
+        fn inner(l: *State) callconv(.c) i32 {
             const x: f32 = @floatCast(l.Loptnumber(1, 0.0));
             const y: f32 = @floatCast(l.Loptnumber(2, 0.0));
             const z: f32 = @floatCast(l.Loptnumber(3, 0.0));
@@ -1318,7 +1301,7 @@ test "Luau JIT/CodeGen" {
     lua.openbase();
 
     try lua.Zsetglobalfn("test", struct {
-        fn inner(L: *State) !i32 {
+        fn inner(L: *State) callconv(.c) i32 {
             L.pushboolean(L.Gisnative(@intCast(L.Loptinteger(1, 0))));
             return 1;
         }
@@ -1359,7 +1342,7 @@ test "Luau JIT/CodeGen compileLoad" {
     lua.openbase();
 
     try lua.Zsetglobalfn("test", struct {
-        fn inner(L: *State) !i32 {
+        fn inner(L: *State) callconv(.c) i32 {
             L.pushboolean(L.Gisnative(@intCast(L.Loptinteger(1, 0))));
             return 1;
         }
@@ -1398,7 +1381,7 @@ test "Luau JIT/CodeGen ParseResult" {
     lua.openbase();
 
     try lua.Zsetglobalfn("test", struct {
-        fn inner(L: *State) !i32 {
+        fn inner(L: *State) callconv(.c) i32 {
             L.pushboolean(L.Gisnative(@intCast(L.Loptinteger(1, 0))));
             return 1;
         }
@@ -1467,20 +1450,20 @@ test "Metamethods" {
 
     _ = try lua.Lnewmetatable("MyMetatable");
 
-    try lua.Zsetfieldfn(-1, luau.Metamethods.index, struct {
-        fn inner(l: *State) !i32 {
+    try lua.Zsetfieldfn(luau.Metamethods.index, struct {
+        fn inner(l: *State) callconv(.c) i32 {
             l.Lchecktype(1, .Table);
             const key = l.tostring(2) orelse unreachable;
             expectEqualStrings("test", key) catch unreachable;
-            try l.pushstring("Hello, world");
+            l.pushstring("Hello, world") catch @panic("OOM");
             return 1;
         }
     }.inner);
 
-    try lua.Zsetfieldfn(-1, luau.Metamethods.tostring, struct {
-        fn inner(l: *State) !i32 {
+    try lua.Zsetfieldfn(luau.Metamethods.tostring, struct {
+        fn inner(l: *State) callconv(.c) i32 {
             l.Lchecktype(1, .Table);
-            try l.pushstring("MyMetatable");
+            l.pushstring("MyMetatable") catch @panic("OOM");
             return 1;
         }
     }.inner);
@@ -1508,8 +1491,8 @@ test "Zig Error Fn Lua Handled" {
     defer lua.deinit();
 
     const zigEFn = struct {
-        fn inner(_: *State) !i32 {
-            return error.Fail;
+        fn inner(l: *State) callconv(.c) i32 {
+            return l.LerrorL("Fail", .{}) catch @panic("OOM");
         }
     }.inner;
 
@@ -1525,7 +1508,7 @@ test "getfieldObject" {
     try lua.Lopenlibs();
 
     try lua.newtable();
-    try lua.Zsetfield(-1, "test", true);
+    try lua.Zsetfield("test", true);
     try lua.Zsetglobal("some", "Value");
 
     // switch (try lua.getfieldObj(-1, "test")) {
@@ -1638,13 +1621,23 @@ test "State getInfo" {
     defer testing.allocator.free(bc);
 
     try lua.Zsetglobalfn("func", struct {
-        fn inner(L: *State) !i32 {
+        fn inner(L: *State) callconv(.c) i32 {
             var ar: luau.VM.lua.Debug = .{ .ssbuf = undefined };
-            try expect(L.getinfo(1, "snl", &ar));
-            try expect(ar.what == .lua);
-            try std.testing.expectEqualSentinel(u8, 0, "MyFunction", ar.name orelse @panic("Failed"));
-            try std.testing.expectEqualStrings("[string \"module\"]", ar.short_src orelse @panic("Failed"));
-            try expect(ar.linedefined.? == 1);
+            expect(L.getinfo(1, "snl", &ar)) catch |err| {
+                L.LerrorL("{s}", .{@errorName(err)}) catch @panic("OOM");
+            };
+            expect(ar.what == .lua) catch |err| {
+                L.LerrorL("{s}", .{@errorName(err)}) catch @panic("OOM");
+            };
+            std.testing.expectEqualSentinel(u8, 0, "MyFunction", ar.name orelse @panic("Failed")) catch |err| {
+                L.LerrorL("{s}", .{@errorName(err)}) catch @panic("OOM");
+            };
+            std.testing.expectEqualStrings("[string \"module\"]", ar.short_src orelse @panic("Failed")) catch |err| {
+                L.LerrorL("{s}", .{@errorName(err)}) catch @panic("OOM");
+            };
+            expect(ar.linedefined.? == 1) catch |err| {
+                L.LerrorL("{s}", .{@errorName(err)}) catch @panic("OOM");
+            };
             return 1;
         }
     }.inner);
@@ -1674,8 +1667,8 @@ test "yielding error" {
         defer testing.allocator.free(bc);
 
         try lua.Zsetglobalfn("foo", struct {
-            fn inner(L: *State) !i32 {
-                return L.yield(0);
+            fn inner(L: *State) callconv(.c) i32 {
+                return L.yield(0) catch @panic("OOM");
             }
         }.inner);
 
@@ -1706,8 +1699,8 @@ test "yielding error" {
         defer testing.allocator.free(bc);
 
         try lua.Zsetglobalfn("foo", struct {
-            fn inner(L: *State) !i32 {
-                return L.yield(0);
+            fn inner(L: *State) callconv(.c) i32 {
+                return L.yield(0) catch @panic("OOM");
             }
         }.inner);
 
@@ -1751,10 +1744,14 @@ test "Thread Data" {
     defer lua.deinit();
 
     const zigFn = struct {
-        fn inner(L: *State) !i32 {
+        fn inner(L: *State) callconv(.c) i32 {
             const data = L.getthreaddata(*Sample); // should exists
-            try expectEqual(10, data.a);
-            try expectEqual(20, data.b);
+            expectEqual(10, data.a) catch |err| {
+                L.LerrorL("{s}", .{@errorName(err)}) catch @panic("OOM");
+            };
+            expectEqual(20, data.b) catch |err| {
+                L.LerrorL("{s}", .{@errorName(err)}) catch @panic("OOM");
+            };
             return 0;
         }
     }.inner;
@@ -1829,9 +1826,9 @@ test "Alloc Ref (P)" {
         defer testing.allocator.free(bc);
 
         try T.Zsetglobalfn("foo", struct {
-            fn inner(L: *State) !i32 {
+            fn inner(L: *State) callconv(.c) i32 {
                 inline for (0..15) |_| {
-                    try L.createtable(0, 40);
+                    L.createtable(0, 40) catch @panic("OOM");
                 }
                 return 1;
             }
@@ -1866,9 +1863,9 @@ test "Alloc Ref (P)" {
         defer testing.allocator.free(bc);
 
         try T.Zsetglobalfn("foo", struct {
-            fn inner(L: *State) !i32 {
+            fn inner(L: *State) callconv(.c) i32 {
                 inline for (0..15) |_| {
-                    try L.createtable(0, 40);
+                    L.createtable(0, 40) catch @panic("OOM");
                 }
                 return 1;
             }
@@ -1910,8 +1907,8 @@ test "String (S)" {
         defer testing.allocator.free(bc);
 
         try T.Zsetglobalfn("foo", struct {
-            fn inner(L: *State) !i32 {
-                try L.pushlstring("Hello, world");
+            fn inner(L: *State) callconv(.c) i32 {
+                L.pushlstring("Hello, world") catch @panic("OOM");
                 return 1;
             }
         }.inner);
@@ -1937,8 +1934,10 @@ test "String (S)" {
         defer testing.allocator.free(bc);
 
         try T.Zsetglobalfn("foo", struct {
-            fn inner(L: *State) !i32 {
-                return L.Zerror("foo bar baz, a long string, luau");
+            fn inner(L: *State) callconv(.c) i32 {
+                L.Zerror("foo bar baz, a long string, luau") catch {};
+                L.raiseerror();
+                return 0;
             }
         }.inner);
 
