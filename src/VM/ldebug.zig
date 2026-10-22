@@ -113,7 +113,7 @@ pub fn getcoverage(
     comptime T: type,
     context: *T,
     funcindex: i32,
-    comptime callback: *const fn (
+    callback: fn (
         ctx: *T,
         func: ?[:0]const u8,
         line: i32,
@@ -146,12 +146,12 @@ pub fn getcounters(
     comptime T: type,
     context: *T,
     funcindex: i32,
-    comptime functionvisit: *const fn (
+    functionvisit: fn (
         ctx: *T,
         func: ?[:0]const u8,
         linedefined: i32,
     ) void,
-    comptime countervisit: *const fn (
+    countervisit: fn (
         ctx: *T,
         kind: i32,
         line: i32,

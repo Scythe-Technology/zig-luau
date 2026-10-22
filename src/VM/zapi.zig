@@ -9,199 +9,16 @@ const laux = @import("laux.zig");
 
 const Errorset = @import("errorset.zig");
 
-pub fn LuaZigFn(comptime ReturnType: type) type {
-    switch (@typeInfo(ReturnType)) {
-        .int => {
-            if (ReturnType != i32)
-                @compileError("Unsupported Fn Return type, must be i32");
-        },
-        else => {},
-    }
-    return fn (state: *lua.State) ReturnType;
+pub inline fn Zpushfunction(L: *lua.State, f: lua.CFunction, name: [:0]const u8) !void {
+    try L.pushcfunction(f, name);
 }
 
-fn handleError(L: *lua.State, err: anyerror) noreturn {
-    switch (err) {
-        // else => @panic("Unknown error"),
-        error.RaiseLuauError => L.raiseerror(),
-        error.OutOfMemory => ldo.throw(L, .ErrMem),
-        else => L.LerrorL("{s}", .{@errorName(err)}) catch ldo.throw(L, .ErrMem),
-    }
+pub inline fn Zpushclosure(L: *lua.State, f: lua.CFunction, name: [:0]const u8, nup: i32) !void {
+    try L.pushcclosure(f, name, nup);
 }
 
-pub fn ZigToCFn(comptime fnType: std.builtin.Type.Fn, comptime f: anytype) lua.CFunction {
-    if (fnType.params.len != 1)
-        @compileError("Fn must have exactly 1 parameter");
-    const param_type = fnType.params[0].type orelse @compileError("Param must have a type");
-    if (param_type != *lua.State)
-        @compileError("Fn parameter must be *lua.State");
-    switch (@typeInfo(fnType.return_type orelse @compileError("Fn must return something"))) {
-        .int => {
-            if (fnType.return_type != i32)
-                @compileError("Unsupported Fn Return type, must be i32");
-            return struct {
-                fn inner(s: *lua.State) callconv(.c) c_int {
-                    return @call(.always_inline, f, .{s});
-                }
-            }.inner;
-        },
-        .void => {
-            return struct {
-                fn inner(s: *lua.State) callconv(.c) c_int {
-                    @call(.always_inline, f, .{s});
-                    return 0;
-                }
-            }.inner;
-        },
-        .error_union => |error_union| {
-            switch (@typeInfo(error_union.payload)) {
-                .int => {
-                    if (error_union.payload != i32)
-                        @compileError("Unsupported Fn Return type, must be i32");
-                    return struct {
-                        fn inner(s: *lua.State) callconv(.c) c_int {
-                            if (@call(.always_inline, f, .{s})) |res|
-                                return res
-                            else |err|
-                                handleError(s, err);
-                        }
-                    }.inner;
-                },
-                .void => {
-                    return struct {
-                        fn inner(s: *lua.State) callconv(.c) c_int {
-                            if (@call(.always_inline, f, .{s}))
-                                return 0
-                            else |err|
-                                handleError(s, err);
-                        }
-                    }.inner;
-                },
-                else => |t| @compileError("Unsupported Fn Return type " ++ @tagName(t)),
-            }
-        },
-        else => |t| @compileError("Unsupported Fn Return type " ++ @tagName(t)),
-    }
-}
-
-pub fn ZigToCFnV(comptime fnType: std.builtin.Type.Fn, comptime f: anytype) lua.CFunction {
-    if (fnType.params.len != 1)
-        @compileError("Fn must have exactly 1 parameter");
-    const param_type = fnType.params[0].type orelse @compileError("Param must have a type");
-    if (param_type != *lua.State)
-        @compileError("Fn parameter must be *lua.State");
-    switch (@typeInfo(fnType.return_type orelse @compileError("Fn must return something"))) {
-        .void, .noreturn => {
-            return struct {
-                fn inner(L: *lua.State) callconv(.c) c_int {
-                    @call(.always_inline, f, .{L});
-                    return 0;
-                }
-            }.inner;
-        },
-        .comptime_int, .comptime_float, .bool, .int, .float, .@"struct", .array, .@"enum", .null, .optional => {
-            return struct {
-                fn inner(L: *lua.State) callconv(.c) c_int {
-                    Zpushvalue(L, @call(.always_inline, f, .{L})) catch |err| switch (@as(anyerror, err)) {
-                        error.RaiseLuauError => L.raiseerror(),
-                        error.OutOfMemory => ldo.throw(L, .ErrMem),
-                        else => L.LerrorL("{s}", .{@errorName(err)}) catch ldo.throw(L, .ErrMem),
-                    };
-                    return 1;
-                }
-            }.inner;
-        },
-        .error_union => |error_union| {
-            switch (@typeInfo(error_union.payload)) {
-                .void, .noreturn => {
-                    return struct {
-                        fn inner(L: *lua.State) callconv(.c) c_int {
-                            if (@call(.always_inline, f, .{L}))
-                                return 0
-                            else |err|
-                                handleError(L, err);
-                        }
-                    }.inner;
-                },
-                .comptime_int, .comptime_float, .bool, .int, .float, .@"struct", .array, .@"enum", .null, .optional => {
-                    return struct {
-                        fn inner(L: *lua.State) callconv(.c) c_int {
-                            if (@call(.always_inline, f, .{L})) |res| {
-                                Zpushvalue(L, res) catch |err| switch (err) {
-                                    error.RaiseLuauError => L.raiseerror(),
-                                    error.OutOfMemory => ldo.throw(L, .ErrMem),
-                                    else => L.LerrorL("{s}", .{@errorName(err)}) catch ldo.throw(L, .ErrMem),
-                                };
-                                return 1;
-                            } else |err| handleError(L, err);
-                        }
-                    }.inner;
-                },
-                else => |t| @compileError("Unsupported Fn Return type " ++ @tagName(t)),
-            }
-        },
-        .error_set => {
-            return struct {
-                fn inner(L: *lua.State) callconv(.c) c_int {
-                    const err = @call(.always_inline, f, .{L});
-                    return handleError(L, err);
-                }
-            }.inner;
-        },
-        else => |t| @compileError("Unsupported Fn Return type " ++ @tagName(t)),
-    }
-}
-
-pub fn toCFn(comptime f: anytype) lua.CFunction {
-    const t = @TypeOf(f);
-    const ti = @typeInfo(t);
-    switch (ti) {
-        .@"fn" => |Fn| return ZigToCFn(Fn, f),
-        .pointer => |ptr| {
-            // *const fn ...
-            if (!ptr.is_const)
-                @compileError("Pointer must be constant");
-            const pi = @typeInfo(ptr.child);
-            switch (pi) {
-                .@"fn" => |Fn| return ZigToCFn(Fn, f),
-                else => @compileError("Pointer must be a pointer to a function"),
-            }
-        },
-        else => @compileError("zig_fn must be a Fn or a Fn Pointer"),
-    }
-    @compileError("Could not determine zig_fn type");
-}
-
-pub fn toCFnV(comptime f: anytype) lua.CFunction {
-    const t = @TypeOf(f);
-    const ti = @typeInfo(t);
-    switch (ti) {
-        .@"fn" => |Fn| return ZigToCFnV(Fn, f),
-        .pointer => |ptr| {
-            // *const fn ...
-            if (!ptr.is_const)
-                @compileError("Pointer must be constant");
-            const pi = @typeInfo(ptr.child);
-            switch (pi) {
-                .@"fn" => |Fn| return ZigToCFnV(Fn, f),
-                else => @compileError("Pointer must be a pointer to a function"),
-            }
-        },
-        else => @compileError("zig_fn must be a Fn or a Fn Pointer"),
-    }
-    @compileError("Could not determine zig_fn type");
-}
-
-pub inline fn Zpushfunction(L: *lua.State, comptime f: anytype, name: [:0]const u8) !void {
-    try L.pushcfunction(toCFn(f), name);
-}
-
-pub inline fn Zpushclosure(L: *lua.State, comptime f: anytype, name: [:0]const u8, nup: i32) !void {
-    try L.pushcclosure(toCFn(f), name, nup);
-}
-
-pub fn Zpushclosurek(L: *lua.State, comptime f: anytype, name: [:0]const u8, nup: i32, comptime cont: ?fn (L: *lua.State, status: i32) i32) void {
-    L.pushcclosurek(toCFn(f), name, nup, if (cont) |cont_f|
+pub fn Zpushclosurek(L: *lua.State, f: lua.CFunction, name: [:0]const u8, nup: i32, cont: ?fn (L: *lua.State, status: i32) i32) void {
+    L.pushcclosurek(f, name, nup, if (cont) |cont_f|
         struct {
             fn inner(l: *lua.State, status: c_int) callconv(.c) c_int {
                 return @call(.always_inline, cont_f, .{ l, status });
@@ -209,10 +26,6 @@ pub fn Zpushclosurek(L: *lua.State, comptime f: anytype, name: [:0]const u8, nup
         }.inner
     else
         null);
-}
-
-pub inline fn ZpushfunctionV(L: *lua.State, comptime f: anytype, name: [:0]const u8) void {
-    L.pushcfunction(toCFnV(f), name);
 }
 
 pub fn Zyielderror(L: *lua.State) anyerror {
@@ -226,11 +39,15 @@ pub fn Zpushvalue(L: *lua.State, value: anytype) !void {
         .comptime_int => L.pushinteger(@intCast(value)),
         .comptime_float => L.pushnumber(@floatCast(value)),
         .int => |int| {
-            const pushfn = if (int.signedness == .signed) lapi.pushinteger else lapi.pushunsigned;
-            if (int.bits <= 32)
-                pushfn(L, @intCast(value))
-            else
-                pushfn(L, @truncate(value));
+            if (int.bits <= 32) {
+                const pushfn = if (int.signedness == .signed) lapi.pushinteger else lapi.pushunsigned;
+                pushfn(L, @intCast(value));
+            } else {
+                if (int.bits <= 64)
+                    lapi.pushinteger64(L, @bitCast(value))
+                else
+                    lapi.pushinteger64(L, @truncate(value));
+            }
         },
         .float => |float| {
             if (float.bits <= 64)
@@ -300,11 +117,15 @@ pub fn Zpushvalue(L: *lua.State, value: anytype) !void {
             }
         },
         .@"struct" => |s| {
-            try L.createtable(0, s.fields.len);
-            inline for (s.fields) |field| {
-                switch (@typeInfo(field.type)) {
-                    .@"fn" => try Zsetfieldfn(L, -1, field.name, @field(value, field.name)),
-                    else => try Zsetfield(L, -1, field.name, @field(value, field.name)),
+            try L.createtable(0, s.field_names.len);
+            inline for (s.field_names, s.field_types) |field_name, field_type| {
+                switch (@typeInfo(field_type)) {
+                    .@"fn" => try Zsetfieldfn(L, field_name, @field(value, field_name)),
+                    .pointer => |p| try if (@typeInfo(p.child) == .@"fn")
+                        Zsetfieldfn(L, field_name, @field(value, field_name))
+                    else
+                        Zsetfield(L, field_name, @field(value, field_name)),
+                    else => try Zsetfield(L, field_name, @field(value, field_name)),
                 }
             }
         },
@@ -320,32 +141,21 @@ pub fn Zpushvalue(L: *lua.State, value: anytype) !void {
     }
 }
 
-pub fn Zsetfield(L: *lua.State, comptime index: i32, k: [:0]const u8, value: anytype) !void {
-    const idx = comptime if (index != lua.GLOBALSINDEX and index != lua.REGISTRYINDEX and index < 0) index - 1 else index;
+pub fn Zsetfield(L: *lua.State, k: [:0]const u8, value: anytype) !void {
     try Zpushvalue(L, value);
-    try L.rawsetfield(idx, k);
+    try L.rawsetfield(-2, k);
 }
-pub fn Zsetfieldfn(L: *lua.State, comptime index: i32, comptime k: [:0]const u8, comptime f: anytype) !void {
-    const idx = comptime if (index != lua.GLOBALSINDEX and index != lua.REGISTRYINDEX and index < 0) index - 1 else index;
+pub fn Zsetfieldfn(L: *lua.State, k: [:0]const u8, f: lua.CFunction) !void {
     try Zpushfunction(L, f, k);
-    try L.rawsetfield(idx, k);
-}
-pub fn ZsetfieldfnV(L: *lua.State, comptime index: i32, comptime k: [:0]const u8, comptime f: anytype) !void {
-    const idx = comptime if (index != lua.GLOBALSINDEX and index != lua.REGISTRYINDEX and index < 0) index - 1 else index;
-    try ZpushfunctionV(L, f, k);
-    try L.rawsetfield(idx, k);
+    try L.rawsetfield(-2, k);
 }
 
 pub fn Zsetglobal(L: *lua.State, name: [:0]const u8, value: anytype) !void {
     try Zpushvalue(L, value);
     try L.setglobal(name);
 }
-pub fn Zsetglobalfn(L: *lua.State, comptime name: [:0]const u8, comptime f: anytype) !void {
+pub fn Zsetglobalfn(L: *lua.State, name: [:0]const u8, f: lua.CFunction) !void {
     try Zpushfunction(L, f, name);
-    try L.setglobal(name);
-}
-pub fn ZsetglobalfnV(L: *lua.State, comptime name: [:0]const u8, comptime f: anytype) !void {
-    try ZpushfunctionV(L, f, name);
     try L.setglobal(name);
 }
 
@@ -482,9 +292,9 @@ pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32, comptime msg: ?[]
         else
             return tag_error(L, narg, .Boolean, msg),
         .int => |int| {
-            if (!L.isnumber(narg))
-                return tag_error(L, narg, .Number, msg);
             if (int.bits < 32) {
+                if (!L.isnumber(narg))
+                    return tag_error(L, narg, .Number, msg);
                 const value = lapi.tointeger(L, narg) orelse unreachable;
                 const max = std.math.maxInt(T);
                 const min = std.math.minInt(T);
@@ -497,9 +307,18 @@ pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32, comptime msg: ?[]
                 }
                 return @intCast(value);
             } else if (int.bits == 32) {
+                if (!L.isnumber(narg))
+                    return tag_error(L, narg, .Number, msg);
                 const getfn = if (int.signedness == .signed) lapi.tointeger else lapi.tounsigned;
                 return getfn(L, narg) orelse unreachable;
-            } else @compileError("int size too large, 32 bits or lower is supported");
+            } else {
+                const value = lapi.Atoobject(L, narg) orelse return tag_error(L, narg, .Integer, msg);
+                return switch (value.typeOf()) {
+                    .Number => @intFromFloat(value.nvalue()),
+                    .Integer => @bitCast(value.lvalue()),
+                    else => tag_error(L, narg, .Integer, msg),
+                };
+            }
         },
         .float => |float| {
             if (!L.isnumber(narg))
@@ -646,15 +465,18 @@ test "toCFn + Zchecktype" {
 
     {
         const foo = struct {
-            fn inner(l: *lua.State) !i32 {
-                try Zchecktype(l, 1, .Number);
+            fn inner(l: *lua.State) callconv(.c) i32 {
+                Zchecktype(l, 1, .Number) catch |err| switch (err) {
+                    error.RaiseLuauError => l.raiseerror(),
+                    else => @panic("unexpected error"),
+                };
                 std.testing.expectEqual(6, l.tonumber(1).?) catch @panic("failed");
                 l.pushnumber(2);
                 return 1;
             }
         }.inner;
 
-        try L.pushcclosure(toCFn(foo), "foo", 0);
+        try L.pushcclosure(foo, "foo", 0);
         L.pushnumber(6);
         L.call(1, 1);
         defer L.pop(1);
@@ -662,199 +484,41 @@ test "toCFn + Zchecktype" {
     }
     if (comptime EXCEPTIONS_ENABLED) {
         const foo = struct {
-            fn inner(l: *lua.State) !i32 {
-                try Zchecktype(l, 1, .Number);
+            fn inner(l: *lua.State) callconv(.c) i32 {
+                Zchecktype(l, 1, .Number) catch |err| switch (err) {
+                    error.RaiseLuauError => l.raiseerror(),
+                    else => @panic("unexpected error"),
+                };
                 return 0;
             }
         }.inner;
 
-        try L.pushcclosure(toCFn(foo), "foo", 0);
+        try L.pushcclosure(foo, "foo", 0);
         try std.testing.expectEqual(error.Runtime, L.pcall(0, 0, 0).check());
         try std.testing.expectEqualStrings("missing argument #1 to 'foo' (number expected)", L.tostring(-1).?);
         defer L.pop(1);
     }
     if (comptime EXCEPTIONS_ENABLED) {
         const foo = struct {
-            fn inner(_: *lua.State) !i32 {
-                return error.TestError;
+            fn inner(l: *lua.State) callconv(.c) i32 {
+                l.LerrorL("TestError", .{}) catch @panic("OOM");
             }
         }.inner;
 
-        try L.pushcclosure(toCFn(foo), "foo", 0);
+        try L.pushcclosure(foo, "foo", 0);
         try std.testing.expectEqual(error.Runtime, L.pcall(0, 0, 0).check());
         try std.testing.expectEqualStrings("TestError", L.tostring(-1).?);
         defer L.pop(1);
     }
     {
         const foo = struct {
-            fn inner(l: *lua.State) void {
+            fn inner(l: *lua.State) callconv(.c) i32 {
                 std.testing.expectEqual(9, l.tonumber(1).?) catch @panic("failed");
+                return 0;
             }
         }.inner;
 
-        try L.pushcclosure(toCFn(foo), "foo", 0);
-        L.pushnumber(9);
-        L.call(1, 0);
-    }
-}
-
-test toCFnV {
-    const L = try @import("lstate.zig").Lnewstate();
-    defer L.deinit();
-    errdefer std.debug.print("{s}\n", .{L.tostring(-1) orelse "No lua error"});
-
-    {
-        const foo = struct {
-            fn inner(l: *lua.State) i32 {
-                std.testing.expectEqual(6, l.tonumber(1).?) catch @panic("failed");
-                return 2;
-            }
-        }.inner;
-
-        try L.pushcclosure(toCFnV(foo), "foo", 0);
-        L.pushnumber(6);
-        L.call(1, 1);
-        defer L.pop(1);
-        try std.testing.expectEqual(2, L.tonumber(-1).?);
-    }
-    {
-        const foo = struct {
-            fn inner(_: *lua.State) comptime_int {
-                return 8;
-            }
-        }.inner;
-
-        try L.pushcclosure(toCFnV(foo), "foo", 0);
-        L.call(0, 1);
-        defer L.pop(1);
-        try std.testing.expectEqual(8, L.tonumber(-1).?);
-    }
-    {
-        const foo = struct {
-            fn inner(_: *lua.State) comptime_float {
-                return 123.456;
-            }
-        }.inner;
-
-        try L.pushcclosure(toCFnV(foo), "foo", 0);
-        L.call(0, 1);
-        defer L.pop(1);
-        try std.testing.expectEqual(123.456, L.tonumber(-1).?);
-    }
-    {
-        const foo = struct {
-            fn inner(_: *lua.State) f64 {
-                return 234.567;
-            }
-        }.inner;
-
-        try L.pushcclosure(toCFnV(foo), "foo", 0);
-        L.call(0, 1);
-        defer L.pop(1);
-        try std.testing.expectEqual(234.567, L.tonumber(-1).?);
-    }
-    {
-        const Dummy = struct {
-            a: f64,
-            b: enum { A, B, C },
-            c: []const u8,
-            d: i4,
-        };
-        const foo = struct {
-            fn inner(_: *lua.State) Dummy {
-                return Dummy{
-                    .a = 3.14,
-                    .b = .A,
-                    .c = "Test",
-                    .d = 6,
-                };
-            }
-        }.inner;
-
-        try L.pushcclosure(toCFnV(foo), "foo", 0);
-        L.call(0, 1);
-        defer L.pop(1);
-        try std.testing.expectEqual(.Number, L.getfield(-1, "a"));
-        try std.testing.expectEqual(3.14, L.tonumber(-1).?);
-        L.pop(1);
-        try std.testing.expectEqual(.Number, L.getfield(-1, "b"));
-        try std.testing.expectEqual(0, L.tointeger(-1).?);
-        L.pop(1);
-        try std.testing.expectEqual(.String, L.getfield(-1, "c"));
-        try std.testing.expectEqualStrings("Test", L.tostring(-1).?);
-        L.pop(1);
-        try std.testing.expectEqual(.Number, L.getfield(-1, "d"));
-        try std.testing.expectEqual(6, L.tointeger(-1).?);
-        L.pop(1);
-    }
-    {
-        const foo = struct {
-            fn inner(_: *lua.State) ?i32 {
-                return 123;
-            }
-        }.inner;
-
-        try L.pushcclosure(toCFnV(foo), "foo", 0);
-        L.call(0, 1);
-        defer L.pop(1);
-        try std.testing.expectEqual(123, L.tonumber(-1).?);
-    }
-    {
-        const foo = struct {
-            fn inner(_: *lua.State) !?i32 {
-                return 123;
-            }
-        }.inner;
-
-        try L.pushcclosure(toCFnV(foo), "foo", 0);
-        L.call(0, 1);
-        defer L.pop(1);
-        try std.testing.expectEqual(123, L.tonumber(-1).?);
-    }
-    {
-        const foo = struct {
-            fn inner(_: *lua.State) enum { A, B, C } {
-                return .C;
-            }
-        }.inner;
-
-        try L.pushcclosure(toCFnV(foo), "foo", 0);
-        L.call(0, 1);
-        defer L.pop(1);
-        try std.testing.expectEqual(2, L.tointeger(-1).?);
-    }
-    if (comptime EXCEPTIONS_ENABLED) {
-        const foo = struct {
-            fn inner(_: *lua.State) !?i32 {
-                return error.Failed;
-            }
-        }.inner;
-
-        try L.pushcclosure(toCFnV(foo), "foo", 0);
-        try std.testing.expectEqual(error.Runtime, L.pcall(0, 0, 0).check());
-        try std.testing.expectEqualStrings("Failed", L.tostring(-1).?);
-        defer L.pop(1);
-    }
-    if (comptime EXCEPTIONS_ENABLED) {
-        const foo = struct {
-            fn inner(_: *lua.State) !i32 {
-                return error.TestError;
-            }
-        }.inner;
-
-        try L.pushcclosure(toCFnV(foo), "foo", 0);
-        try std.testing.expectEqual(error.Runtime, L.pcall(0, 0, 0).check());
-        try std.testing.expectEqualStrings("TestError", L.tostring(-1).?);
-        defer L.pop(1);
-    }
-    {
-        const foo = struct {
-            fn inner(l: *lua.State) void {
-                std.testing.expectEqual(9, l.tonumber(1).?) catch @panic("failed");
-            }
-        }.inner;
-
-        try L.pushcclosure(toCFnV(foo), "foo", 0);
+        try L.pushcclosure(foo, "foo", 0);
         L.pushnumber(9);
         L.call(1, 0);
     }
@@ -867,7 +531,7 @@ test Zpushfunction {
 
     {
         const foo = struct {
-            fn inner(l: *lua.State) i32 {
+            fn inner(l: *lua.State) callconv(.c) i32 {
                 std.testing.expectEqual(6, l.tonumber(1).?) catch @panic("failed");
                 l.pushnumber(2);
                 return 1;
@@ -972,7 +636,7 @@ test Zpushvalue {
 
     {
         const foo = struct {
-            fn inner(l: *lua.State) i32 {
+            fn inner(l: *lua.State) callconv(.c) i32 {
                 std.testing.expectEqual(6, l.tonumber(1).?) catch @panic("failed");
                 l.pushnumber(2);
                 return 1;
@@ -1304,9 +968,9 @@ test Zsetfield {
 
     {
         try L.newtable();
-        try Zsetfield(L, -1, "a", 455);
-        try Zsetfield(L, -1, "b", "str");
-        try Zsetfield(L, -1, "c", true);
+        try Zsetfield(L, "a", 455);
+        try Zsetfield(L, "b", "str");
+        try Zsetfield(L, "c", true);
         try std.testing.expectEqual(.Number, L.getfield(-1, "a"));
         try std.testing.expectEqual(455, L.tointeger(-1).?);
         L.pop(1);
@@ -1314,28 +978,6 @@ test Zsetfield {
         try std.testing.expectEqualStrings("str", L.tostring(-1).?);
         L.pop(1);
         try std.testing.expectEqual(.Boolean, L.getfield(-1, "c"));
-        try std.testing.expectEqual(true, L.toboolean(-1));
-    }
-    {
-        try Zsetfield(L, lua.GLOBALSINDEX, "a", 455);
-        try Zsetfield(L, lua.GLOBALSINDEX, "b", "str");
-        try Zsetfield(L, lua.GLOBALSINDEX, "c", true);
-        try std.testing.expectEqual(.Number, L.getfield(lua.GLOBALSINDEX, "a"));
-        try std.testing.expectEqual(455, L.tointeger(-1).?);
-        try std.testing.expectEqual(.String, L.getfield(lua.GLOBALSINDEX, "b"));
-        try std.testing.expectEqualStrings("str", L.tostring(-1).?);
-        try std.testing.expectEqual(.Boolean, L.getfield(lua.GLOBALSINDEX, "c"));
-        try std.testing.expectEqual(true, L.toboolean(-1));
-    }
-    {
-        try Zsetfield(L, lua.REGISTRYINDEX, "a", 455);
-        try Zsetfield(L, lua.REGISTRYINDEX, "b", "str");
-        try Zsetfield(L, lua.REGISTRYINDEX, "c", true);
-        try std.testing.expectEqual(.Number, L.getfield(lua.REGISTRYINDEX, "a"));
-        try std.testing.expectEqual(455, L.tointeger(-1).?);
-        try std.testing.expectEqual(.String, L.getfield(lua.REGISTRYINDEX, "b"));
-        try std.testing.expectEqualStrings("str", L.tostring(-1).?);
-        try std.testing.expectEqual(.Boolean, L.getfield(lua.REGISTRYINDEX, "c"));
         try std.testing.expectEqual(true, L.toboolean(-1));
     }
 }
@@ -1363,7 +1005,7 @@ test Zsetfieldfn {
 
     {
         const foo = struct {
-            fn inner(l: *lua.State) i32 {
+            fn inner(l: *lua.State) callconv(.c) i32 {
                 std.testing.expectEqual(6, l.tonumber(1).?) catch @panic("failed");
                 l.pushnumber(2);
                 return 1;
@@ -1371,7 +1013,7 @@ test Zsetfieldfn {
         }.inner;
 
         try L.newtable();
-        try Zsetfieldfn(L, -1, "foo", foo);
+        try Zsetfieldfn(L, "foo", foo);
         try std.testing.expectEqual(.Function, L.getfield(-1, "foo"));
         L.pushnumber(6);
         L.call(1, 1);
@@ -1386,7 +1028,7 @@ test Zsetglobalfn {
 
     {
         const foo = struct {
-            fn inner(l: *lua.State) i32 {
+            fn inner(l: *lua.State) callconv(.c) i32 {
                 std.testing.expectEqual(6, l.tonumber(1).?) catch @panic("failed");
                 l.pushnumber(2);
                 return 1;
@@ -1418,8 +1060,8 @@ test Zresumeerror {
 
     {
         const foo = struct {
-            fn inner(l: *lua.State) !i32 {
-                return try l.yield(0);
+            fn inner(l: *lua.State) callconv(.c) i32 {
+                return l.yield(0) catch @panic("OOM");
             }
         }.inner;
 
@@ -1437,8 +1079,8 @@ test Zresumeferror {
 
     {
         const foo = struct {
-            fn inner(l: *lua.State) !i32 {
-                return try l.yield(0);
+            fn inner(l: *lua.State) callconv(.c) i32 {
+                return l.yield(0) catch @panic("OOM");
             }
         }.inner;
 
@@ -1531,8 +1173,8 @@ test Ztolstring {
         _ = try L.newuserdata(struct {});
         try L.newtable();
         try L.Zpushfunction(struct {
-            fn inner(l: *lua.State) !i32 {
-                try l.pushlstring("meta_test");
+            fn inner(l: *lua.State) callconv(.c) i32 {
+                l.pushlstring("meta_test") catch @panic("OOM");
                 return 1;
             }
         }.inner, "__tostring");
@@ -1545,8 +1187,8 @@ test Ztolstring {
         _ = try L.newuserdata(struct {});
         try L.newtable();
         try L.Zpushfunction(struct {
-            fn inner(l: *lua.State) !i32 {
-                try l.pushstring("error");
+            fn inner(l: *lua.State) callconv(.c) i32 {
+                l.pushstring("error") catch @panic("OOM");
                 l.raiseerror();
             }
         }.inner, "__tostring");
@@ -1561,8 +1203,8 @@ test Ztolstring {
         _ = try L.newuserdata(struct {});
         try L.newtable();
         try L.Zpushfunction(struct {
-            fn inner(l: *lua.State) !i32 {
-                try l.newtable();
+            fn inner(l: *lua.State) callconv(.c) i32 {
+                l.newtable() catch @panic("OOM");
                 return 1;
             }
         }.inner, "__tostring");

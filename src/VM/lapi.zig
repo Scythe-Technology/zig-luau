@@ -610,50 +610,66 @@ pub fn tocfunction(L: *lua.State, idx: i32) ?lua.CFunction {
         o.clvalue().d.c.f;
 }
 
-pub fn tolightuserdata(L: *lua.State, comptime T: type, idx: i32) ?*T {
+pub fn lua_tolightuserdata(L: *lua.State, idx: i32) ?*anyopaque {
     if (comptime !build_config.use_zig_backend) {
-        return @ptrCast(@alignCast(c.lua_tolightuserdata(@ptrCast(L), idx)));
+        return c.lua_tolightuserdata(@ptrCast(L), idx);
     }
     const o: *const lobject.TValue = index2addr(L, idx);
     return if (!o.ttislightuserdata())
         null
     else
-        @ptrCast(@alignCast(o.pvalue()));
+        o.pvalue();
 }
 
-pub fn tolightuserdatatagged(L: *lua.State, comptime T: type, idx: i32, tag: i32) ?*T {
+pub inline fn tolightuserdata(L: *lua.State, comptime T: type, idx: i32) ?*T {
+    return @ptrCast(@alignCast(lua_tolightuserdata(L, idx)));
+}
+
+pub fn lua_tolightuserdatatagged(L: *lua.State, idx: i32, tag: i32) ?*anyopaque {
     if (comptime !build_config.use_zig_backend) {
-        return @ptrCast(@alignCast(c.lua_tolightuserdatatagged(@ptrCast(L), idx, @intCast(tag))));
+        return c.lua_tolightuserdatatagged(@ptrCast(L), idx, @intCast(tag));
     }
     const o: *const lobject.TValue = index2addr(L, idx);
     return if (!o.ttislightuserdata() or o.lightuserdatatag() != tag)
         null
     else
-        @ptrCast(@alignCast(o.pvalue()));
+        o.pvalue();
 }
 
-pub fn touserdata(L: *lua.State, comptime T: type, idx: i32) ?*T {
+pub inline fn tolightuserdatatagged(L: *lua.State, comptime T: type, idx: i32, tag: i32) ?*T {
+    return @ptrCast(@alignCast(lua_tolightuserdatatagged(L, idx, tag)));
+}
+
+pub fn lua_touserdata(L: *lua.State, idx: i32) ?*anyopaque {
     if (comptime !build_config.use_zig_backend) {
-        return @ptrCast(@alignCast(c.lua_touserdata(@ptrCast(L), idx)));
+        return c.lua_touserdata(@ptrCast(L), idx);
     }
     const o: *const lobject.TValue = index2addr(L, idx);
     if (o.ttisuserdata())
-        return @ptrCast(@alignCast(&o.uvalue().data))
+        return &o.uvalue().data
     else if (o.ttislightuserdata())
-        return @ptrCast(@alignCast(o.pvalue()))
+        return o.pvalue()
     else
         return null;
 }
 
-pub fn touserdatatagged(L: *lua.State, comptime T: type, idx: i32, tag: u8) ?*T {
+pub inline fn touserdata(L: *lua.State, comptime T: type, idx: i32) ?*T {
+    return @ptrCast(@alignCast(lua_touserdata(L, idx)));
+}
+
+pub fn lua_touserdatatagged(L: *lua.State, idx: i32, tag: u8) ?*anyopaque {
     if (comptime !build_config.use_zig_backend) {
-        return @ptrCast(@alignCast(c.lua_touserdatatagged(@ptrCast(L), idx, @intCast(tag))));
+        return c.lua_touserdatatagged(@ptrCast(L), idx, @intCast(tag));
     }
     const o: *const lobject.TValue = index2addr(L, idx);
     return if (!o.ttisuserdata() or o.uvalue().tag != tag)
         null
     else
-        @ptrCast(@alignCast(&o.uvalue().data));
+        &o.uvalue().data;
+}
+
+pub inline fn touserdatatagged(L: *lua.State, comptime T: type, idx: i32, tag: u8) ?*T {
+    return @ptrCast(@alignCast(lua_touserdatatagged(L, idx, tag)));
 }
 
 pub fn userdatatag(L: *lua.State, idx: i32) ?u8 {
@@ -699,8 +715,7 @@ pub fn tobuffer(L: *lua.State, idx: i32) ?[]u8 {
     const o: *const lobject.TValue = index2addr(L, idx);
     if (!o.ttisbuffer())
         return null;
-    const b = o.bufvalue();
-    return @as([*]u8, @ptrCast(&b.data))[0..@intCast(b.len)];
+    return o.bufvalue().toSlice();
 }
 
 pub fn topointer(L: *lua.State, idx: i32) ?*const anyopaque {
@@ -1228,22 +1243,14 @@ pub fn costatus(L: *lua.State, co: *lua.State) lua.CoStatus {
     return .Suspended; // initial state
 }
 
-pub fn getthreaddata(L: *lua.State, comptime T: type) T {
-    switch (@typeInfo(T)) {
-        .pointer => {},
-        .optional => |opt| {
-            if (@typeInfo(opt.child) != .pointer)
-                @compileError("T optional type must be a pointer type");
-        },
-        else => @compileError("T must be optional or a pointer type"),
-    }
+pub fn lua_getthreaddata(L: *lua.State) ?*anyopaque {
     if (comptime !build_config.use_zig_backend) {
-        return @ptrCast(@alignCast(c.lua_getthreaddata(@ptrCast(L))));
+        return c.lua_getthreaddata(@ptrCast(L));
     }
-    return @ptrCast(@alignCast(L.userdata));
+    return L.userdata;
 }
 
-pub fn setthreaddata(L: *lua.State, comptime T: type, data: T) void {
+pub inline fn getthreaddata(L: *lua.State, comptime T: type) T {
     switch (@typeInfo(T)) {
         .pointer => {},
         .optional => |opt| {
@@ -1252,10 +1259,26 @@ pub fn setthreaddata(L: *lua.State, comptime T: type, data: T) void {
         },
         else => @compileError("T must be optional or a pointer type"),
     }
+    return @ptrCast(@alignCast(lua_getthreaddata(L)));
+}
+
+pub fn lua_setthreaddata(L: *lua.State, data: ?*anyopaque) void {
     if (comptime !build_config.use_zig_backend) {
-        return c.lua_setthreaddata(@ptrCast(L), @ptrCast(@alignCast(data)));
+        return c.lua_setthreaddata(@ptrCast(L), @ptrCast(data));
     }
-    L.userdata = @ptrCast(data);
+    L.userdata = data;
+}
+
+pub inline fn setthreaddata(L: *lua.State, comptime T: type, data: T) void {
+    switch (@typeInfo(T)) {
+        .pointer => {},
+        .optional => |opt| {
+            if (@typeInfo(opt.child) != .pointer)
+                @compileError("T optional type must be a pointer type");
+        },
+        else => @compileError("T must be optional or a pointer type"),
+    }
+    lua_setthreaddata(L, @ptrCast(@alignCast(data)));
 }
 
 //
@@ -1329,30 +1352,33 @@ pub inline fn concat(L: *lua.State, idx: i32) !void {
     c.lua_concat(@ptrCast(L), idx);
 }
 
-pub fn newuserdatatagged(L: *lua.State, comptime T: type, tag: u8) Errorset.Table!*T {
+pub fn lua_newuserdatatagged(L: *lua.State, sz: usize, tag: u8) Errorset.Table!?*anyopaque {
     if (comptime !build_config.use_zig_backend) {
-        return @ptrCast(@alignCast(c.lua_newuserdatatagged(@ptrCast(L), @sizeOf(T), @intCast(tag)).?));
+        return @ptrCast(@alignCast(c.lua_newuserdatatagged(@ptrCast(L), sz, @intCast(tag)).?));
     }
     api_check(L, tag < lua.config.UTAG_LIMIT or tag == ludata.UTAG_PROXY);
     try lgc.CcheckGC(L);
     lgc.Cthreadbarrier(L);
-    const u = try ludata.Unewudata(L, @sizeOf(T), tag);
+    const u = try ludata.Unewudata(L, sz, tag);
     L.top[0].setuvalue(L, u);
     api_incr_top(L);
     return @ptrCast(@alignCast(&u.data));
+}
+pub inline fn newuserdatatagged(L: *lua.State, comptime T: type, tag: u8) Errorset.Table!*T {
+    return @ptrCast(@alignCast(try lua_newuserdatatagged(L, @sizeOf(T), tag)));
 }
 pub inline fn newuserdata(L: *lua.State, comptime T: type) Errorset.Table!*T {
     return newuserdatatagged(L, T, 0);
 }
 
-pub fn newuserdatataggedwithmetatable(L: *lua.State, comptime T: type, tag: u8) Errorset.Table!*T {
+pub fn lua_newuserdatataggedwithmetatable(L: *lua.State, sz: usize, tag: u8) Errorset.Table!?*anyopaque {
     if (comptime !build_config.use_zig_backend) {
-        return @ptrCast(@alignCast(c.lua_newuserdatataggedwithmetatable(@ptrCast(L), @sizeOf(T), @intCast(tag)).?));
+        return @ptrCast(@alignCast(c.lua_newuserdatataggedwithmetatable(@ptrCast(L), sz, @intCast(tag)).?));
     }
     api_check(L, tag < lua.config.UTAG_LIMIT);
     try lgc.CcheckGC(L);
     lgc.Cthreadbarrier(L);
-    const u = try ludata.Unewudata(L, @sizeOf(T), tag);
+    const u = try ludata.Unewudata(L, sz, tag);
 
     // currently, we always allocate unmarked objects, so forward barrier can be skipped
     std.debug.assert(!lgc.isblack(u.obj2gco()));
@@ -1367,26 +1393,32 @@ pub fn newuserdatataggedwithmetatable(L: *lua.State, comptime T: type, tag: u8) 
     return @ptrCast(@alignCast(&u.data));
 }
 
-pub fn newuserdatadtor(L: *lua.State, comptime T: type, comptime dtorFn: *const fn (dtor: *T) void) !*T {
-    const dtor: *const fn (?*anyopaque) callconv(.c) void = struct {
-        fn inner(dtor: ?*anyopaque) callconv(.c) void {
-            @call(.always_inline, dtorFn, .{@as(*T, @ptrCast(@alignCast(dtor.?)))});
-        }
-    }.inner;
-    const sz = @sizeOf(T);
+pub inline fn newuserdatataggedwithmetatable(L: *lua.State, comptime T: type, tag: u8) Errorset.Table!*T {
+    return @ptrCast(@alignCast(try lua_newuserdatataggedwithmetatable(L, @sizeOf(T), tag)));
+}
+
+pub fn lua_newuserdatadtor(L: *lua.State, sz: usize, dtorFn: *const fn (dtor: ?*anyopaque) callconv(.c) void) Errorset.Table!?*anyopaque {
     if (comptime !build_config.use_zig_backend) {
-        return @ptrCast(@alignCast(c.lua_newuserdatadtor(@ptrCast(L), sz, dtor).?));
+        return @ptrCast(@alignCast(c.lua_newuserdatadtor(@ptrCast(L), sz, dtorFn).?));
     }
 
     try lgc.CcheckGC(L);
     lgc.Cthreadbarrier(L);
     // make sure sz + sizeof(dtor) doesn't overflow; luaU_newdata will reject SIZE_MAX correctly
-    const as = if (sz < std.math.maxInt(usize) - @sizeOf(@TypeOf(dtor))) sz + @sizeOf(@TypeOf(dtor)) else std.math.maxInt(usize);
+    const as = if (sz < std.math.maxInt(usize) - @sizeOf(@TypeOf(dtorFn))) sz + @sizeOf(@TypeOf(dtorFn)) else std.math.maxInt(usize);
     const u = try ludata.Unewudata(L, as, ludata.UTAG_IDTOR);
-    @memcpy(@as([*]u8, &u.data)[sz..], &@as([@sizeOf(usize)]u8, @bitCast(@intFromPtr(dtor))));
+    @memcpy(@as([*]u8, &u.data)[sz..], &@as([@sizeOf(usize)]u8, @bitCast(@intFromPtr(dtorFn))));
     L.top[0].setuvalue(L, u);
     api_incr_top(L);
     return @ptrCast(@alignCast(&u.data));
+}
+
+pub inline fn newuserdatadtor(L: *lua.State, comptime T: type, dtorFn: fn (dtor: *T) void) Errorset.Table!*T {
+    return @ptrCast(@alignCast(try lua_newuserdatadtor(L, @sizeOf(T), struct {
+        fn inner(dtor: ?*anyopaque) callconv(.c) void {
+            @call(.always_inline, dtorFn, .{@as(*T, @ptrCast(@alignCast(dtor.?)))});
+        }
+    }.inner)));
 }
 
 pub fn newbuffer(L: *lua.State, sz: usize) Errorset.Table![]u8 {
@@ -1527,7 +1559,15 @@ pub fn setuserdatatag(L: *lua.State, idx: i32, tag: u8) void {
     o.uvalue().tag = tag;
 }
 
-pub fn setuserdatadtor(L: *lua.State, comptime T: type, tag: u8, comptime dtorfn: ?*const fn (L: *lua.State, ptr: *T) void) void {
+pub fn lua_setuserdatadtor(L: *lua.State, tag: u8, dtorFn: ?*const fn (L: *lua.State, ptr: ?*anyopaque) callconv(.c) void) void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_setuserdatadtor(@ptrCast(L), @intCast(tag), @ptrCast(@alignCast(dtorFn)));
+    }
+    api_check(L, tag < lua.config.UTAG_LIMIT);
+    L.global.udatagc[tag] = dtorFn;
+}
+
+pub inline fn setuserdatadtor(L: *lua.State, comptime T: type, tag: u8, dtorfn: ?*const fn (L: *lua.State, ptr: *T) void) void {
     const dtor: ?*const fn (L: *lua.State, ptr: ?*anyopaque) callconv(.c) void = if (dtorfn) |dtor| struct {
         fn inner(state: *lua.State, ptr: ?*anyopaque) callconv(.c) void {
             @call(.always_inline, dtor, .{
@@ -1536,11 +1576,7 @@ pub fn setuserdatadtor(L: *lua.State, comptime T: type, tag: u8, comptime dtorfn
             });
         }
     }.inner else null;
-    if (comptime !build_config.use_zig_backend) {
-        return c.lua_setuserdatadtor(@ptrCast(L), @intCast(tag), @ptrCast(@alignCast(dtor)));
-    }
-    api_check(L, tag < lua.config.UTAG_LIMIT);
-    L.global.udatagc[tag] = dtor;
+    lua_setuserdatadtor(L, tag, dtor);
 }
 
 pub fn getuserdatadtor(L: *lua.State, tag: u8) ?lua.Destructor {
@@ -1702,22 +1738,12 @@ pub fn getallocf(L: *lua.State, ud: ?*?*anyopaque) ?lua.Alloc {
     return f;
 }
 
-pub fn registeruserdatadirectfieldget(
+pub fn lua_registeruserdatadirectfieldget(
     L: *lua.State,
-    comptime T: type,
     tag: u8,
     field: []const u8,
-    comptime callback: *const fn (ud: *T, result: *lobject.TValue) void,
+    callback: *const fn (ud: ?*anyopaque, result: ?*anyopaque) callconv(.c) void,
 ) Errorset.Table!void {
-    const @"fn" = struct {
-        fn inner(ud: ?*anyopaque, result: ?*anyopaque) callconv(.c) void {
-            @call(.always_inline, callback, .{
-                @as(*T, @ptrCast(@alignCast(ud.?))),
-                @as(*lobject.TValue, @ptrCast(@alignCast(result))),
-            });
-        }
-    }.inner;
-
     if (comptime !build_config.use_zig_backend) {
         // small static buffer for field because the 'field' type
         // does not require a zero sentinel, but the C api does.
@@ -1726,11 +1752,11 @@ pub fn registeruserdatadirectfieldget(
             @panic("field too long, use zig backend");
         @memcpy(static[0..field.len], field);
         static[field.len] = 0;
-        return c.lua_registeruserdatadirectfieldget(@ptrCast(L), @intCast(tag), &static, @ptrCast(@alignCast(@"fn")));
+        return c.lua_registeruserdatadirectfieldget(@ptrCast(L), @intCast(tag), &static, @ptrCast(@alignCast(callback)));
     }
     api_check(L, tag < lua.config.UTAG_LIMIT);
     api_check(L, field.len != 0);
-    api_check(L, callback != null);
+    // api_check(L, callback != null);
 
     const g = L.global;
 
@@ -1740,6 +1766,23 @@ pub fn registeruserdatadirectfieldget(
     const ts = try lstring.Snew(L, field);
     lstring.Sfix(ts);
 
-    const slot = try ltable.Hsetstr(L, g.udatadirectfields[tag], ts);
-    slot.setpvalue(@ptrCast(@alignCast(@"fn")), 0);
+    const slot = try ltable.Hsetstr(L, g.udatadirectfields[tag].?, ts);
+    slot.setpvalue(@ptrCast(@alignCast(@constCast(callback))), 0);
+}
+
+pub inline fn registeruserdatadirectfieldget(
+    L: *lua.State,
+    comptime T: type,
+    tag: u8,
+    field: []const u8,
+    callback: fn (ud: *T, result: *lobject.TValue) void,
+) Errorset.Table!void {
+    return lua_registeruserdatadirectfieldget(L, tag, field, struct {
+        fn inner(ud: ?*anyopaque, result: ?*anyopaque) callconv(.c) void {
+            @call(.always_inline, callback, .{
+                @as(*T, @ptrCast(@alignCast(ud.?))),
+                @as(*lobject.TValue, @ptrCast(@alignCast(result))),
+            });
+        }
+    }.inner);
 }

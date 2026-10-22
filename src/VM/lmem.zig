@@ -730,7 +730,7 @@ pub fn Mvisitpage(
     page: *lua_Page,
     comptime T: type,
     context: T,
-    comptime visitor: fn (context: T, page: *lua_Page, gco: *lstate.GCObject) bool,
+    visitor: fn (context: T, page: *lua_Page, gco: *lstate.GCObject) bool,
 ) void {
     var start: [*]u8 = undefined;
     var end: [*]u8 = undefined;
@@ -763,7 +763,7 @@ pub fn Mvisitgco(
     L: *lua.State,
     comptime T: type,
     context: T,
-    comptime visitor: fn (context: T, page: *lua_Page, gco: *lstate.GCObject) bool,
+    visitor: fn (context: T, page: *lua_Page, gco: *lstate.GCObject) bool,
 ) void {
     const g = L.global;
 

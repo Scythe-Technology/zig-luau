@@ -363,6 +363,10 @@ pub const Buffer = extern struct {
     pub inline fn obj2gco(obj: *Buffer) *lstate.GCObject {
         return @ptrCast(@alignCast(obj));
     }
+
+    pub inline fn toSlice(b: *Buffer) []u8 {
+        return @as([*]u8, @ptrCast(&b.data))[0..@intCast(b.len)];
+    }
 };
 
 pub const Vector = extern struct {
