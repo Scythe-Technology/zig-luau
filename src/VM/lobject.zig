@@ -524,7 +524,6 @@ pub const Closure = extern struct {
         pub const C = extern struct {
             f: ?lua.CFunction,
             cont: ?lua.Continuation,
-            debugname_DEPRECATED: ?[*:0]const u8,
             debugname: ?*TString,
             upvals: [1]TValue,
 

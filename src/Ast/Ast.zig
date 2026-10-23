@@ -1042,8 +1042,14 @@ pub const StatIf = extern struct {
     thenbody: *StatBlock,
     elsebody: ?*Stat,
     thenLocation: cpp_std.Optional(Location),
+
     /// Active for 'elseif' as well
     elseLocation: cpp_std.Optional(Location),
+
+    // Active for 'if local' and 'if const' statements
+    conditionLocal: ?*Local = null,
+    conditionIsConst: bool = false,
+    conditionKeywordLocation: cpp_std.Optional(Location),
 
     pub const is = IsFn;
     pub const as = AsCastFn;
@@ -2438,7 +2444,7 @@ test "AstValuesCheck" {
             const default_value_ptr = field_attrs.?.default_value_ptr orelse @compileError("classIndex field does not have a default value");
             const enum_value = @as(*const Ast.Node.Kind, @ptrCast(@alignCast(default_value_ptr))).*;
 
-            std.testing.expectEqual(@field(AstValues, decl_name), @intFromEnum(enum_value)) catch |err| {
+            std.testing.expectEqual(@field(AstValues, decl_name), @backingInt(enum_value)) catch |err| {
                 std.debug.print("index error for {s}\n", .{name});
                 return err;
             };

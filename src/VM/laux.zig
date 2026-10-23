@@ -26,7 +26,7 @@ pub fn currfuncname(L: *lua.State) ?[:0]const u8 {
     else
         null;
     const debugname: ?[:0]const u8 = if (cl != null and cl.?.isC != 0)
-        std.mem.span(cl.?.d.c.debugname_DEPRECATED)
+        if (cl.?.d.c.debugname) |s| s.toSlice() else null
     else
         null;
 
@@ -90,7 +90,7 @@ pub inline fn Lcheckoption(L: *lua.State, comptime T: type, narg: i32, def: ?T) 
 
     inline for (std.meta.fields(T)) |field| {
         if (std.mem.eql(u8, field.name, name))
-            return @enumFromInt(field.value);
+            return @fromBackingInt(@intCast(field.value));
     }
 
     var buf: [128]u8 = undefined;

@@ -19,8 +19,8 @@ pub inline fn getproto(cl: *lobject.Closure) ?*lobject.Proto {
 }
 
 pub fn Fnewproto(L: *lua.State) !*lobject.Proto {
-    const f = try lmem.Mnewgco(L, lobject.Proto, @sizeOf(lobject.Proto), L.activememcat, @intFromEnum(lua.Type.Proto));
-    lgc.Cinit(L, @ptrCast(@alignCast(f)), @intFromEnum(lua.Type.Proto));
+    const f = try lmem.Mnewgco(L, lobject.Proto, @sizeOf(lobject.Proto), L.activememcat, @backingInt(lua.Type.Proto));
+    lgc.Cinit(L, @ptrCast(@alignCast(f)), @backingInt(lua.Type.Proto));
 
     f.nups = 0;
     f.numparams = 0;
@@ -73,8 +73,8 @@ pub fn Fnewproto(L: *lua.State) !*lobject.Proto {
 }
 
 pub fn FnewLclosure(L: *lua.State, nelems: u8, e: *lobject.LuaTable, p: *lobject.Proto) !*lobject.Closure {
-    const c = try lmem.Mnewgco(L, lobject.Closure, sizeCclosure(nelems), L.activememcat, @intFromEnum(lua.Type.Function));
-    lgc.Cinit(L, @ptrCast(@alignCast(c)), @intFromEnum(lua.Type.Function));
+    const c = try lmem.Mnewgco(L, lobject.Closure, sizeCclosure(nelems), L.activememcat, @backingInt(lua.Type.Function));
+    lgc.Cinit(L, @ptrCast(@alignCast(c)), @backingInt(lua.Type.Function));
     c.isC = 0;
     c.env = e;
     c.nupvalues = nelems;
@@ -87,8 +87,8 @@ pub fn FnewLclosure(L: *lua.State, nelems: u8, e: *lobject.LuaTable, p: *lobject
 }
 
 pub fn FnewCclosure(L: *lua.State, nelems: u8, e: *lobject.LuaTable) !*lobject.Closure {
-    const c = try lmem.Mnewgco(L, lobject.Closure, sizeCclosure(nelems), L.activememcat, @intFromEnum(lua.Type.Function));
-    lgc.Cinit(L, @ptrCast(@alignCast(c)), @intFromEnum(lua.Type.Function));
+    const c = try lmem.Mnewgco(L, lobject.Closure, sizeCclosure(nelems), L.activememcat, @backingInt(lua.Type.Function));
+    lgc.Cinit(L, @ptrCast(@alignCast(c)), @backingInt(lua.Type.Function));
     c.isC = 1;
     c.env = e;
     c.nupvalues = nelems;
@@ -97,7 +97,6 @@ pub fn FnewCclosure(L: *lua.State, nelems: u8, e: *lobject.LuaTable) !*lobject.C
     c.d.c.f = null;
     c.d.c.cont = null;
     c.d.c.debugname = null;
-    c.d.c.debugname_DEPRECATED = null;
     return c;
 }
 

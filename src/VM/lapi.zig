@@ -822,12 +822,22 @@ pub inline fn pushfstring(L: *lua.State, comptime fmt: []const u8, args: anytype
 pub fn pushcclosurek(
     L: *lua.State,
     f: lua.CFunction,
-    debugname: [:0]const u8,
+    debugname: ?[]const u8,
     nup: u8,
     cont: ?lua.Continuation,
 ) Errorset.Table!void {
     if (comptime !build_config.use_zig_backend) {
-        return c.lua_pushcclosurek(@ptrCast(L), @ptrCast(@alignCast(f)), debugname, nup, @ptrCast(@alignCast(cont)));
+        // small static buffer for field because the 'k' type
+        // does not require a zero sentinel, but the C api does.
+        var static: [256:0]u8 = undefined;
+        if (debugname) |s| {
+            const k = s;
+            if (k.len > static.len)
+                @panic("key too long, use zig backend");
+            @memcpy(static[0..k.len], k);
+            static[k.len] = 0;
+        }
+        return c.lua_pushcclosurek(@ptrCast(L), @ptrCast(@alignCast(f)), if (debugname) |_| &static else null, nup, @ptrCast(@alignCast(cont)));
     }
     try lgc.CcheckGC(L);
     lgc.Cthreadbarrier(L);
@@ -835,7 +845,7 @@ pub fn pushcclosurek(
     const cl = try lfunc.FnewCclosure(L, nup, getcurrenv(L));
     cl.d.c.f = f;
     cl.d.c.cont = cont;
-    cl.d.c.debugname_DEPRECATED = debugname;
+    cl.d.c.debugname = if (debugname) |s| try lstring.Snew(L, s) else null;
     L.top -= nup;
     var n: u8 = nup;
     while (n > 0) : (n -= 1) {

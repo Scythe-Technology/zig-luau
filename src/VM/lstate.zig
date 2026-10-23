@@ -305,6 +305,7 @@ pub const global_State = extern struct {
 
     weakregistry: lobject.TValue, // backing table for lua_weakref/lua_weakunref/lua_getweakref
     weakregistryfree: c_int, // next free slot in weakregistry
+    weakregistrytop: c_int, // top of the weakregistry (highest used index)
     embeddergc: ?lua.EmbedderGc, // embedder GC callback for keeping weak references alive
 
     /// names for tagged lightuserdata
