@@ -49,9 +49,10 @@
 // Version 11: Adds CALLFB, CMPPROTO and feedback vector description. Experimental.
 // Version 12: Adds cost function serialized for proto and prepend each proto with size in bytes. Experimental.
 // Version 13: Adds support for double-precision vector constants. Experimental.
+// Version 14: Adds FASTPCALL. Currently supported.
 
 // WIP Versions: Used for in-progress features that might require multiple changes to bytecode. Since these versions are higher than the non-WIP versions, they are responsible for maintaining compatibility with them. For example, tests exercising WIP bytecode versions may need to enable flags for unreleased but non-WIP bytecode versions.
-// Version 100: Adds NEWCLASS for use with Luau Classes. Future class-related bytecode changes should go in this version before release. Experimental.
+// Version 100: Adds NEWCLASS, CONSTRUCT, FINCONSTRUCT, GETPRIVATEFIELD, and SETPRIVATEFIELD for use with Luau Classes. Future class-related bytecode changes should go in this version before release. Experimental.
 
 // # Bytecode type information history
 // Version 1: (from bytecode version 4) Type information for function signature. Currently supported.
@@ -431,10 +432,10 @@ pub const Opcode = enum(u32) {
     NAMECALLUDATA,
 
     // NEWCLASSMEMBER: register this method on a class object.
-    // A: target register of class
-    // B: reserved
+    // A: source register of class
+    // B: member visibility, see LuauClassMemberVisibility
     // C: initial value of this member. currently must be a function.
-    // AUX: The name of this member as a constant string
+    // AUX: If method is public, the name of this member as a constant string. If private, the bottom 8 bits contain the private method index, and the upper 24 bits are reserved.
     NEWCLASSMEMBER,
 
     // CALLFB: call specified function with collecting runtime stats in a feedback slot
@@ -450,12 +451,51 @@ pub const Opcode = enum(u32) {
     // AUX: proto id
     CMPPROTO,
 
+    // FASTPCALL: perform a fastcall of a built-in protected call function
+    // A: protected function id (0 - pcall, 1 - xpcall)
+    // B: number of explicit arguments before a variadic tail
+    // C: jump offset to get to following CALL
+    FASTPCALL,
+
+    // The following instructions appear only in experimental bytecode versions and are subject to change
+
     // NEWCLASS: reify a class object
     // A: target register of class
     // B: source register of superclass, or 0xFF if no superclass
-    // C: reserved
+    // C: bottom bit is 1 if the class is open, else 0; upper 7 bits are reserved
     // AUX: constant table index of unreified class object
     NEWCLASS,
+
+    // CONSTRUCT: duplicate table to ra using the constant table template specified in the feedback slot. if rb is a class with default constructor and duplicated table matches shape required by the class, creates an object using class's default constructor
+    // A: target register
+    // B: register that is likely to hold a class
+    // C: reserved
+    // AUX: feedback slot id
+    CONSTRUCT,
+
+    // FINCONSTRUCT: checks if object construction initiated by a preceding CONSTRUCT succeeded and either finishes result placement or fallbacks to a CALL instruction
+    // Note that FINCONSTRUCT will read the actual call arguments, such as argument/result registers and counts, from the CALL instruction
+    // A: source register
+    // B: reserved
+    // C: jump offset to get to following CALL
+    FINCONSTRUCT,
+
+    // GETPRIVATEFIELD: retrieve the value of a private field from a class instance or its class
+    // A: target register of field value
+    // B: source register with class instance or class object
+    // C: upvalue index with expected class of instance or class object
+    // AUX: bottom 8 bits contain private field offset.
+    //      bit 9 is 1 if the field is static, else 0;
+    //      bit 10 is 1 if retrieval is for a namecall, else 0;
+    //      remaining 22 bits are reserved
+    GETPRIVATEFIELD,
+
+    // SETPRIVATEFIELD: set the value of a private field on a class instance
+    // A: source register of field value
+    // B: source register with class instance
+    // C: upvalue index with expected class of instance
+    // AUX: bottom 8 bits contain private field offset. remaining 24 bits are reserved
+    SETPRIVATEFIELD,
 
     // Enum entry for number of opcodes, not a valid opcode by itself!
     _COUNT,
@@ -501,6 +541,7 @@ pub const BytecodeTag = enum(u32) {
     CONSTANT_TABLE_WITH_CONSTANTS,
     CONSTANT_INTEGER,
     CONSTANT_CLASS_SHAPE,
+    CONSTANT_VECTORD,
 
     // WARNING: This must always be last.
     CONSTANT__COUNT,
@@ -509,8 +550,8 @@ pub const BytecodeTag = enum(u32) {
     // Type encoding version
     // Types of constant table entries
     pub const VERSION_MIN = 3;
-    pub const VERSION_MAX = 13;
-    pub const VERSION_TARGET = 6;
+    pub const VERSION_MAX = 14;
+    pub const VERSION_TARGET = 13;
     pub const VERSION_CLASSES = 100;
     pub const TYPE_VERSION_MIN = 1;
     pub const TYPE_VERSION_MAX = 3;
@@ -529,6 +570,9 @@ pub const BytecodeType = enum(u32) {
     TYPE_USERDATA,
     TYPE_VECTOR,
     TYPE_BUFFER,
+    TYPE_INTEGER,
+    TYPE_CLASS,
+    TYPE_OBJECT,
 
     TYPE_ANY = 15,
 
@@ -725,6 +769,10 @@ pub const BuiltinFunction = enum(u32) {
     // buffer.readinteger / buffer.writeinteger (int64_t)
     LBF_BUFFER_READINTEGER,
     LBF_BUFFER_WRITEINTEGER,
+
+    // table.create / table.clear
+    LBF_TABLE_CREATE,
+    LBF_TABLE_CLEAR,
 };
 
 // Capture type, used in CAPTURE
@@ -748,7 +796,10 @@ pub const ProtoFlag = enum(u32) {
     LPF_USES_EXPORT = 1 << 4,
 };
 
-pub const LuauFeedbackType = enum(u32) { LFT_CALLTARGET = 0 };
+pub const LuauFeedbackType = enum(u32) {
+    LFT_CALLTARGET = 0,
+    LFT_CONSTRUCT = 1,
+};
 
 // sources:
 // https://github.com/luau-lang/luau/blob/a2303a6ae68c53035eccf230c4450b9f068536af/Common/include/Luau/Bytecode.h

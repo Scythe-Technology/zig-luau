@@ -19,6 +19,7 @@ const lstate = @import("lstate.zig");
 const lbuffer = @import("lbuffer.zig");
 const lobject = @import("lobject.zig");
 const lvmutils = @import("lvmutils.zig");
+const ldebug = @import("ldebug.zig");
 
 const Errorset = @import("errorset.zig");
 
@@ -984,7 +985,7 @@ pub inline fn newtable(L: *lua.State) !void {
 }
 
 /// set readonly flag for table at `idx`
-pub fn setreadonly(L: *lua.State, idx: i32, enabled: bool) void {
+pub fn setreadonly(L: *lua.State, idx: i32, enabled: bool) Errorset.Table!void {
     if (comptime !build_config.use_zig_backend) {
         return c.lua_setreadonly(@ptrCast(L), idx, if (enabled) 1 else 0);
     }
@@ -992,7 +993,7 @@ pub fn setreadonly(L: *lua.State, idx: i32, enabled: bool) void {
     api_check(L, o.ttistable());
     const t = o.hvalue();
     api_check(L, t != L.registry().hvalue());
-    t.readonly = if (enabled) 1 else 0;
+    try ltable.Hsetreadonly(L, t, enabled);
 }
 
 /// get readonly flag for table at `idx`
@@ -1002,7 +1003,7 @@ pub fn getreadonly(L: *lua.State, idx: i32) bool {
     }
     const o: *const lobject.TValue = index2addr(L, idx);
     api_check(L, o.ttistable());
-    return o.hvalue().readonly != 0;
+    return ltable.Hgetreadonly(o.hvalue());
 }
 
 /// set safeenv flag for table at `idx`
@@ -1212,7 +1213,7 @@ pub fn cpcall(L: *lua.State, func: lua.CFunction, ud: *anyopaque) lua.Status {
 
 pub fn callyieldable(L: *lua.State, nargs: i32, nresults: i32) i32 {
     if (comptime !build_config.use_zig_backend) {
-        return @fromBackingInt(@intCast(c.lua_callyieldable(@ptrCast(L), nargs, nresults)));
+        return c.lua_callyieldable(@ptrCast(L), nargs, nresults);
     }
     api_check(L, L.ci.?[0].func[0].iscfunction());
     const cl = L.ci.?[0].func[0].clvalue();
@@ -1251,6 +1252,131 @@ pub fn costatus(L: *lua.State, co: *lua.State) lua.CoStatus {
     if (co.top == co.base) // is it empty?
         return .Finished;
     return .Suspended; // initial state
+}
+
+pub fn hasfinalizers(L: *lua.State) bool {
+    if (comptime !build_config.use_zig_backend)
+        return c.lua_hasfinalizers(@ptrCast(L)) != 0;
+    return L.finalizers != null;
+}
+
+fn runfinalizery(L: *lua.State) callconv(.c) c_int {
+    return runfinalizeryInner(L) catch |err| switch (err) {
+        error.OutOfMemory, error.BlockTooBig => ldo.throw(L, .ErrMem),
+        error.Runtime => ldo.throw(L, .ErrRun),
+        else => {
+            pushstring(L, @errorName(err)) catch ldo.throw(L, .ErrMem);
+            ldo.throw(L, .ErrRun);
+        },
+    };
+}
+
+fn runfinalizeryInner(L: *lua.State) Errorset.Coroutine!c_int {
+    const co = tothread(L, lua.upvalueindex(1));
+    const result_int = tointeger(L, lua.upvalueindex(2)) orelse 0;
+    const result: ldo.FinallyResult = @fromBackingInt(result_int);
+
+    if (co == null)
+        try ldebug.GrunerrorL(L, "{s}", .{"finalizer function has already been called"});
+
+    if (co.? == L)
+        try ldebug.GrunerrorL(L, "{s}", .{"cannot finalize running thread"});
+
+    if (co.?.finalizers == null)
+        try ldebug.GrunerrorL(L, "{s}", .{"coroutine has no pending finalizers"});
+
+    // luaD_runfinalizers expects a thread, followed by the finalizer state
+    settop(L, 0);
+    pushvalue(L, lua.upvalueindex(1));
+
+    // clear the thread upvalue so that future calls will error immediately
+    index2addr(L, lua.upvalueindex(1)).setnilvalue();
+
+    if (result == .Cancelled) {
+        ldo.Dpreparefinalizestate(L, co.?, result);
+        try lstate.resetthread(co.?);
+    } else {
+        try ldo.Dpreparefinalize(L, co.?, result);
+    }
+
+    return ldo.Drunfinalizers(L, false); // returnstatus
+}
+
+fn runfinalizercont(L: *lua.State, call_status: c_int) callconv(.c) c_int {
+    if (call_status != @backingInt(lua.Status.Ok))
+        ldo.throw(L, @as(lua.Status, @fromBackingInt(@as(u3, @intCast(call_status)))));
+
+    return ldo.Drunfinalizers(L, false) catch |err| switch (err) { // returnstatus
+        error.OutOfMemory, error.BlockTooBig => ldo.throw(L, .ErrMem),
+        error.Runtime => ldo.throw(L, .ErrRun),
+        else => {
+            pushstring(L, @errorName(err)) catch ldo.throw(L, .ErrMem);
+            ldo.throw(L, .ErrRun);
+        },
+    };
+}
+
+pub fn pushfinalizerfunction(L: *lua.State, co: *lua.State, toclose: bool) Errorset.Table!void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_pushfinalizerfunction(@ptrCast(L), @ptrCast(co), if (toclose) 1 else 0);
+    }
+
+    api_check(L, L.curr_status == @backingInt(lua.Status.Ok));
+    api_check(L, co != L);
+    api_check(L, L.global == co.global);
+    api_check(L, co.finalizers != null);
+    if (toclose)
+        api_check(L, co.curr_status == @backingInt(lua.Status.Ok) or co.curr_status == @backingInt(lua.Status.Yield))
+    else
+        api_check(L, co.curr_status != @backingInt(lua.Status.Yield) and co.curr_status != @backingInt(lua.Status.Break));
+
+    // push thread
+    lgc.Cthreadbarrier(L);
+    try rawcheckstack(L, 1);
+    L.top[0].setthvalue(L, co);
+    api_incr_top(L);
+
+    const fin: ldo.FinallyResult = if (toclose)
+        .Cancelled
+    else if (co.curr_status == @backingInt(lua.Status.Ok))
+        .Finished
+    else
+        .Error;
+    pushinteger(L, @intCast(@backingInt(fin)));
+    try pushcclosurek(L, runfinalizery, "finalize", 2, runfinalizercont);
+}
+
+pub fn addfinalizer(L: *lua.State, co: *lua.State, idx: i32) Errorset.Table!void {
+    if (comptime !build_config.use_zig_backend) {
+        return c.lua_addfinalizer(@ptrCast(L), @ptrCast(co), idx);
+    }
+
+    api_check(L, !isnoneornil(L, idx));
+
+    if (co == mainthread(L))
+        try ldebug.GrunerrorL(L, "{s}", .{"cannot register a finalizer on the main thread"});
+
+    const cost = costatus(L, co);
+    if (cost == .Finished or cost == .FinishedErr)
+        try ldebug.GrunerrorL(L, "{s}", .{"cannot register a finalizer on dead coroutine"});
+
+    if (L.global.cb.userfinalizer) |uf| {
+        @branchHint(.unlikely);
+        uf(L, co);
+    }
+
+    const cb = index2addr(L, idx);
+
+    // create a callback table if it's not ready
+    if (co.finalizers == null) {
+        co.finalizers = try ltable.Hnew(L, 1, 0);
+        lgc.Cobjbarrier(L, @ptrCast(@alignCast(co)), co.finalizers.?.obj2gco());
+    }
+
+    // add a new item
+    const slot = try ltable.Hsetnum(L, co.finalizers.?, @intCast(ltable.Hgetn(co.finalizers.?) + 1));
+    slot.setobj(L, cb);
+    lgc.Cbarriert(L, co.finalizers.?, cb);
 }
 
 pub fn lua_getthreaddata(L: *lua.State) ?*anyopaque {
@@ -1407,9 +1533,9 @@ pub inline fn newuserdatataggedwithmetatable(L: *lua.State, comptime T: type, ta
     return @ptrCast(@alignCast(try lua_newuserdatataggedwithmetatable(L, @sizeOf(T), tag)));
 }
 
-pub fn lua_newuserdatadtor(L: *lua.State, sz: usize, dtorFn: *const fn (dtor: ?*anyopaque) callconv(.c) void) Errorset.Table!?*anyopaque {
+pub fn lua_newuserdatadtor(L: *lua.State, sz: usize, dtorFn: lua.Destructor) Errorset.Table!?*anyopaque {
     if (comptime !build_config.use_zig_backend) {
-        return @ptrCast(@alignCast(c.lua_newuserdatadtor(@ptrCast(L), sz, dtorFn).?));
+        return @ptrCast(@alignCast(c.lua_newuserdatadtor(@ptrCast(L), sz, @ptrCast(dtorFn)).?));
     }
 
     try lgc.CcheckGC(L);
@@ -1423,10 +1549,10 @@ pub fn lua_newuserdatadtor(L: *lua.State, sz: usize, dtorFn: *const fn (dtor: ?*
     return @ptrCast(@alignCast(&u.data));
 }
 
-pub inline fn newuserdatadtor(L: *lua.State, comptime T: type, dtorFn: fn (dtor: *T) void) Errorset.Table!*T {
+pub inline fn newuserdatadtor(L: *lua.State, comptime T: type, dtorFn: fn (L: *lua.State, dtor: *T) void) Errorset.Table!*T {
     return @ptrCast(@alignCast(try lua_newuserdatadtor(L, @sizeOf(T), struct {
-        fn inner(dtor: ?*anyopaque) callconv(.c) void {
-            @call(.always_inline, dtorFn, .{@as(*T, @ptrCast(@alignCast(dtor.?)))});
+        fn inner(l: *lua.State, dtor: ?*anyopaque) callconv(.c) void {
+            @call(.always_inline, dtorFn, .{ l, @as(*T, @ptrCast(@alignCast(dtor.?))) });
         }
     }.inner)));
 }
@@ -1539,7 +1665,8 @@ pub fn ref(L: *lua.State, idx: i32) Errorset.Table!?i32 {
 
 pub fn unref(L: *lua.State, r: i32) void {
     if (comptime !build_config.use_zig_backend) {
-        return c.lua_unref(@ptrCast(L), r);
+        _ = c.lua_unref(@ptrCast(L), r);
+        return;
     }
     if (r <= lua.REFNIL)
         return;

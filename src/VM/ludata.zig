@@ -42,15 +42,14 @@ pub fn Ufreeudata(L: *lua.State, u: *lobject.Udata, page: *lmem.lua_Page) void {
         if (L.global.udatagc[u.tag]) |dtor|
             dtor(L, @ptrCast(@alignCast(&u.data)));
     } else if (u.tag == UTAG_IDTOR) {
-        const InlineDtor = *const fn (data: ?*anyopaque) callconv(.c) void;
-        var dtor: ?InlineDtor = null;
+        var dtor: ?lua.Destructor = null;
         dtor = @ptrFromInt(std.mem.readVarInt(
             usize,
-            (@as([*]u8, @ptrCast(&u.data)) + @as(u32, @intCast(u.len)) - @sizeOf(InlineDtor))[0..@sizeOf(InlineDtor)],
+            (@as([*]u8, @ptrCast(&u.data)) + @as(u32, @intCast(u.len)) - @sizeOf(lua.Destructor))[0..@sizeOf(lua.Destructor)],
             builtin.cpu.arch.endian(),
         ));
         if (dtor) |d|
-            d(@ptrCast(@alignCast(&u.data)));
+            d(L, @ptrCast(@alignCast(&u.data)));
     }
 
     lmem.Mfreegco(L, u.obj2gco(), sizeudata(@intCast(u.len)), u.header.memcat, page);

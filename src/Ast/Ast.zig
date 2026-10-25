@@ -629,6 +629,7 @@ pub const ExprCall = extern struct {
     typeArguments: Array(TypeOrPack),
     args: Array(*Expr),
     self: bool,
+    tableCall: bool = false,
     argLocation: Location,
 
     pub const is = IsFn;
@@ -658,6 +659,8 @@ pub const ExprIndexName = extern struct {
     indexLocation: Location,
     opPosition: Location.Position,
     op: u8 = '.',
+    /// Indicates a private field/method access made within a class method body
+    privateAccess: bool = false,
 
     pub const is = IsFn;
     pub const as = AsCastFn;
@@ -933,6 +936,14 @@ pub const ExprIfElse = extern struct {
     trueExpr: *Expr,
     hasElse: bool,
     falseExpr: *Expr,
+
+    /// Active for 'if local' and 'if const' expressions; conditionLocal is bound to `condition` and in scope for trueExpr only
+    conditionLocal: ?*Local,
+    conditionIsConst: bool = false,
+    conditionKeywordLocation: cpp_std.Optional(Location),
+
+    /// Location of the `=` in an `if local`/`if const` binding
+    conditionEqualsLocation: cpp_std.Optional(Location),
 
     pub const is = IsFn;
     pub const as = AsCastFn;
@@ -1573,20 +1584,28 @@ pub const DeclaredExternTypeProperty = extern struct {
     pub const asType = AsTypeCastFn;
 };
 
+pub const ClassAccess = enum(c_int) {
+    Public = 0,
+    Private = 1,
+};
+
 pub const ClassProperty = extern struct {
     qualifierLocation: Location,
     name: Name,
     nameLocation: Location,
     typeColonLocation: cpp_std.Optional(Location) = .nullopt,
     ty: ?*Type = null,
+    access: ClassAccess = .Public,
 };
 
 pub const ClassMethod = extern struct {
+    /// Methods with no access modifiers are public by default.
     qualifierLocation: cpp_std.Optional(Location),
     keywordLocation: Location,
     functionName: Name,
     nameLocation: Location,
     function: *ExprFunction,
+    access: ClassAccess = .Public,
 };
 
 const ClassMember = Variant(&.{ ClassProperty, ClassMethod });
@@ -1733,6 +1752,7 @@ pub const TypeTable = extern struct {
 
     props: Array(TableProp),
     indexer: ?*TableIndexer,
+    isExact: bool = false,
 
     pub const is = IsFn;
     pub const as = AsCastFn;

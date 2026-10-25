@@ -31,7 +31,7 @@ ZIG_EXPORT Luau::Frontend* ZIG_LUAU_ANALYSIS(Frontend_init)(Luau::FileResolver* 
     frontendOptions.forAutocomplete = options.forAutocomplete;
     frontendOptions.applyInternalLimitScaling = options.applyInternalLimitScaling;
     
-    return new Luau::Frontend(fileResolver, configResolver, frontendOptions);
+    return new Luau::Frontend(Luau::SolverMode::New, fileResolver, configResolver, frontendOptions);
 }
 
 ZIG_EXPORT using Frontend_loadDefinitionError = bool (*)(void* ctx, const char* str, size_t len, Luau::Location location);

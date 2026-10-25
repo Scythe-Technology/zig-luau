@@ -8,4 +8,12 @@ pub const Table = Memory || error{
     @"table index contains nan",
 };
 
+pub const Runtime = error{
+    Runtime,
+};
+
+pub const Coroutine = Table || Runtime || error{
+    @"too many results to invoke finalizer",
+};
+
 pub const TableReadonly = Table.@"attempt to modify a readonly table";

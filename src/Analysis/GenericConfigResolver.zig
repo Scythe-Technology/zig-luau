@@ -46,7 +46,7 @@ pub const GenericConfigResolver = opaque {
 };
 
 pub fn init(mode: Mode) *GenericConfigResolver {
-    return zig_Luau_Analysis_GenericConfigResolver_init(@intFromEnum(mode));
+    return zig_Luau_Analysis_GenericConfigResolver_init(@backingInt(mode));
 }
 
 test GenericConfigResolver {

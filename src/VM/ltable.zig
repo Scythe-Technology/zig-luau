@@ -9,6 +9,7 @@ const ldebug = @import("ldebug.zig");
 const lgc = @import("lgc.zig");
 const lmem = @import("lmem.zig");
 const lnumutils = @import("lnumutils.zig");
+const ltm = @import("ltm.zig");
 
 const Errorset = @import("errorset.zig");
 
@@ -283,6 +284,17 @@ fn numusehash(t: *const LuaTable, nums: []u32, pnasize: *usize) u32 {
     return totaluse;
 }
 
+fn hashslotsused(t: *const LuaTable) u32 {
+    var totaluse: u32 = 0;
+    var i: usize = lobject.sizenode(t);
+    while (i > 0) : (i -= 1) {
+        const n: *LuaNode = @ptrCast(t.gnode(i - 1));
+        if (!n.gval().ttisnil())
+            totaluse += 1;
+    }
+    return totaluse;
+}
+
 fn setarrayvector(L: *lua.State, t: *LuaTable, size: usize) Error!void {
     if (size > MAXSIZE)
         return error.@"table overflow";
@@ -328,6 +340,8 @@ fn arrayornewkey(L: *lua.State, t: *LuaTable, key: *const TValue) Error!*TValue 
 }
 
 fn resize(L: *lua.State, t: *LuaTable, nasize: usize, nhsize: usize) Error!void {
+    std.debug.assert(!lobject.hasmetacache(t));
+
     if (nasize > MAXSIZE or nhsize > MAXSIZE)
         return error.@"table overflow";
 
@@ -399,7 +413,22 @@ pub fn Hresizehash(L: *lua.State, t: *LuaTable, nhsize: usize) Error!void {
     try resize(L, t, @intCast(t.sizearray), nhsize);
 }
 
+fn isArrayIntKey(key: *const TValue) bool {
+    if (!key.ttisnumber())
+        return false;
+    const n = key.nvalue();
+    const k = lnumutils.inum2int(n);
+    return @as(f64, @floatFromInt(k)) == n;
+}
+
 fn rehash(L: *lua.State, t: *LuaTable, ek: *const TValue) Error!void {
+    // insertions of keys that are not integer numbers do not have to rehash the array part
+    // this can mean that such key insert will not cause the sparse array/node rebalance, but this is actually less surprising
+    if (!isArrayIntKey(ek)) {
+        try resize(L, t, @intCast(t.sizearray), hashslotsused(t) + 1);
+        return;
+    }
+
     var nums: [MAXBITS + 1]u32 = @splat(0);
     var nasize = numusearray(t, nums[0..]); // count keys in array part
     var totaluse: usize = nasize; // all those keys are integer keys
@@ -437,8 +466,8 @@ fn rehash(L: *lua.State, t: *LuaTable, ek: *const TValue) Error!void {
 }
 
 pub fn Hnew(L: *lua.State, narray: u32, nhash: u32) Error!*LuaTable {
-    const t = try lmem.Mnewgco(L, LuaTable, @sizeOf(LuaTable), L.header.memcat, @intFromEnum(lua.Type.Table));
-    lgc.Cinit(L, @ptrCast(@alignCast(t)), @intFromEnum(lua.Type.Table));
+    const t = try lmem.Mnewgco(L, LuaTable, @sizeOf(LuaTable), L.header.memcat, @backingInt(lua.Type.Table));
+    lgc.Cinit(L, @ptrCast(@alignCast(t)), @backingInt(lua.Type.Table));
     t.metatable = null;
     t.tmcache = ~(@as(u8, 0));
     t.array = null;
@@ -459,9 +488,78 @@ pub fn Hnew(L: *lua.State, narray: u32, nhash: u32) Error!*LuaTable {
 pub fn Hfree(L: *lua.State, t: *LuaTable, page: *lmem.lua_Page) void {
     if (@as(*LuaNode, @ptrCast(t.node)) != dummynode)
         lmem.Mfreearray(L, LuaNode, t.node, lobject.sizenode(t), t.header.memcat);
-    if (t.array) |arr|
-        lmem.Mfreearray(L, TValue, arr, @intCast(t.sizearray), t.header.memcat);
+    if (t.array) |arr| {
+        if (lobject.hasmetacache(t)) {
+            const base: [*]TValue = @ptrFromInt(@intFromPtr(arr) - ltm.N * @sizeOf(TValue));
+            lmem.Mfreearray(L, TValue, base, @as(usize, @intCast(t.sizearray)) + ltm.N, t.header.memcat);
+        } else {
+            lmem.Mfreearray(L, TValue, arr, @intCast(t.sizearray), t.header.memcat);
+        }
+    }
     lmem.Mfreegco(L, t.obj2gco(), @sizeOf(LuaTable), t.header.memcat, page);
+}
+
+pub fn Hgetreadonly(t: *const LuaTable) bool {
+    return t.readonly != 0;
+}
+
+pub fn Hsetreadonly(L: *lua.State, t: *LuaTable, readonly: bool) Error!void {
+    if (Hgetreadonly(t) == readonly)
+        return;
+
+    if (readonly) {
+        t.readonly = 1;
+
+        // check if this table is likely to be used as a metatable
+        if (@as(*const LuaNode, @ptrCast(t.node)) == dummynode)
+            return;
+
+        // collect all metamethods
+        var metamethods: [ltm.N]TValue = undefined;
+        var found = false;
+        var tmcache: u8 = 0;
+
+        for (0..ltm.N) |i| {
+            const val = Hgetstr(t, L.global.tmname[i]);
+            metamethods[ltm.N - (i + 1)].setobj(L, val); // metamethods will be stored in reverse
+            const has_value = !val.ttisnil();
+            found = found or has_value;
+            if (i <= @backingInt(ltm.TMS.TM_EQ) and !has_value)
+                tmcache |= @as(u8, 1) << @intCast(i);
+        }
+
+        // update the metamethod presence cache
+        t.tmcache = tmcache;
+
+        // if there are metamethods, place the metamethod cache before the array elements
+        if (found) {
+            const size: usize = @intCast(t.sizearray);
+            const array = (try lmem.Mreallocarray(L, TValue, t.array, size, size + ltm.N, t.header.memcat)).?;
+            const logical: [*]TValue = array + (ltm.N * @sizeOf(TValue));
+            if (size != 0) {
+                std.mem.copyBackwards(TValue, logical[0..size], array[0..size]);
+            }
+            @memcpy(array[0..ltm.N], metamethods[0..]);
+            t.array = logical;
+            t.readonly |= 2;
+        }
+    } else {
+        // if we have a metamethod cache, transform the array part back to the original layout (or delete when sizearray is 0)
+        if (lobject.hasmetacache(t)) {
+            const old_array = t.array.?;
+            const size: usize = @intCast(t.sizearray);
+            var new_array: ?[*]TValue = null;
+
+            if (size != 0) {
+                new_array = try lmem.Mnewarray(L, TValue, size, t.header.memcat);
+                @memcpy(new_array.?[0..size], old_array[0..size]);
+            }
+
+            t.array = new_array;
+            lmem.Mfreearray(L, TValue, old_array - (ltm.N * @sizeOf(TValue)), size + ltm.N, t.header.memcat);
+        }
+        t.readonly = 0;
+    }
 }
 
 fn getfreepos(t: *LuaTable) ?*LuaNode {
@@ -683,8 +781,8 @@ pub fn Hgetn(t: *LuaTable) usize {
 }
 
 pub fn Hclone(L: *lua.State, tt: *LuaTable) Error!*LuaTable {
-    const t = try lmem.Mnewgco(L, LuaTable, @sizeOf(LuaTable), L.activememcat, @intFromEnum(lua.Type.Table));
-    lgc.Cinit(L, @ptrCast(@alignCast(t)), @intFromEnum(lua.Type.Table));
+    const t = try lmem.Mnewgco(L, LuaTable, @sizeOf(LuaTable), L.activememcat, @backingInt(lua.Type.Table));
+    lgc.Cinit(L, @ptrCast(@alignCast(t)), @backingInt(lua.Type.Table));
     t.metatable = tt.metatable;
     t.tmcache = tt.tmcache;
     t.array = null;

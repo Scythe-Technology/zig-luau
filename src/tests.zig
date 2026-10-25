@@ -565,6 +565,40 @@ test "threads" {
     try expectEqual(.Nil, new_thread2.typeOf(1));
 }
 
+test "coroutine finalizer runs when closed" {
+    if (comptime !luau.use_zig_backend)
+        return;
+
+    const Holder = struct {
+        var hits: i32 = 0;
+
+        fn fin(l: *State) callconv(.c) c_int {
+            _ = l;
+            hits += 1;
+            return 0;
+        }
+    };
+    Holder.hits = 0;
+
+    var lua = try luau.init(&testing.allocator);
+    defer lua.deinit();
+
+    const co = try lua.newthread();
+    co.pushnil();
+    try expectEqual(.Suspended, lua.costatus(co));
+    try expect(!co.hasfinalizers());
+
+    try lua.pushcfunction(Holder.fin, "fin");
+    try lua.addfinalizer(co, -1);
+    try expect(co.hasfinalizers());
+    try expect(!lua.hasfinalizers());
+
+    try lua.pushfinalizerfunction(co, true);
+    try expectEqual(luau.VM.lua.Status.Ok, lua.pcall(0, 0, 0));
+    try expectEqual(@as(i32, 1), Holder.hits);
+    try expect(!co.hasfinalizers());
+}
+
 test "userdata and uservalues" {
     var lua = try luau.init(&testing.allocator);
     defer lua.deinit();
@@ -956,7 +990,7 @@ test "compile and run bytecode" {
 const DataDtor = struct {
     gc_hits_ptr: *i32,
 
-    pub fn dtor(self: *DataDtor) void {
+    pub fn dtor(_: *State, self: *DataDtor) void {
         self.gc_hits_ptr.* = self.gc_hits_ptr.* + 1;
     }
 };
@@ -1425,7 +1459,7 @@ test "Readonly table" {
     defer lua.deinit();
 
     try lua.newtable();
-    lua.setreadonly(-1, true);
+    try lua.setreadonly(-1, true);
     try lua.setglobal("List");
 
     const src =

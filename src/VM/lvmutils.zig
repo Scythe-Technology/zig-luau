@@ -66,13 +66,13 @@ test Vtonumber {
     const allocator = std.testing.allocator;
 
     {
-        var n = lobject.TValue{ .tt = @intFromEnum(lua.Type.None), .value = undefined };
-        const obj = lobject.TValue{ .tt = @intFromEnum(lua.Type.Number), .value = .{ .n = 1.0 } };
+        var n = lobject.TValue{ .tt = @backingInt(lua.Type.None), .value = undefined };
+        const obj = lobject.TValue{ .tt = @backingInt(lua.Type.Number), .value = .{ .n = 1.0 } };
         try std.testing.expect(Vtonumber(&obj, &n) == &obj);
     }
     {
-        var n = lobject.TValue{ .tt = @intFromEnum(lua.Type.None), .value = undefined };
-        const obj = lobject.TValue{ .tt = @intFromEnum(lua.Type.Boolean), .value = .{ .b = 1 } };
+        var n = lobject.TValue{ .tt = @backingInt(lua.Type.None), .value = undefined };
+        const obj = lobject.TValue{ .tt = @backingInt(lua.Type.Boolean), .value = .{ .b = 1 } };
         try std.testing.expect(Vtonumber(&obj, &n) == null);
     }
     {
@@ -83,7 +83,7 @@ test Vtonumber {
         gc.* = .{
             .gch = .{
                 .header = .{
-                    .tt = @intFromEnum(lua.Type.String),
+                    .tt = @backingInt(lua.Type.String),
                     .marked = 0,
                     .memcat = 0,
                 },
@@ -96,8 +96,8 @@ test Vtonumber {
         data[2] = '3';
         data[3] = 0;
 
-        var n = lobject.TValue{ .tt = @intFromEnum(lua.Type.None), .value = undefined };
-        const obj = lobject.TValue{ .tt = @intFromEnum(lua.Type.String), .value = .{ .gc = gc } };
+        var n = lobject.TValue{ .tt = @backingInt(lua.Type.None), .value = undefined };
+        const obj = lobject.TValue{ .tt = @backingInt(lua.Type.String), .value = .{ .gc = gc } };
         try std.testing.expect(Vtonumber(&obj, &n) == &n);
         try std.testing.expect(n.ttisnumber());
         try std.testing.expect(n.nvalue() == 123.0);
@@ -110,7 +110,7 @@ test Vtonumber {
         gc.* = .{
             .gch = .{
                 .header = .{
-                    .tt = @intFromEnum(lua.Type.String),
+                    .tt = @backingInt(lua.Type.String),
                     .marked = 0,
                     .memcat = 0,
                 },
@@ -121,8 +121,8 @@ test Vtonumber {
         data[0] = 'b';
         data[1] = 0;
 
-        var n = lobject.TValue{ .tt = @intFromEnum(lua.Type.None), .value = undefined };
-        const obj = lobject.TValue{ .tt = @intFromEnum(lua.Type.String), .value = .{ .gc = gc } };
+        var n = lobject.TValue{ .tt = @backingInt(lua.Type.None), .value = undefined };
+        const obj = lobject.TValue{ .tt = @backingInt(lua.Type.String), .value = .{ .gc = gc } };
         try std.testing.expect(Vtonumber(&obj, &n) == null);
     }
 }

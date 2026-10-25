@@ -3,6 +3,8 @@ const std = @import("std");
 
 const lmem = @import("lmem.zig");
 const lstate = @import("lstate.zig");
+const ltable = @import("ltable.zig");
+const lapi = @import("lapi.zig");
 
 const lua = @import("lua.zig");
 const ldebug = @import("ldebug.zig");
@@ -15,7 +17,7 @@ extern "c" fn zig_luau_luaD_throw(L: *lua.State, errcode: i32) noreturn;
 pub const MAX_STACK_SIZE = (1024 / @sizeOf(lobject.TValue)) * 1024 * 1024;
 
 pub inline fn throw(L: *lua.State, errcode: lua.Status) noreturn {
-    zig_luau_luaD_throw(L, @intFromEnum(errcode));
+    zig_luau_luaD_throw(L, @backingInt(errcode));
 }
 
 pub inline fn getgrownstacksize(L: *lua.State, n: usize) usize {
@@ -51,7 +53,7 @@ pub inline fn expandstacklimit(L: *lua.State, p: *lobject.TValue) void {
 }
 
 pub inline fn isyielded(L: *lua.State) bool {
-    return L.curr_status == @intFromEnum(lua.Status.Yield) or L.curr_status == @intFromEnum(lua.Status.Break) or L.curr_status == SCHEDULED_REENTRY;
+    return L.curr_status == @backingInt(lua.Status.Yield) or L.curr_status == @backingInt(lua.Status.Break) or L.curr_status == SCHEDULED_REENTRY;
 }
 
 // results from luaD_precall
@@ -65,7 +67,80 @@ pub const C_CALL_YIELD = -1;
 /// luaD_call can 'yield' into an immediate reentry
 /// reentry will remove extra call frames from C call stack and continue execution
 /// this lua_State::status code is internal and should not be used by users
-pub const SCHEDULED_REENTRY = 0x7;
+pub const SCHEDULED_REENTRY = 0x7f;
+
+pub const FinallyResult = enum(c_int) {
+    Finished = 0,
+    Error = 1,
+    Cancelled = 2,
+};
+
+pub fn Dpreparefinalizestate(L: *lua.State, co: *lua.State, finresult: FinallyResult) void {
+    std.debug.assert(co.finalizers != null);
+
+    L.top[0].sethvalue(L, co.finalizers.?);
+    L.top += 1;
+    L.top[0].setnvalue(@floatFromInt(ltable.Hgetn(co.finalizers.?)));
+    L.top += 1;
+    L.top[0].setnvalue(@floatFromInt(@as(c_int, @intCast(@backingInt(finresult)))));
+    L.top += 1;
+
+    co.finalizers = null; // we have taken the list for processing
+}
+
+pub fn Dpreparefinalize(L: *lua.State, co: *lua.State, finresult: FinallyResult) Errorset.Coroutine!void {
+    const nres: u32 = if (finresult == .Finished) @intCast(co.top - co.base) else 1;
+    if (!try lapi.checkstack(L, nres + 3))
+        return error.@"too many results to invoke finalizer";
+
+    Dpreparefinalizestate(L, co, finresult);
+    lapi.xmove(co, L, nres);
+}
+
+pub fn Drunfinalizers(L: *lua.State, returnstatus: bool) Errorset.Coroutine!c_int {
+    const results: i32 = @intCast(lapi.gettop(L) - 4);
+    const position = lapi.tointeger(L, 3) orelse 0;
+    const status = lapi.tointeger(L, 4) orelse 0;
+
+    if (position != 0) {
+        if (!try lapi.checkstack(L, @intCast(results + 2)))
+            return error.@"too many results to invoke finalizer";
+
+        // decrement the position
+        lapi.pushinteger(L, position - 1);
+        lapi.replace(L, 3);
+
+        // take the finalizer from the end of the table
+        _ = lapi.rawgeti(L, 2, position);
+
+        // push status string
+        const label: [:0]const u8 = if (status == @backingInt(FinallyResult.Cancelled))
+            "cancelled"
+        else if (status == @backingInt(FinallyResult.Finished))
+            "finished"
+        else
+            "error";
+        try lapi.pushstring(L, label);
+
+        // copy results over
+        var i: i32 = 0;
+        while (i < results) : (i += 1)
+            lapi.pushvalue(L, 5 + i);
+
+        // pcall with no errfunc makes ourselves the handler for any errors
+        return lapi.pcallyieldable(L, results + 1, 0, 0);
+    }
+
+    if (returnstatus) {
+        L.base[3].setbvalue(status != @backingInt(FinallyResult.Error)); // Replace numerical status with a boolean
+        return results + 1;
+    }
+
+    if (status == @backingInt(FinallyResult.Error))
+        return error.Runtime;
+
+    return results;
+}
 
 fn correctstack(L: *lua.State, oldstack: [*]lobject.TValue) void {
     L.top = L.stack + (L.top - oldstack);
@@ -128,25 +203,25 @@ pub fn Dgrowstack(L: *lua.State, n: usize) Errorset.Memory!void {
 }
 
 pub inline fn @"resume"(L: *lua.State, from: ?*lua.State, narg: i32) lua.Status {
-    return @enumFromInt(c.lua_resume(@ptrCast(L), @ptrCast(from), narg));
+    return @fromBackingInt(@intCast(c.lua_resume(@ptrCast(L), @ptrCast(from), narg)));
 }
 
 pub inline fn resumeerror(L: *lua.State, from: ?*lua.State) lua.Status {
-    return @enumFromInt(c.lua_resumeerror(@ptrCast(L), @ptrCast(from)));
+    return @fromBackingInt(@intCast(c.lua_resumeerror(@ptrCast(L), @ptrCast(from))));
 }
 
 pub fn yield(L: *lua.State, nresults: u32) !i32 {
     if (L.nCcalls > L.baseCcalls)
         try ldebug.GrunerrorL(L, "attempt to yield across metamethod/C-call boundary", .{});
     L.base = L.top - nresults;
-    L.curr_status = @intFromEnum(lua.Status.Yield);
+    L.curr_status = @backingInt(lua.Status.Yield);
     return -1;
 }
 
 pub fn @"break"(L: *lua.State) !i32 {
     if (L.nCcalls > L.baseCcalls)
         try ldebug.GrunerrorL(L, "attempt to yield across metamethod/C-call boundary", .{});
-    L.curr_status = @intFromEnum(lua.Status.Break);
+    L.curr_status = @backingInt(lua.Status.Break);
     return -1;
 }
 

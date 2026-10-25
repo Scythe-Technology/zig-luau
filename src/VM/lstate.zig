@@ -333,6 +333,7 @@ pub const global_State = extern struct {
 
     gcstats: GCStats,
     lastprotoid: u32,
+    lastclassid: u32,
 
     /// TODO: change `false` to be based on configuration (LUAI_GCMETRICS)
     gcmetrics: if (false) GCMetrics else void,
@@ -570,6 +571,9 @@ pub const lua_State = extern struct {
     pub const getthreaddata = lapi.getthreaddata;
     pub const setthreaddata = lapi.setthreaddata;
     pub const costatus = lapi.costatus;
+    pub const hasfinalizers = lapi.hasfinalizers;
+    pub const pushfinalizerfunction = lapi.pushfinalizerfunction;
+    pub const addfinalizer = lapi.addfinalizer;
 
     //
     // garbage-collection function and options
@@ -988,6 +992,7 @@ pub fn newstate(allocator: lua.Alloc, ud: ?*anyopaque) Errorset.Table!*lua_State
     g.gcstats = .{};
 
     g.lastprotoid = 1;
+    g.lastclassid = 1;
 
     // TODO: LUAI_GCMETRICS
 

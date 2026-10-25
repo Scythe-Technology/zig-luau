@@ -252,6 +252,9 @@ pub const ExprIfElse = extern struct {
     thenPosition: Location.Position,
     elsePosition: Location.Position,
     isElseIf: bool,
+
+    /// Colon before the `if local`/`if const` binding's type annotation
+    annotationColonPosition: Location.Position,
 };
 
 pub const ExprInterpString = extern struct {

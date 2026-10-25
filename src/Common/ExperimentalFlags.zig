@@ -7,10 +7,8 @@ pub inline fn isAnalysisFlagExperimental(flag: []const u8) bool {
     const kList = [_][]const u8{
         "LuauInstantiateInSubtyping", // requires some fixes to lua-apps code
         "LuauFixIndexerSubtypingOrdering", // requires some small fixes to lua-apps code since this fixes a false negative
-        "StudioReportLuauAny2", // takes telemetry data for usage of any types
-        "LuauTableCloneClonesType3", // requires fixes in lua-apps code, terrifyingly
-        "LuauSolverV2",
         "UseNewLuauTypeSolverDefaultEnabled", // This can change the default solver used in cli applications, so it also needs to be disabled. Will require fixes in lua-apps code
+        "LuauRefactorStringSemanticSubtyping", // Requires fixes to lua-apps code.
     };
 
     for (comptime kList) |item|

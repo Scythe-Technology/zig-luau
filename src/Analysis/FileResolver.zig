@@ -31,7 +31,7 @@ pub fn FileResolver(comptime T: type) type {
                         const res: struct { []const u8, SourceCodeType } = @call(.always_inline, T.readSource, .{ @as(*T, @ptrCast(@alignCast(ud))), name[0..len] }) orelse return null;
                         const buf, const t = res;
                         outLen.* = buf.len;
-                        outType.* = @intFromEnum(t);
+                        outType.* = @backingInt(t);
                         return buf.ptr;
                     }
                 }.inner,

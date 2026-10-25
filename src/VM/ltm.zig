@@ -34,7 +34,7 @@ pub const TMS = enum {
     TM_N, // number of elements in the enum
 };
 
-pub const N: comptime_int = @intFromEnum(TMS.TM_N);
+pub const N: comptime_int = @backingInt(TMS.TM_N);
 
 pub const typenames = if (!lua.config.VECTOR_DOUBLE) [_][:0]const u8{
     // ORDER TYPE
@@ -110,7 +110,7 @@ comptime {
         @compileError("typenames size mismatch");
     if (eventname.len != N)
         @compileError("eventname size mismatch");
-    if (@intFromEnum(TMS.TM_EQ) >= 8)
+    if (@backingInt(TMS.TM_EQ) >= 8)
         @compileError("fasttm optimization stores a bitfield with metamethods in a byte");
 }
 
@@ -134,17 +134,24 @@ pub const LONGEST_TYPENAME_SIZE = res: {
 
 pub fn gfasttm(g: *lstate.global_State, et: ?*lobject.LuaTable, event: TMS) ?*const lobject.TValue {
     const mt = et orelse return null;
-    if (mt.tmcache & (@as(usize, 1) << @intFromEnum(event)) > 0)
+    const bit: u32 = @as(u32, 1) << @intCast(@backingInt(event));
+    if ((@as(u32, mt.tmcache) & bit) != 0)
         return null;
+    if (lobject.hasmetacache(mt)) {
+        const slot = lobject.getmetacache(mt, @intCast(@backingInt(event)));
+        if (slot.ttisnil())
+            return null;
+        return slot;
+    }
 
-    return Tgettm(mt, event, g.tmname[@intFromEnum(event)]);
+    return Tgettm(mt, event, g.tmname[@backingInt(event)]);
 }
 
 pub fn Tgettm(events: *lobject.LuaTable, e: TMS, ename: *lobject.TString) ?*const lobject.TValue {
     const tm = ltable.Hgetstr(events, ename);
     if (tm.ttisnil()) {
         // no tag method?
-        events.tmcache |= @truncate(@as(usize, 1) << @intFromEnum(e)); // cache this fact
+        events.tmcache |= @truncate(@as(usize, 1) << @backingInt(e)); // cache this fact
         return null;
     }
     return tm;

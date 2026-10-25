@@ -381,6 +381,13 @@ pub const Vector = extern struct {
 
 pub const FeedbackVectorSlotKind = enum(u8) {
     CallTarget,
+    Construct,
+};
+
+pub const LuauClassConstructMatch = enum(c_int) {
+    Mismatch = 0,
+    Match = 1,
+    MatchZeroed = 2,
 };
 
 pub const FeedbackVectorSlot = extern struct {
@@ -390,6 +397,11 @@ pub const FeedbackVectorSlot = extern struct {
             pc: u32,
             proto: u32,
             hits: u32,
+        },
+        construct: extern struct {
+            shape: u32,
+            classid: u32,
+            match: LuauClassConstructMatch,
         },
     },
 };
@@ -744,7 +756,7 @@ pub const LuaTable = extern struct {
 
     /// 1<<p means tagmethod(p) is not present
     tmcache: u8,
-    /// sandboxing feature to prohibit writes to table
+    /// bit 0 - prohibit writes to table, bit 1 - array contains a metamethod cache
     readonly: u8,
     /// environment doesn't share globals with other scripts
     safeenv: u8,
@@ -783,48 +795,70 @@ pub const LuauClass = extern struct {
 
     name: *TString,
 
+    /// Used to match feedback vector construction slots
+    id: u32,
+
     /// The superclass of this class. NULL if this class doesn't inherit.
     super: ?*LuauClass,
 
-    /// Mapping from offset to static members (only methods for now).
-    staticmembers: [*]TValue,
+    /// Mapping from offset to static members (only methods for now). Private members at the end.
+    staticmembers: ?[*]TValue,
+    /// We store a pointer to the private static members separately as an optimization to avoid computing an overall offset into static members.
+    privatestaticmembers: ?[*]TValue,
 
-    /// Mapping from member name to offset.
+    /// Mapping from public member name to offset.
     /// For static members, subtracting numberofinstancemembers from the offset gives the actual index into staticmembers.
     memberstooffset: *LuaTable,
 
-    /// Mapping from offset to member name. Instance member offsets are stored before static member offsets.
-    offsettomember: [*]*TString,
+    /// Mapping from offset to member name. Instance member offsets are stored before static member offsets. Offsets corresponding to private
+    /// fields are NULL, and there are no entries for private static members.
+    offsettomember: ?[*]?*TString,
+
+    /// Metatable for this *class object*. At time of writing this only contains __call
+    metatable: ?*LuaTable,
 
     /// Metatable for instances of this class. NULL until the first metamethod
     /// is added via luaR_addclassmember.
     instancemetatable: ?*LuaTable,
 
-    /// Number of instance members that we expect instances of this class object
-    /// to have.
+    /// Number of public and private instance members that we expect instances of this class object to have.
     numberofinstancemembers: u32,
 
-    // Total number of members that we expect this class object to have between
-    // instance and static members.
-    //
-    // We store this number as an optimization. It's pretty rare that we need
-    // to reference the specific number of static members, but it's very common
-    // to reference the total number of members (for validating hot paths in
-    // the interpreter) and the number of instance members (branching on
-    // instance or static members, creating class instances).
-    numberofallmembers: u32,
+    /// Total number of members that we expect this class object to have between instance and static members.
+    ///
+    /// We store this number as an optimization. It's pretty rare that we need
+    /// to reference the specific number of static members, but it's very common
+    /// to reference the total number of members (for validating hot paths in
+    /// the interpreter) and the number of instance members (branching on
+    /// instance or static members, creating class instances).
+    numberofmembers: u32,
 
-    // Can this class be extended?
+    numberofprivatefields: u32,
+    /// If this class inherits, its ancestors' private fields come before this class's, so we track where its own private fields start.
+    ownprivatefieldsstart: u32,
+
+    numberofprivatestaticmembers: u8,
+
+    /// Can this class be extended?
     isopen: bool,
 
-    // True if this class or any of its ancestors defines an __init method.
-    // If a class's ancestors define an __init method, it must itself also define an __init method.
-    // We cannot determine this statically, so we track it here to error at runtime if the invariant is violated.
-    // The default constructor errors if this is true, which works because the default constructor is overridden if a class defines an __init method.
+    /// True if this class or any of its ancestors defines an __init method.
+    /// If a class's ancestors define an __init method, it must itself also define an __init method.
+    /// We cannot determine this statically, so we track it here to error at runtime if the invariant is violated.
+    /// The default constructor errors if this is true, which works because the default constructor is overridden if a class defines an __init method.
     hasuserinitinchain: bool,
 
     pub inline fn obj2gco(obj: *LuauClass) *lstate.GCObject {
         return @ptrCast(@alignCast(obj));
+    }
+
+    pub inline fn offsettomemberlength(cls: *const LuauClass) u32 {
+        return cls.numberofmembers - cls.numberofprivatestaticmembers;
+    }
+
+    /// Number of static members, including this class's private ones.
+    pub inline fn numstaticmembers(cls: *const LuauClass) u32 {
+        return cls.numberofmembers - cls.numberofinstancemembers;
     }
 };
 
@@ -836,13 +870,13 @@ pub const LuauObject = extern struct {
     /// The class object that this value is an instance of.
     lclass: *LuauClass,
 
-    /// The number of members that this instance contains. We need this in order
-    /// to free ourselves if we got swept in the same GC cycle as our class
+    /// The number of members that this instance contains. We need these in order to free ourselves if we get swept in the same GC cycle as our class
     /// pointer.
     numberofmembers: u32,
 
-    /// The fields of this instance.
-    members: [*]TValue,
+    /// The fields of this instance. Members are ordered according to inheritance chain, with base classes coming first. For each class, public members
+    /// come first, then privates.
+    members: ?[*]TValue,
 
     pub inline fn obj2gco(obj: *LuauObject) *lstate.GCObject {
         return @ptrCast(@alignCast(obj));
@@ -859,6 +893,12 @@ pub inline fn twoto(x: if (@sizeOf(usize) == 8) u6 else u5) usize {
 }
 pub inline fn sizenode(t: *const LuaTable) usize {
     return @intCast(@as(usize, 1) << @truncate(t.lsizenode));
+}
+pub inline fn hasmetacache(t: *const LuaTable) bool {
+    return (t.readonly & 2) != 0;
+}
+pub inline fn getmetacache(t: *const LuaTable, event: u32) *TValue {
+    return @ptrFromInt(@intFromPtr(t.array.?) - (@as(usize, 1) + event) * @sizeOf(TValue));
 }
 
 extern "c" const luaO_nilobject_: TValue;

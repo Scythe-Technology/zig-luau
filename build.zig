@@ -827,7 +827,6 @@ const LUAU_Analysis_SOURCE_FILES = [_][]const u8{
     "Analysis/src/StructuralTypeEquality.cpp",
     "Analysis/src/Substitution.cpp",
     "Analysis/src/Subtyping.cpp",
-    "Analysis/src/SubtypingUnifier.cpp",
     "Analysis/src/Symbol.cpp",
     "Analysis/src/TableLiteralInference.cpp",
     "Analysis/src/ToDot.cpp",
@@ -970,21 +969,23 @@ const LUAU_Config_SOURCE_FILES = [_][]const u8{
 };
 
 const LUAU_Require_HEADERS_DIRS = [_][]const u8{
-    "Require/Runtime/include/",
-    "Require/Runtime/src/",
+    "Require/include/",
+    "Require/src/",
 };
 const LUAU_Require_SOURCE_FILES = [_][]const u8{
-    "Require/Runtime/src/Navigation.cpp",
-    "Require/Runtime/src/Require.cpp",
-    "Require/Runtime/src/RequireImpl.cpp",
+    "Require/src/Navigation.cpp",
+    "Require/src/Require.cpp",
+    "Require/src/RequireImpl.cpp",
 };
 
 const LUAU_RequireNavigator_HEADERS_DIRS = [_][]const u8{
-    "Require/Navigator/include/",
+    "Require/include/",
+    "Require/src/",
 };
 const LUAU_RequireNavigator_SOURCE_FILES = [_][]const u8{
-    "Require/Navigator/src/PathUtilities.cpp",
-    "Require/Navigator/src/RequireNavigator.cpp",
+    "Require/src/AliasCycleTracker.cpp",
+    "Require/src/PathUtilities.cpp",
+    "Require/src/RequireNavigator.cpp",
 };
 
 const LUAU_VM_HEADERS_DIRS = [_][]const u8{

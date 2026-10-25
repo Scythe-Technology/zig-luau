@@ -36,7 +36,7 @@ fn validatetable(g: *const lstate.global_State, h: *lobject.LuaTable) void {
     for (0..sizenode) |i| {
         const n = &h.node[i];
 
-        std.debug.assert(n.gkey().ttype() != @intFromEnum(lua.Type.Deadkey) or n.gval().ttisnil());
+        std.debug.assert(n.gkey().ttype() != @backingInt(lua.Type.Deadkey) or n.gval().ttisnil());
         std.debug.assert(@as(isize, @intCast(i)) + n.gnext() >= 0 and @as(isize, @intCast(i)) + n.gnext() < sizenode);
 
         if (!n.gval().ttisnil()) {
@@ -84,7 +84,7 @@ fn validatestack(g: *const lstate.global_State, l: *lua.State) void {
 
     var upval: ?*lobject.UpVal = l.openupval;
     while (upval) |uv| : (upval = uv.u.open.threadnext) {
-        std.debug.assert(uv.header.tt == @intFromEnum(lua.Type.UpVal));
+        std.debug.assert(uv.header.tt == @backingInt(lua.Type.UpVal));
         std.debug.assert(uv.upisopen());
         std.debug.assert(uv.u.open.next.?.u.open.prev == uv and uv.u.open.prev.?.u.open.next == uv);
         std.debug.assert(!lgc.isblack(uv.obj2gco()));
@@ -120,11 +120,20 @@ fn validateclass(g: *const lstate.global_State, lco: *lobject.LuauClass) void {
     if (lco.super) |super|
         validateobjref(g, obj, super.obj2gco());
     validateobjref(g, obj, lco.memberstooffset.obj2gco());
-    for (0..lco.numberofallmembers) |i| {
-        validateobjref(g, obj, lco.offsettomember[i].obj2gco());
-        if (i >= lco.numberofinstancemembers)
-            validateref(g, obj, &lco.staticmembers[i - @as(u32, @intCast(lco.numberofinstancemembers))]);
+    if (lco.offsettomemberlength() != 0) {
+        const names = lco.offsettomember.?;
+        for (0..lco.offsettomemberlength()) |i| {
+            if (names[i]) |str|
+                validateobjref(g, obj, str.obj2gco());
+        }
     }
+    if (lco.numstaticmembers() != 0) {
+        const statics = lco.staticmembers.?;
+        for (0..lco.numstaticmembers()) |i|
+            validateref(g, obj, &statics[i]);
+    }
+    if (lco.metatable) |mt|
+        validateobjref(g, obj, mt.obj2gco());
     if (lco.instancemetatable) |mt|
         validateobjref(g, obj, mt.obj2gco());
 }
@@ -132,8 +141,11 @@ fn validateclass(g: *const lstate.global_State, lco: *lobject.LuauClass) void {
 fn validateobject(g: *const lstate.global_State, inst: *lobject.LuauObject) void {
     const obj = inst.obj2gco();
     validateobjref(g, obj, inst.lclass.obj2gco());
-    for (0..inst.numberofmembers) |i|
-        validateref(g, obj, &inst.members[i]);
+    if (inst.numberofmembers != 0) {
+        const members = inst.members.?;
+        for (0..inst.numberofmembers) |i|
+            validateref(g, obj, &members[i]);
+    }
 }
 
 fn validateobj(g: *const lstate.global_State, o: *lstate.GCObject) void {
@@ -143,17 +155,17 @@ fn validateobj(g: *const lstate.global_State, o: *lstate.GCObject) void {
     }
 
     switch (o.gch.header.tt) {
-        @intFromEnum(lua.Type.String), @intFromEnum(lua.Type.Buffer) => {},
-        @intFromEnum(lua.Type.Table) => validatetable(g, o.toh()),
-        @intFromEnum(lua.Type.Function) => validateclosure(g, o.tocl()),
-        @intFromEnum(lua.Type.Userdata) => if (o.tou().metatable) |mt|
+        @backingInt(lua.Type.String), @backingInt(lua.Type.Buffer) => {},
+        @backingInt(lua.Type.Table) => validatetable(g, o.toh()),
+        @backingInt(lua.Type.Function) => validateclosure(g, o.tocl()),
+        @backingInt(lua.Type.Userdata) => if (o.tou().metatable) |mt|
             validateobjref(g, o, mt.obj2gco()),
-        @intFromEnum(lua.Type.Thread) => validatestack(g, o.toth()),
-        @intFromEnum(lua.Type.Vector) => return,
-        @intFromEnum(lua.Type.Proto) => validateproto(g, o.top()),
-        @intFromEnum(lua.Type.UpVal) => validateref(g, o, o.touv().v),
-        @intFromEnum(lua.Type.Class) => validateclass(g, o.toclass()),
-        @intFromEnum(lua.Type.Object) => validateobject(g, o.toobject()),
+        @backingInt(lua.Type.Thread) => validatestack(g, o.toth()),
+        @backingInt(lua.Type.Vector) => return,
+        @backingInt(lua.Type.Proto) => validateproto(g, o.top()),
+        @backingInt(lua.Type.UpVal) => validateref(g, o, o.touv().v),
+        @backingInt(lua.Type.Class) => validateclass(g, o.toclass()),
+        @backingInt(lua.Type.Object) => validateobject(g, o.toobject()),
         else => unreachable,
     }
 }
@@ -166,12 +178,12 @@ fn validategraylist(g: *const lstate.global_State, obj: ?*lstate.GCObject) void 
     while (so) |o| {
         std.debug.assert(lgc.isgray(o));
         switch (o.gch.header.tt) {
-            @intFromEnum(lua.Type.Table) => so = o.toh().gclist,
-            @intFromEnum(lua.Type.Function) => so = o.tocl().gclist,
-            @intFromEnum(lua.Type.Thread) => so = o.toth().gclist,
-            @intFromEnum(lua.Type.Class) => so = o.toclass().gclist,
-            @intFromEnum(lua.Type.Object) => so = o.toobject().gclist,
-            @intFromEnum(lua.Type.Proto) => so = o.top().gclist,
+            @backingInt(lua.Type.Table) => so = o.toh().gclist,
+            @backingInt(lua.Type.Function) => so = o.tocl().gclist,
+            @backingInt(lua.Type.Thread) => so = o.toth().gclist,
+            @backingInt(lua.Type.Class) => so = o.toclass().gclist,
+            @backingInt(lua.Type.Object) => so = o.toobject().gclist,
+            @backingInt(lua.Type.Proto) => so = o.top().gclist,
             else => unreachable,
         }
     }
@@ -217,7 +229,7 @@ pub fn Cvalidate(L: *lua.State) void {
 
     var upval: ?*lobject.UpVal = g.uvhead.u.open.next.?;
     while (upval != &g.uvhead) : (upval = upval.?.u.open.next) {
-        std.debug.assert(upval.?.header.tt == @intFromEnum(lua.Type.UpVal));
+        std.debug.assert(upval.?.header.tt == @backingInt(lua.Type.UpVal));
         std.debug.assert(upval.?.upisopen());
         std.debug.assert(upval.?.u.open.next.?.u.open.prev == upval and upval.?.u.open.prev.?.u.open.next == upval);
         std.debug.assert(!lgc.isblack(upval.?.obj2gco()));

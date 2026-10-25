@@ -111,14 +111,14 @@ pub const AstNameTable = extern struct {
     };
 
     pub fn init(allocator: *Allocator) !AstNameTable {
-        comptime std.debug.assert(kReserved.len == @intFromEnum(Lexeme.Type.Reserved_END) - @intFromEnum(Lexeme.Type.Reserved_BEGIN));
+        comptime std.debug.assert(kReserved.len == @backingInt(Lexeme.Type.Reserved_END) - @backingInt(Lexeme.Type.Reserved_BEGIN));
         var ast: AstNameTable = .{
             .data = try .init(128),
             .allocator = allocator,
         };
         errdefer ast.data.deinit();
         for (kReserved, 0..) |name, i|
-            _ = try ast.addStatic(name, @enumFromInt(@intFromEnum(Lexeme.Type.Reserved_BEGIN) + @as(c_int, @intCast(i))));
+            _ = try ast.addStatic(name, @fromBackingInt(@intCast(@backingInt(Lexeme.Type.Reserved_BEGIN) + @as(c_int, @intCast(i)))));
 
         return ast;
     }

@@ -459,22 +459,36 @@ fn traversestack(g: *lstate.global_State, L: *lua.State) void {
 }
 
 fn traverseclass(g: *lstate.global_State, classobject: *lobject.LuauClass) void {
-    markobject(g, @ptrCast(@alignCast(classobject.name)));
+    markobject(g, classobject.name.obj2gco());
     if (classobject.super) |super|
-        markobject(g, @ptrCast(@alignCast(super)));
-    markobject(g, @ptrCast(@alignCast(classobject.memberstooffset)));
-    for (0..classobject.numberofallmembers) |i|
-        markobject(g, @ptrCast(@alignCast(classobject.offsettomember[i])));
-    for (0..classobject.numberofallmembers - classobject.numberofinstancemembers) |i|
-        markobject(g, @ptrCast(@alignCast(&classobject.staticmembers[i])));
+        markobject(g, super.obj2gco());
+    markobject(g, classobject.memberstooffset.obj2gco());
+    if (classobject.offsettomemberlength() != 0) {
+        const names = classobject.offsettomember.?;
+        for (0..classobject.offsettomemberlength()) |i| {
+            if (names[i]) |str|
+                markobject(g, str.obj2gco());
+        }
+    }
+    // Includes this class's private static members, which live at the tail of staticmembers.
+    if (classobject.numstaticmembers() != 0) {
+        const statics = classobject.staticmembers.?;
+        for (0..classobject.numstaticmembers()) |i|
+            markvalue(g, &statics[i]);
+    }
+    if (classobject.metatable) |mt|
+        markobject(g, mt.obj2gco());
     if (classobject.instancemetatable) |mt|
-        markobject(g, @ptrCast(@alignCast(mt)));
+        markobject(g, mt.obj2gco());
 }
 
 fn traverseobject(g: *lstate.global_State, classinst: *lobject.LuauObject) void {
-    markobject(g, @ptrCast(@alignCast(classinst.lclass)));
-    for (0..classinst.numberofmembers) |i|
-        markobject(g, @ptrCast(@alignCast(&classinst.members[i])));
+    markobject(g, classinst.lclass.obj2gco());
+    if (classinst.numberofmembers != 0) {
+        const members = classinst.members.?;
+        for (0..classinst.numberofmembers) |i|
+            markvalue(g, &members[i]);
+    }
 }
 
 fn clearstack(L: *lua.State) void {
@@ -572,14 +586,18 @@ fn propagatemark(g: *lstate.global_State) Errorset.Memory!usize {
             const classobject = o.toclass();
             g.gray = classobject.gclist;
             traverseclass(g, classobject);
+            // We've traversed the "object" itself ...
             return @sizeOf(lobject.LuauClass) +
-                ((classobject.numberofallmembers - classobject.numberofinstancemembers) * @sizeOf(lobject.TValue)) +
-                (classobject.numberofallmembers * @sizeOf(*lobject.TString));
+                // ... plus the method closures, each a `TValue` wide ...
+                (classobject.numstaticmembers() * @sizeOf(lobject.TValue)) +
+                // ... plus a string pointer for each method or property except for private static members, each a pointer wide.
+                (classobject.offsettomemberlength() * @sizeOf(?*lobject.TString));
         },
         @backingInt(lua.Type.Object) => {
             const classinst = o.toobject();
             g.gray = classinst.gclist;
             traverseobject(g, classinst);
+            // We've traversed the instance and its instance fields
             return @sizeOf(lobject.LuauObject) +
                 (classinst.numberofmembers * @sizeOf(lobject.TValue));
         },
@@ -613,6 +631,17 @@ pub inline fn iscleared(o: anytype) bool {
     return o.iscollectable() and isobjcleared(o.gcvalue());
 }
 
+fn rebuildmetacache(L: *lua.State, h: *lobject.LuaTable) void {
+    var tmcache: u8 = 0;
+    for (0..ltm.N) |event| {
+        const value = ltable.Hgetstr(h, L.global.tmname[event]);
+        lobject.getmetacache(h, @intCast(event)).setobj(L, value);
+        if (event <= @backingInt(ltm.TMS.TM_EQ) and value.ttisnil())
+            tmcache |= @as(u8, 1) << @intCast(event);
+    }
+    h.tmcache = tmcache;
+}
+
 /// clear collected entries from weaktables
 fn cleartable(L: *lua.State, il: ?*lstate.GCObject) Errorset.Table!usize {
     var work: usize = 0;
@@ -644,12 +673,17 @@ fn cleartable(L: *lua.State, il: ?*lstate.GCObject) Errorset.Table!usize {
             }
         }
 
-        if (gettablemode(L.global, h)) |mode| {
-            // are we allowed to shrink this weak table?
-            if (std.mem.indexOfScalar(u8, mode, 's') != null) {
-                // shrink at 37.5% occupancy
-                if (activevalues < @divTrunc(lobject.sizenode(h) * 3, 8))
-                    try ltable.Hresizehash(L, h, activevalues);
+        if (lobject.hasmetacache(h))
+            rebuildmetacache(L, h);
+
+        if (h.readonly == 0) { // frozen tables do not shrink
+            if (gettablemode(L.global, h)) |mode| {
+                // are we allowed to shrink this weak table?
+                if (std.mem.indexOfScalar(u8, mode, 's') != null) {
+                    // shrink at 37.5% occupancy
+                    if (activevalues < @divTrunc(lobject.sizenode(h) * 3, 8))
+                        try ltable.Hresizehash(L, h, activevalues);
+                }
             }
         }
 

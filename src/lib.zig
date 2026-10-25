@@ -121,6 +121,7 @@ test {
 //
 pub const LUAU_VERSION = VM.lua.config.LUAU_VERSION;
 pub const VECTOR_SIZE = VM.lua.config.VECTOR_SIZE;
+pub const use_zig_backend = build_config.use_zig_backend;
 
 pub const State = VM.lua.State;
 
