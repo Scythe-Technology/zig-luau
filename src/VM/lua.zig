@@ -67,6 +67,7 @@ pub const Coverage = *const fn (?*anyopaque, [*c]const u8, c_int, c_int, [*c]con
 /// prototype for memory-allocation functions
 ///
 pub const Alloc = *const fn (ud: ?*anyopaque, ptr: ?*anyopaque, osize: usize, nsize: usize) callconv(.c) ?*anyopaque;
+pub const CageAlloc = *const fn (ud: ?*anyopaque, ptr: ?*anyopaque, osize: usize, nsize: usize, type: c_int) callconv(.c) ?*anyopaque;
 
 ///
 ///  basic types
@@ -114,7 +115,7 @@ pub const Type = if (!config.VECTOR_DOUBLE) enum(i6) {
         return t == .None or t == .Nil;
     }
     pub inline fn istypecollectable(comptime t: Type) bool {
-        return @intFromEnum(t) >= @intFromEnum(Type.String);
+        return @backingInt(t) >= @backingInt(Type.String);
     }
 } else enum(i6) {
     None = TNONE,
@@ -155,7 +156,7 @@ pub const Type = if (!config.VECTOR_DOUBLE) enum(i6) {
         return t == .None or t == .Nil;
     }
     pub inline fn istypecollectable(comptime t: Type) bool {
-        return @intFromEnum(t) >= @intFromEnum(Type.String);
+        return @backingInt(t) >= @backingInt(Type.String);
     }
 };
 
@@ -311,6 +312,10 @@ pub const Callbacks = extern struct {
     userthread: ?*const fn (LP: ?*State, L: *State) callconv(.c) void = null,
     /// gets called when a string is created; returned atom can be retrieved via tostringatom
     useratom: ?*const fn (L: *State, s: [*c]const u8, l: usize) callconv(.c) i16 = null,
+
+    /// NOTE: experimental API, requires a Debug flag to be called and is subject to breaking changes
+    /// gets called before a finalizer is attached to 'co' by current thread
+    userfinalizer: ?*const fn (L: *State, co: *State) callconv(.c) void = null,
 
     /// gets called when BREAK instruction is encountered
     debugbreak: ?*const fn (L: *State, ar: *c.lua_Debug) callconv(.c) void = null,

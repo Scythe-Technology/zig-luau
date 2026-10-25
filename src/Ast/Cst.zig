@@ -33,6 +33,7 @@ pub const Node = extern struct {
         stat_local,
         stat_for,
         stat_for_in,
+        stat_if,
         stat_assign,
         stat_compound_assign,
         stat_function,
@@ -76,6 +77,7 @@ pub const Node = extern struct {
                 .stat_local => StatLocal,
                 .stat_for => StatFor,
                 .stat_for_in => StatForIn,
+                .stat_if => StatIf,
                 .stat_assign => StatAssign,
                 .stat_compound_assign => StatCompoundAssign,
                 .stat_function => StatFunction,
@@ -307,6 +309,13 @@ pub const StatForIn = extern struct {
     varsAnnotationColonPositions: Ast.Array(Location.Position),
     varsCommaPositions: Ast.Array(Location.Position),
     valuesCommaPositions: Ast.Array(Location.Position),
+};
+
+pub const StatIf = extern struct {
+    classIndex: Node.Kind = .stat_if,
+
+    // Colon before the `if local`/`if const` binding's type annotation
+    annotationColonPosition: Location.Position,
 };
 
 pub const StatAssign = extern struct {
@@ -541,6 +550,7 @@ test "CstValuesCheck" {
         pub extern "c" const CstStatLocalIndex: u8;
         pub extern "c" const CstStatForIndex: u8;
         pub extern "c" const CstStatForInIndex: u8;
+        pub extern "c" const CstStatIfIndex: u8;
         pub extern "c" const CstStatAssignIndex: u8;
         pub extern "c" const CstStatCompoundAssignIndex: u8;
         pub extern "c" const CstStatFunctionIndex: u8;
@@ -582,6 +592,7 @@ test "CstValuesCheck" {
         pub extern "c" const CstStatLocalSize: usize;
         pub extern "c" const CstStatForSize: usize;
         pub extern "c" const CstStatForInSize: usize;
+        pub extern "c" const CstStatIfSize: usize;
         pub extern "c" const CstStatAssignSize: usize;
         pub extern "c" const CstStatCompoundAssignSize: usize;
         pub extern "c" const CstStatFunctionSize: usize;
@@ -602,9 +613,9 @@ test "CstValuesCheck" {
         pub extern "c" const CstTypePackGenericSize: usize;
     };
 
-    try std.testing.expect(CstValues.CstTypeTableItemKindIndexer == @intFromEnum(TypeTable.Item.Kind.indexer));
-    try std.testing.expect(CstValues.CstTypeTableItemKindProperty == @intFromEnum(TypeTable.Item.Kind.property));
-    try std.testing.expect(CstValues.CstTypeTableItemKindStringProperty == @intFromEnum(TypeTable.Item.Kind.string_property));
+    try std.testing.expect(CstValues.CstTypeTableItemKindIndexer == @backingInt(TypeTable.Item.Kind.indexer));
+    try std.testing.expect(CstValues.CstTypeTableItemKindProperty == @backingInt(TypeTable.Item.Kind.property));
+    try std.testing.expect(CstValues.CstTypeTableItemKindStringProperty == @backingInt(TypeTable.Item.Kind.string_property));
 
     @setEvalBranchQuota(2000);
     inline for (@typeInfo(CstValues).@"struct".decl_names) |decl_name| {
@@ -626,7 +637,7 @@ test "CstValuesCheck" {
             const default_value_ptr = field_attrs.?.default_value_ptr orelse @compileError("classIndex field does not have a default value");
             const enum_value = @as(*const Cst.Node.Kind, @ptrCast(@alignCast(default_value_ptr))).*;
 
-            std.testing.expectEqual(@field(CstValues, decl_name), @intFromEnum(enum_value)) catch |err| {
+            std.testing.expectEqual(@field(CstValues, decl_name), @backingInt(enum_value)) catch |err| {
                 std.debug.print("index error for {s}\n", .{name});
                 return err;
             };

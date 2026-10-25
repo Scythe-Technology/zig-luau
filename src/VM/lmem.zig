@@ -250,14 +250,29 @@ fn Mtoobig(L: *lua.State) noreturn {
     ldebug.GrunerrorL(L, "memory allocation error: block too big");
 }
 
+inline fn pagealloc(g: *lstate.global_State, block: ?*lua_Page, oldsize: usize, newsize: usize) ?*lua_Page {
+    return @ptrCast(@alignCast(
+        (g.frealloc.?)(g.ud, @ptrCast(@alignCast(block)), oldsize, newsize),
+    ));
+}
+
+inline fn freegcopages(g: *lstate.global_State) [*]?*lua_Page {
+    return @ptrCast(@alignCast(&g.freegcopages));
+}
+
+inline fn allgcopages(g: *lstate.global_State) *?*lua_Page {
+    return &g.allgcopages;
+}
+
 fn newpage(L: *lua.State, pageset: ?*?*lua_Page, pageSize: usize, blockSize: c_int, blockCount: c_int) Error!*lua_Page {
     const g = L.global;
 
     std.debug.assert(pageSize - @offsetOf(lua_Page, "data") >= blockSize * blockCount);
 
-    const page = @as(*lua_Page, @ptrCast(@alignCast(
-        (g.frealloc.?)(g.ud, null, 0, pageSize) orelse return Error.OutOfMemory,
-    )));
+    const page = pagealloc(g, null, 0, pageSize) orelse return Error.OutOfMemory;
+    // const page = @as(*lua_Page, @ptrCast(@alignCast(
+    //     (g.frealloc.?)(g.ud, null, 0, pageSize) orelse return Error.OutOfMemory,
+    // )));
 
     // ASAN_POISON_MEMORY_REGION(...); // TODO: ASAN support
 
@@ -325,7 +340,7 @@ fn freepage(L: *lua.State, pageset: ?*?*lua_Page, page: *lua_Page) void {
     }
 
     // so long
-    _ = (g.frealloc.?)(g.ud, @ptrCast(page), @intCast(page.pageSize), 0);
+    _ = pagealloc(g, page, @intCast(page.pageSize), 0);
 }
 
 fn freeclasspage(L: *lua.State, freepageset: [*]?*lua_Page, pageset: ?*?*lua_Page, page: *lua_Page, sizeClass: u8) void {
@@ -385,9 +400,12 @@ fn newblock(L: *lua.State, sizeClass: u8) Error!*anyopaque {
 
 inline fn newgcoblock(L: *lua.State, sizeClass: u8) Error!*anyopaque {
     const g = L.global;
+    const freepages = freegcopages(g);
+    const allpages = allgcopages(g);
+
     const page = g.freegcopages[sizeClass] orelse blk: {
         // slow path: no page in the freelist, allocate a new one
-        break :blk try newclasspage(L, &g.freegcopages, &g.allgcopages, sizeClass, false);
+        break :blk try newclasspage(L, freepages, allpages, sizeClass, false);
     };
 
     std.debug.assert(page.prev == null);
@@ -412,7 +430,7 @@ inline fn newgcoblock(L: *lua.State, sizeClass: u8) Error!*anyopaque {
 
     // if we allocate the last block out of a page, we need to remove it from free list
     if (page.freeList == null and page.freeNext < 0) {
-        g.freegcopages[sizeClass] = page.next;
+        freepages[sizeClass] = page.next;
         if (page.next) |next|
             next.prev = null;
         page.next = null;
@@ -462,16 +480,18 @@ inline fn freegcoblock(L: *lua.State, sizeClass: u8, block: *anyopaque, page: *l
     std.debug.assert(@intFromPtr(block) >= @intFromPtr(&page.data) and @intFromPtr(block) < @intFromPtr(page) + @as(usize, @intCast(page.pageSize)));
 
     const g = L.global;
+    const freepages = freegcopages(g);
+    const allpages = allgcopages(g);
 
     // if the page wasn't in the page free list, it should be now since it got a block!
     if (page.freeList == null and page.freeNext < 0) {
         std.debug.assert(page.prev == null);
         std.debug.assert(page.next == null);
 
-        page.next = g.freegcopages[sizeClass];
+        page.next = freepages[sizeClass];
         if (page.next) |next|
             next.prev = page;
-        g.freegcopages[sizeClass] = page;
+        freepages[sizeClass] = page;
     }
 
     // when separate block metadata is not used, free list link is stored inside the block data itself
@@ -484,7 +504,7 @@ inline fn freegcoblock(L: *lua.State, sizeClass: u8, block: *anyopaque, page: *l
 
     // if it's the last block in the page, we don't need the page
     if (page.busyBlocks == 0)
-        freeclasspage(L, &g.freegcopages, &g.allgcopages, page, sizeClass);
+        freeclasspage(L, freepages, allpages, page, sizeClass);
 }
 
 pub fn Mnew_(L: *lua.State, nsize: usize, memcat: u8) Error!*anyopaque {
@@ -502,7 +522,7 @@ pub fn Mnew_(L: *lua.State, nsize: usize, memcat: u8) Error!*anyopaque {
 
     if (g.cb.onallocate) |onallocate| {
         @branchHint(.unlikely);
-        onallocate(L, block, 0, nsize, memcat, @intFromEnum(lua.Type.All), 0);
+        onallocate(L, block, 0, nsize, memcat, @backingInt(lua.Type.All), 0);
     }
 
     return block;
@@ -542,6 +562,15 @@ pub fn Mnewgco_(L: *lua.State, nsize: usize, memcat: u8, tt: i32, tag: i32) Erro
 }
 pub inline fn Mnewgco(L: *lua.State, comptime T: type, nsize: usize, memcat: u8, tt: i32) !*T {
     return @ptrCast(@alignCast(try Mnewgco_(L, nsize, memcat, tt, 0)));
+}
+
+fn Mnewgcocaged_(L: *lua.State, nsize: usize, memcat: u8, tt: i32, tag: i32) Error!*lstate.GCObject {
+    _ = L;
+    _ = nsize;
+    _ = memcat;
+    _ = tt;
+    _ = tag;
+    @compileError("not implemented");
 }
 
 pub fn Mnewgcofixed_(L: *lua.State, nsize: usize, memcat: u8, tt: i32) Error!*lstate.GCObject {
@@ -600,7 +629,7 @@ pub fn Mfreegco_(L: *lua.State, block: ?*lstate.GCObject, osize: usize, memcat: 
     const oclass = sizeclass(osize);
 
     if (oclass >= 0) {
-        block.?.gch.header.tt = @intFromEnum(lua.Type.Nil);
+        block.?.gch.header.tt = @backingInt(lua.Type.Nil);
 
         freegcoblock(L, @intCast(oclass), @ptrCast(@alignCast(block.?)), page);
     } else {
@@ -615,7 +644,7 @@ pub fn Mfreegco_(L: *lua.State, block: ?*lstate.GCObject, osize: usize, memcat: 
     g.memcatbytes[memcat] -= osize;
 }
 pub inline fn Mfreegco(L: *lua.State, p: *lstate.GCObject, size: usize, memcat: u8, page: *lua_Page) void {
-    std.debug.assert(p.gch.header.tt >= @intFromEnum(lua.Type.String));
+    std.debug.assert(p.gch.header.tt >= @backingInt(lua.Type.String));
     Mfreegco_(L, p, size, memcat, page);
 }
 
@@ -630,12 +659,21 @@ pub fn Mfreegcofixed_(L: *lua.State, block: ?*lstate.GCObject, osize: usize, mem
     const oclass = sizeclass(osize);
     std.debug.assert(oclass >= 0);
 
-    block.?.gch.header.tt = @intFromEnum(lua.Type.Nil);
+    block.?.gch.header.tt = @backingInt(lua.Type.Nil);
 
     freegcoblock(L, @intCast(oclass), @ptrCast(@alignCast(block.?)), page);
 
     g.totalbytes -= osize;
     g.memcatbytes[memcat] -= osize;
+}
+
+fn Mfreegcocaged_(L: *lua.State, block: ?*lstate.GCObject, osize: usize, memcat: u8, page: *lua_Page) void {
+    _ = L;
+    _ = block;
+    _ = osize;
+    _ = memcat;
+    _ = page;
+    @compileError("not implemented");
 }
 
 pub fn Mrealloc_(L: *lua.State, block: ?*anyopaque, osize: usize, nsize: usize, memcat: u8) Error!?*anyopaque {
@@ -683,7 +721,7 @@ pub fn Mrealloc_(L: *lua.State, block: ?*anyopaque, osize: usize, nsize: usize, 
 
     if (g.cb.onallocate) |onallocate| {
         @branchHint(.unlikely);
-        onallocate(L, result.?, osize, nsize, memcat, @intFromEnum(lua.Type.All), 0);
+        onallocate(L, result.?, osize, nsize, memcat, @backingInt(lua.Type.All), 0);
     }
 
     return result;
@@ -744,7 +782,7 @@ pub fn Mvisitpage(
         const gco: *lstate.GCObject = @ptrCast(@alignCast(pos));
 
         // skip memory blocks that are already freed
-        if (gco.gch.header.tt == @intFromEnum(lua.Type.Nil))
+        if (gco.gch.header.tt == @backingInt(lua.Type.Nil))
             continue;
 
         // when true is returned it means that the element was deleted
@@ -767,12 +805,24 @@ pub fn Mvisitgco(
 ) void {
     const g = L.global;
 
-    var curr: ?*lua_Page = g.allgcopages;
-    while (curr) |page| {
-        const next = page.listnext; // block visit might destroy the page
+    {
+        var curr: ?*lua_Page = g.allgcopages;
+        while (curr) |page| {
+            const next = page.listnext; // block visit might destroy the page
 
-        Mvisitpage(page, T, context, visitor);
+            Mvisitpage(page, T, context, visitor);
 
-        curr = next;
+            curr = next;
+        }
+    }
+    {
+        var curr: ?*lua_Page = g.allgcopages_cage;
+        while (curr) |page| {
+            const next = page.listnext; // block visit might destroy the page
+
+            Mvisitpage(page, T, context, visitor);
+
+            curr = next;
+        }
     }
 }

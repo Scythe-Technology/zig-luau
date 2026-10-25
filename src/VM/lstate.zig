@@ -269,6 +269,15 @@ pub const global_State = extern struct {
     /// array with tag-method names
     tmname: [ltm.N]*lobject.TString,
 
+    cagealloc: lua.CageAlloc,
+    cageud: ?*anyopaque,
+    /// cage GCO free pages, per size class
+    freegcopages_cage: [lua.config.SIZECLASSES]?*lmem.lua_Page,
+    /// all cage GCO pages (sweep target)
+    allgcopages_cage: ?*lmem.lua_Page,
+    /// sweep cursor
+    sweepgcopage_cage: ?*lmem.lua_Page,
+
     /// storage for temporary values used in pseudo2addr
     pseudotemp: lobject.TValue,
 
@@ -379,6 +388,9 @@ pub const lua_State = extern struct {
 
     /// when invoked from Luau using NAMECALL, what method do we need to invoke?
     namecall: ?*lobject.TString,
+
+    /// optional table of all the callbacks to run when this thread completes (see coroutine.finally)
+    finalizers: ?*lobject.LuaTable,
 
     userdata: ?*anyopaque,
 

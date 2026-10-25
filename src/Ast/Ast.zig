@@ -1051,6 +1051,9 @@ pub const StatIf = extern struct {
     conditionIsConst: bool = false,
     conditionKeywordLocation: cpp_std.Optional(Location),
 
+    // Location of the `=` in an `if local`/`if const` binding
+    conditionEqualsLocation: cpp_std.Optional(Location),
+
     pub const is = IsFn;
     pub const as = AsCastFn;
     pub const asExpr = AsExprCastFn;
