@@ -2,7 +2,7 @@ const std = @import("std");
 
 const Ast = @import("Ast.zig");
 const Allocator = @import("Allocator.zig");
-const DenseHash2 = @import("../Common/DenseHash2.zig");
+const DenseHash = @import("../Common/DenseHash.zig");
 
 pub const Lexeme = struct {
     pub const Type = enum(c_int) {
@@ -87,7 +87,7 @@ pub const kReserved = [_][:0]const u8{
 };
 
 pub const AstNameTable = extern struct {
-    data: DenseHash2.DenseHashSet2(Entry, EntryHash),
+    data: DenseHash.DenseHashSet(Entry, EntryHash),
     allocator: *Allocator,
 
     const Entry = extern struct {

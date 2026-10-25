@@ -7,7 +7,7 @@ const Cst = @import("Cst.zig");
 const Lexer = @import("Lexer.zig");
 const Location = @import("Location.zig").Location;
 const Allocator = @import("Allocator.zig");
-const DenseHash2 = @import("../Common/DenseHash2.zig");
+const DenseHash = @import("../Common/DenseHash.zig");
 
 pub const ParseError = cpp_std.Exception(extern struct {
     location: Location,
@@ -38,7 +38,7 @@ pub const ParseOptions = extern struct {
     noErrorLimit: bool = false,
 
     pub const FragmentParseResumeSettings = extern struct {
-        localMap: DenseHash2.DenseHashMap2(Ast.Name, *Ast.Local, struct {}) = .empty,
+        localMap: DenseHash.DenseHashMap(Ast.Name, *Ast.Local, struct {}) = .empty,
         localStack: cpp_std.Vector(*Ast.Local) = undefined,
         resumePosition: Location.Position,
     };
@@ -63,7 +63,7 @@ pub fn parseType(source: []const u8, nameTable: *Lexer.AstNameTable, allocator: 
     return zig_Luau_Ast_Parser_parseType(source.ptr, source.len, nameTable, allocator, &options);
 }
 
-pub const CstNodeMap = DenseHash2.DenseHashMap2(*Ast.Node, *Cst.Node, struct {});
+pub const CstNodeMap = DenseHash.DenseHashMap(*Ast.Node, *Cst.Node, struct {});
 
 pub const ParseResult = extern struct {
     root: *Ast.StatBlock,
