@@ -188,6 +188,66 @@ fn mainposition(t: *const LuaTable, key: *const TValue) [*]LuaNode {
     };
 }
 
+/// Marker for template dispatch into a generic GCObject* version of a function (not for LUA_TSTRING!)
+const LUA_TGCO = -1;
+
+fn HashKey(comptime Tag: lua.Type) type {
+    return switch (Tag) {
+        .Boolean => bool,
+        .LightUserdata => ?*const anyopaque,
+        .Number => f64,
+        .Integer => i64,
+        .Vector => []const lua.config.VECTOR_TYPE,
+        .String => *lobject.TString,
+        @fromBackingInt(LUA_TGCO) => *lstate.GCObject,
+        else => @compileError("bad table key tag"),
+    };
+}
+
+// For static mainposition dispatch on a known tag (or GCO)
+fn mainpositiontagged(comptime Tag: lua.Type, t: *const LuaTable, key: HashKey(Tag)) *LuaNode {
+    return switch (comptime Tag) {
+        .Boolean => @ptrCast(hashboolean(t, key)),
+        .LightUserdata => @ptrCast(hashpointer(t, key)),
+        .Number => @ptrCast(hashnum(t, key)),
+        .Integer => @ptrCast(hashint(t, key)),
+        .Vector => @ptrCast(hashvec(t, key)),
+        .String => @ptrCast(hashstr(t, key)),
+        @fromBackingInt(LUA_TGCO) => @ptrCast(hashpointer(t, @ptrCast(key))),
+        else => @compileError("bad table key tag"),
+    };
+}
+
+// TODO: remove with FFlagLuauTableFindImprovement
+// For static luaO_rawequalKey dispatch on a known tag (or GCO). Only used specializations are implemented
+fn rawequalkeyvalue(comptime Tag: lua.Type, t1: *const lobject.TKey, key: HashKey(Tag)) bool {
+    return switch (comptime Tag) {
+        .Boolean => t1.bvalue() == key,
+        .Number => t1.nvalue() == key,
+        .Integer => t1.lvalue() == key,
+        .Vector => lnumutils.iveceq(t1.vvalue(), key),
+        @fromBackingInt(LUA_TGCO) => t1.gcvalue() == key,
+        else => @compileError("bad table key tag"),
+    };
+}
+
+// Lookup a node in the main position of the key or look through the node chain
+fn chainsearchtagged(comptime Tag: lua.Type, t: *const LuaTable, key: HashKey(Tag)) *const TValue {
+    var n = mainpositiontagged(Tag, t, key);
+
+    // check whether `key' is somewhere in the chain
+    while (true) {
+        if (n.gkey().typeOf() == Tag and rawequalkeyvalue(Tag, n.gkey(), key))
+            return n.gval();
+
+        if (n.gnext() == 0)
+            break;
+        n = n.add_num(n.gnext());
+    }
+
+    return lobject.Onilobject;
+}
+
 ///
 /// returns the index for `key` if `key` is an appropriate key to live in
 /// the array part of the table, -1 otherwise.
@@ -287,6 +347,7 @@ fn numusehash(t: *const LuaTable, nums: []u32, pnasize: *usize) u32 {
 fn hashslotsused(t: *const LuaTable) u32 {
     var totaluse: u32 = 0;
     var i: usize = lobject.sizenode(t);
+
     while (i > 0) : (i -= 1) {
         const n: *LuaNode = @ptrCast(t.gnode(i - 1));
         if (!n.gval().ttisnil())
@@ -328,84 +389,135 @@ fn setnodevector(L: *lua.State, t: *LuaTable, newsize: usize) Error!void {
     t.bound.lastfree = @intCast(size); // all positions are free
 }
 
-fn arrayornewkey(L: *lua.State, t: *LuaTable, key: *const TValue) Error!*TValue {
-    if (key.ttisnumber()) {
-        const n = key.nvalue();
-        const k = lnumutils.inum2int(n);
-        if (@as(f64, @floatFromInt(k)) == n and k - 1 < t.sizearray)
-            return &t.array.?[@intCast(k - 1)];
-    }
-
-    return newkey(L, t, key);
-}
-
-fn resize(L: *lua.State, t: *LuaTable, nasize: usize, nhsize: usize) Error!void {
+fn resize(L: *lua.State, t: *LuaTable, nasize_u: usize, nhsize_u: usize) Error!void {
     std.debug.assert(!lobject.hasmetacache(t));
 
-    if (nasize > MAXSIZE or nhsize > MAXSIZE)
+    if (nasize_u > MAXSIZE or nhsize_u > MAXSIZE)
         return error.@"table overflow";
 
-    const oldasize: i32 = t.sizearray;
-    const oldhsize: u8 = t.lsizenode;
-    const nold = t.node; // save old hash ...
-    if (nasize > oldasize) // array part must grow?
-        try setarrayvector(L, t, nasize);
+    const nasize: i32 = @intCast(nasize_u);
+    var nhsize: u32 = @intCast(nhsize_u);
 
-    // create new hash part with appropriate size
-    try setnodevector(L, t, nhsize);
-    // used for the migration check at the end
-    const nnew = t.node;
+    // check for node size bit mask overflow and round up requested hash size
+    var lsizenode: u8 = 0;
 
-    if (nasize < oldasize) { // array part must shrink?
-        t.sizearray = @intCast(nasize);
-        // re-insert elements from vanishing slice
-        var i: usize = nasize;
-        while (i < oldasize) : (i += 1) {
-            if (!t.array.?[i].ttisnil()) {
-                var ok: TValue = undefined;
-                ok.setnvalue(@floatFromInt(i + 1));
-                (try newkey(L, t, &ok)).setobj(L, &t.array.?[i]);
-            }
-        }
-        // shrink array
-        t.array = try lmem.Mreallocarray(L, TValue, t.array, @intCast(oldasize), nasize, t.header.memcat);
+    if (nhsize != 0) {
+        const lg = lobject.ceillog2(nhsize);
+        if (lg > MAXBITS)
+            return error.@"table overflow";
+
+        lsizenode = @intCast(lg);
+        nhsize = @intCast(lobject.twoto(@intCast(lsizenode)));
     }
 
-    // used for the migration check at the end
-    const anew = t.array;
+    const oldsizearray = t.sizearray;
+    const oldsizenode = lobject.sizenode(t);
+    const oldarray = t.array;
+    const oldnode = t.node;
+
+    var newarray = t.array;
+
+    if (nasize != oldsizearray) {
+        if (nasize == 0)
+            newarray = null
+        else
+            newarray = try lmem.Mnewarray(L, TValue, @intCast(nasize), t.header.memcat);
+
+        if (nasize < oldsizearray) {
+            // copy elements from remaining slice
+            if (nasize != 0)
+                @memcpy(newarray.?[0..@intCast(nasize)], oldarray.?[0..@intCast(nasize)]);
+        } else {
+            // copy old elements
+            if (oldsizearray != 0)
+                @memcpy(newarray.?[0..@intCast(oldsizearray)], oldarray.?[0..@intCast(oldsizearray)]);
+
+            // clear new elements
+            var i: i32 = oldsizearray;
+            while (i < nasize) : (i += 1)
+                newarray.?[@intCast(i)].setnilvalue();
+        }
+    }
+
+    var newnode: [*]LuaNode = @ptrCast(@alignCast(@constCast(dummynode)));
+
+    if (nhsize != 0) {
+        // if we allocated a new array part, we have to be careful to with hash part allocation failure
+        if (oldarray != newarray) {
+            errdefer if (nasize != 0) lmem.Mfreearray(L, TValue, newarray, @intCast(nasize), t.header.memcat);
+            newnode = try lmem.Mnewarray(L, LuaNode, nhsize, t.header.memcat);
+        } else {
+            newnode = try lmem.Mnewarray(L, LuaNode, nhsize, t.header.memcat);
+        }
+
+        for (0..nhsize) |i| {
+            const n: *LuaNode = @ptrCast(newnode + i);
+            n.key.pi.next = 0;
+            n.gkey().setnilvalue();
+            n.gval().setnilvalue();
+        }
+    }
+
+    // update table structure now that both allocations succeeded
+    t.array = newarray;
+    t.sizearray = nasize;
+
+    t.node = newnode;
+    t.lsizenode = lsizenode;
+    t.nodemask8 = @truncate((@as(usize, 1) << @as(if (@sizeOf(usize) == 8) u6 else u5, @intCast(lsizenode))) - 1);
+    t.bound.lastfree = @intCast(nhsize); // all positions are free
+
+    // re-insert elements from vanishing array slice
+    var i: i32 = nasize;
+    while (i < oldsizearray) : (i += 1) {
+        if (!oldarray.?[@intCast(i)].ttisnil()) {
+            var ok: TValue = undefined;
+            ok.setnvalue(@floatFromInt(i + 1));
+            // integer number keys from a shrinking slice cannot get into the new array part
+            reinsertkey(L, t, &ok, false).setobj(L, &oldarray.?[@intCast(i)]);
+        }
+    }
 
     // re-insert elements from hash part
-    var i: usize = lobject.twoto(@truncate(oldhsize));
-    while (i > 0) : (i -= 1) {
-        const old: *LuaNode = @ptrCast(nold + i - 1);
+    var n: usize = oldsizenode;
+    while (n > 0) : (n -= 1) {
+        const old: *LuaNode = @ptrCast(oldnode + (n - 1));
         if (!old.gval().ttisnil()) {
             var ok: TValue = undefined;
             lobject.getnodekey(L, &ok, old);
-            (try arrayornewkey(L, t, &ok)).setobj(L, old.gval());
+            reinsertkey(L, t, &ok, true).setobj(L, old.gval());
         }
     }
 
     // make sure we haven't recursively rehashed during element migration
-    std.debug.assert(nnew == t.node);
-    std.debug.assert(anew == t.array);
+    std.debug.assert(newnode == t.node);
+    std.debug.assert(newarray == t.array);
 
-    if (@as(*LuaNode, @ptrCast(nold)) != dummynode)
-        lmem.Mfreearray(L, LuaNode, nold, lobject.twoto(@truncate(oldhsize)), t.header.memcat); // free old array
+    // free old array
+    if (nasize != oldsizearray and oldsizearray != 0)
+        lmem.Mfreearray(L, TValue, oldarray, @intCast(oldsizearray), t.header.memcat);
+
+    // free old node
+    if (@as(*LuaNode, @ptrCast(oldnode)) != dummynode)
+        lmem.Mfreearray(L, LuaNode, oldnode, oldsizenode, t.header.memcat);
 }
 
-fn adjustasize(t: *LuaTable, size: usize, ek: ?*const TValue) usize {
+// When we already know that new key is an integer number
+fn adjustasize(t: *LuaTable, size: usize, extraintkey: i32) usize {
     const tbound: bool = @as(*LuaNode, @ptrCast(t.node)) != dummynode or size < t.sizearray;
-    const ekindex: i32 = if (ek != null and ek.?.ttisnumber()) arrayindex(ek.?.nvalue()) else -1;
     // move the array size up until the boundary is guaranteed to be inside the array part
     var adjusted_size = size;
-    while (adjusted_size + 1 == ekindex or (tbound and !Hgetnum(t, @intCast(adjusted_size + 1)).ttisnil()))
+    while (adjusted_size + 1 == extraintkey or (tbound and !Hgetnum(t, @intCast(adjusted_size + 1)).ttisnil()))
         adjusted_size += 1;
     return adjusted_size;
 }
 
 pub fn Hresizearray(L: *lua.State, t: *LuaTable, nasize: usize) Error!void {
+    if (nasize > MAXSIZE)
+        return error.@"table overflow";
+
     const nsize = if (@as(*LuaNode, @ptrCast(t.node)) == dummynode) 0 else lobject.sizenode(t);
-    const asize = adjustasize(t, nasize, null);
+    const asize = adjustasize(t, nasize, -1);
     try resize(L, t, asize, nsize);
 }
 
@@ -413,30 +525,34 @@ pub fn Hresizehash(L: *lua.State, t: *LuaTable, nhsize: usize) Error!void {
     try resize(L, t, @intCast(t.sizearray), nhsize);
 }
 
-fn isArrayIntKey(key: *const TValue) bool {
-    if (!key.ttisnumber())
-        return false;
-    const n = key.nvalue();
-    const k = lnumutils.inum2int(n);
-    return @as(f64, @floatFromInt(k)) == n;
-}
-
-fn rehash(L: *lua.State, t: *LuaTable, ek: *const TValue) Error!void {
+fn rehash(comptime IsIntKey: bool, L: *lua.State, t: *LuaTable, newintkey: i32) Error!void {
     // insertions of keys that are not integer numbers do not have to rehash the array part
     // this can mean that such key insert will not cause the sparse array/node rebalance, but this is actually less surprising
-    if (!isArrayIntKey(ek)) {
-        try resize(L, t, @intCast(t.sizearray), hashslotsused(t) + 1);
+    if (comptime !IsIntKey) {
+        const nh: usize = @as(usize, hashslotsused(t)) + 1;
+        try resize(L, t, @intCast(t.sizearray), nh);
         return;
     }
 
+    // nums[i] = number of keys between 2^(i-1) and 2^i
     var nums: [MAXBITS + 1]u32 = @splat(0);
-    var nasize = numusearray(t, nums[0..]); // count keys in array part
-    var totaluse: usize = nasize; // all those keys are integer keys
-    totaluse += numusehash(t, nums[0..], &nasize); // count keys in hash part
+    var nasize: usize = 0;
+    var totaluse: usize = 0;
+
+    if (t.sizearray != 0) {
+        nasize = numusearray(t, nums[0..]); // count keys in array part
+        totaluse = nasize; // all those keys are integer keys
+    }
+
+    if (@as(*LuaNode, @ptrCast(t.node)) != dummynode)
+        totaluse += numusehash(t, nums[0..], &nasize); // count keys in hash part
 
     // count extra key
-    if (ek.ttisnumber())
-        nasize += countint(ek.nvalue(), nums[0..]);
+    if (0 < newintkey and newintkey <= MAXSIZE) {
+        nums[@intCast(lobject.ceillog2(@intCast(newintkey)))] += 1;
+        nasize += 1;
+    }
+
     totaluse += 1;
 
     // compute new size for array part
@@ -444,7 +560,7 @@ fn rehash(L: *lua.State, t: *LuaTable, ek: *const TValue) Error!void {
     var nh = totaluse - na;
 
     // enforce the boundary invariant; for performance, only do hash lookups if we must
-    const nadjusted = adjustasize(t, nasize, ek);
+    const nadjusted = adjustasize(t, nasize, newintkey);
 
     // count how many extra elements belong to array part instead of hash part
     const aextra = nadjusted - nasize;
@@ -458,7 +574,7 @@ fn rehash(L: *lua.State, t: *LuaTable, ek: *const TValue) Error!void {
         nasize = nadjusted + aextra;
 
         // since the size was changed, it's again important to enforce the boundary invariant at the new size
-        nasize = adjustasize(t, nasize, ek);
+        nasize = adjustasize(t, nasize, newintkey);
     }
 
     // resize the table to new computed sizes
@@ -490,76 +606,12 @@ pub fn Hfree(L: *lua.State, t: *LuaTable, page: *lmem.lua_Page) void {
         lmem.Mfreearray(L, LuaNode, t.node, lobject.sizenode(t), t.header.memcat);
     if (t.array) |arr| {
         if (lobject.hasmetacache(t)) {
-            const base: [*]TValue = @ptrFromInt(@intFromPtr(arr) - ltm.N * @sizeOf(TValue));
-            lmem.Mfreearray(L, TValue, base, @as(usize, @intCast(t.sizearray)) + ltm.N, t.header.memcat);
+            lmem.Mfreearray(L, TValue, arr - ltm.N, @as(usize, @intCast(t.sizearray)) + ltm.N, t.header.memcat);
         } else {
             lmem.Mfreearray(L, TValue, arr, @intCast(t.sizearray), t.header.memcat);
         }
     }
     lmem.Mfreegco(L, t.obj2gco(), @sizeOf(LuaTable), t.header.memcat, page);
-}
-
-pub fn Hgetreadonly(t: *const LuaTable) bool {
-    return t.readonly != 0;
-}
-
-pub fn Hsetreadonly(L: *lua.State, t: *LuaTable, readonly: bool) Error!void {
-    if (Hgetreadonly(t) == readonly)
-        return;
-
-    if (readonly) {
-        t.readonly = 1;
-
-        // check if this table is likely to be used as a metatable
-        if (@as(*const LuaNode, @ptrCast(t.node)) == dummynode)
-            return;
-
-        // collect all metamethods
-        var metamethods: [ltm.N]TValue = undefined;
-        var found = false;
-        var tmcache: u8 = 0;
-
-        for (0..ltm.N) |i| {
-            const val = Hgetstr(t, L.global.tmname[i]);
-            metamethods[ltm.N - (i + 1)].setobj(L, val); // metamethods will be stored in reverse
-            const has_value = !val.ttisnil();
-            found = found or has_value;
-            if (i <= @backingInt(ltm.TMS.TM_EQ) and !has_value)
-                tmcache |= @as(u8, 1) << @intCast(i);
-        }
-
-        // update the metamethod presence cache
-        t.tmcache = tmcache;
-
-        // if there are metamethods, place the metamethod cache before the array elements
-        if (found) {
-            const size: usize = @intCast(t.sizearray);
-            const array = (try lmem.Mreallocarray(L, TValue, t.array, size, size + ltm.N, t.header.memcat)).?;
-            const logical: [*]TValue = array + (ltm.N * @sizeOf(TValue));
-            if (size != 0) {
-                std.mem.copyBackwards(TValue, logical[0..size], array[0..size]);
-            }
-            @memcpy(array[0..ltm.N], metamethods[0..]);
-            t.array = logical;
-            t.readonly |= 2;
-        }
-    } else {
-        // if we have a metamethod cache, transform the array part back to the original layout (or delete when sizearray is 0)
-        if (lobject.hasmetacache(t)) {
-            const old_array = t.array.?;
-            const size: usize = @intCast(t.sizearray);
-            var new_array: ?[*]TValue = null;
-
-            if (size != 0) {
-                new_array = try lmem.Mnewarray(L, TValue, size, t.header.memcat);
-                @memcpy(new_array.?[0..size], old_array[0..size]);
-            }
-
-            t.array = new_array;
-            lmem.Mfreearray(L, TValue, old_array - (ltm.N * @sizeOf(TValue)), size + ltm.N, t.header.memcat);
-        }
-        t.readonly = 0;
-    }
 }
 
 fn getfreepos(t: *LuaTable) ?*LuaNode {
@@ -573,56 +625,111 @@ fn getfreepos(t: *LuaTable) ?*LuaNode {
     return null; // could not find a free place
 }
 
-//
+fn newcollidingkey(L: *lua.State, t: *LuaTable, mp: *LuaNode, n: *LuaNode) *LuaNode {
+    std.debug.assert(n != dummynode);
+
+    var mk: TValue = undefined;
+    lobject.getnodekey(L, &mk, mp);
+    var othern: *LuaNode = @ptrCast(mainposition(t, &mk));
+
+    // is colliding node out of its main position?
+    if (othern != mp) {
+        // yes, move colliding node into free position
+        while (othern.add_num(othern.gnext()) != mp)
+            othern = othern.add_num(othern.gnext()); // find previous
+
+        othern.key.pi.next = @truncate(n.sub(othern)); // redo the chain with `n' in place of `mp'
+        n.* = mp.*; // copy colliding node into free pos. (mp->next also goes)
+
+        if (mp.gnext() != 0) {
+            n.key.pi.next += @truncate(mp.sub(n)); // correct 'next'
+            mp.key.pi.next = 0; // now 'mp' is free
+        }
+
+        mp.gval().setnilvalue();
+        return mp;
+    } else {
+        // colliding node is in its own main position
+        // new node will go into free position
+        if (mp.gnext() != 0)
+            n.key.pi.next = @truncate(mp.add_num(mp.gnext()).sub(n)) // chain new position
+        else
+            std.debug.assert(n.gnext() == 0);
+        mp.key.pi.next = @truncate(n.sub(mp));
+        return n;
+    }
+}
+
 // inserts a new key into a hash table; first, check whether key's main
 // position is free. If not, check whether colliding node is in its main
 // position or not: if it is not, move colliding node to an empty place and
 // put new key in its main position; otherwise (colliding node is in its main
 // position), new key goes to an empty position.
-//
-fn newkey(L: *lua.State, t: *LuaTable, key: *const TValue) Error!*TValue {
+fn newkeytagged(
+    comptime Tag: lua.Type,
+    comptime IsIntKey: bool,
+    L: *lua.State,
+    t: *LuaTable,
+    key: *const TValue,
+    hashkey: HashKey(Tag),
+    newintkey: i32,
+) Error!*TValue {
     // enforce boundary invariant
-    if (key.ttisnumber() and key.nvalue() == @as(f64, @floatFromInt(t.sizearray + 1))) {
-        try rehash(L, t, key); // grow table
+    if (comptime IsIntKey) {
+        if (newintkey == t.sizearray + 1) {
+            try rehash(IsIntKey, L, t, newintkey); // grow table
 
-        // after rehash, numeric keys might be located in the new array part, but won't be found in the node part
-        return arrayornewkey(L, t, key);
+            if (@as(u32, @bitCast(newintkey)) -% 1 < @as(u32, @bitCast(t.sizearray)))
+                return &t.array.?[@intCast(newintkey - 1)];
+
+            // after rehash, numeric keys might be located in the new array part, but won't be found in the node part
+            return newkeytagged(Tag, IsIntKey, L, t, key, hashkey, newintkey);
+        }
+    }
+
+    var mp = mainpositiontagged(Tag, t, hashkey);
+
+    if (!mp.gval().ttisnil() or mp == dummynode) {
+        // get a free place
+        if (getfreepos(t)) |n| {
+            mp = newcollidingkey(L, t, mp, n);
+        } else {
+            // cannot find a free place?
+            try rehash(IsIntKey, L, t, newintkey); // grow table
+
+            if (comptime IsIntKey) {
+                if (@as(u32, @bitCast(newintkey)) -% 1 < @as(u32, @bitCast(t.sizearray)))
+                    return &t.array.?[@intCast(newintkey - 1)];
+            }
+
+            // after rehash, numeric keys might be located in the new array part, but won't be found in the node part
+            return newkeytagged(Tag, IsIntKey, L, t, key, hashkey, newintkey);
+        }
+    }
+
+    lobject.setnodekey(L, mp, key);
+
+    if (comptime @backingInt(Tag) >= @backingInt(lua.Type.String) or @backingInt(Tag) == LUA_TGCO)
+        lgc.Cbarriert(L, t, key);
+
+    std.debug.assert(mp.gval().ttisnil());
+    return mp.gval();
+}
+
+// for the table rehash path, we cannot trigger nested reshashing
+fn reinsertkey(L: *lua.State, t: *LuaTable, key: *const TValue, checkarraypart: bool) *TValue {
+    if (checkarraypart and key.ttisnumber()) {
+        const n = key.nvalue();
+        const k = lnumutils.inum2int(n);
+        if (@as(f64, @floatFromInt(k)) == n and @as(u32, @bitCast(k)) -% 1 < @as(u32, @bitCast(t.sizearray)))
+            return &t.array.?[@intCast(k - 1)];
     }
 
     var mp: *LuaNode = @ptrCast(mainposition(t, key));
-    if (!mp.gval().ttisnil() or mp == dummynode) {
-        const n = getfreepos(t) orelse {
-            // cannot find a free place?
-            try rehash(L, t, key); // grow table
 
-            // after rehash, numeric keys might be located in the new array part, but won't be found in the node part
-            return arrayornewkey(L, t, key);
-        }; // get a free place
-        std.debug.assert(@as(*LuaNode, @ptrCast(n)) != dummynode);
-        var mk: TValue = undefined;
-        lobject.getnodekey(L, &mk, mp);
-        var othern: *LuaNode = @ptrCast(mainposition(t, &mk));
-        if (othern != mp) { // is colliding node out of its main position?
-            // yes; move colliding node into free position
-            while (othern.add_num(othern.gnext()) != mp)
-                othern = othern.add_num(othern.gnext()); // find previous
-            othern.key.pi.next = @truncate(n.sub(othern)); // redo the chain with `n' in place of `mp'
-            n.* = mp.*; // copy colliding node into free pos. (mp->next also goes)
-            if (mp.gnext() != 0) {
-                n.key.pi.next += @truncate(mp.sub(n)); // correct 'next'
-                mp.key.pi.next = 0; // now 'mp' is free
-            }
-            mp.gval().setnilvalue();
-        } else { // colliding node is in its own main position
-            // new node will go into free position
-            if (mp.gnext() != 0)
-                n.key.pi.next = @truncate((mp.add_num(mp.gnext())).sub(n)) // chain new position
-            else
-                std.debug.assert(n.gnext() == 0);
-            mp.key.pi.next = @truncate(n.sub(mp));
-            mp = n;
-        }
-    }
+    if (!mp.gval().ttisnil() or mp == dummynode)
+        mp = newcollidingkey(L, t, mp, getfreepos(t).?);
+
     lobject.setnodekey(L, mp, key);
     lgc.Cbarriert(L, t, key);
     std.debug.assert(mp.gval().ttisnil());
@@ -634,8 +741,8 @@ fn newkey(L: *lua.State, t: *LuaTable, key: *const TValue) Error!*TValue {
 //
 pub fn Hgetnum(t: *LuaTable, key: i32) *const TValue {
     // (1 <= key && key <= t->sizearray)
-    if (@as(u32, @intCast(key - 1)) < @as(u32, @intCast(t.sizearray)))
-        return &t.array.?[@as(u32, @intCast(key - 1))]
+    if (@as(u32, @bitCast(key)) -% 1 < @as(u32, @bitCast(t.sizearray)))
+        return &t.array.?[@intCast(key - 1)]
     else if (@as(*LuaNode, @ptrCast(t.node)) != dummynode) {
         // hash fallback
         const nk: f64 = @floatFromInt(key);
@@ -663,27 +770,38 @@ pub fn Hgetstr(t: *LuaTable, key: *lobject.TString) *const TValue {
     return lobject.Onilobject;
 }
 
+// search function for lightuserdata
+pub fn Hgetp(t: *LuaTable, key: ?*anyopaque, tag: c_int) *const TValue {
+    var n: *LuaNode = @ptrCast(hashpointer(t, key));
+    while (true) { // check whether `key' is somewhere in the chain
+        const nk = n.gkey();
+        if (nk.ttislightuserdata() and nk.pvalue() == key and nk.lightuserdatatag() == tag)
+            return n.gval(); // that's it
+        if (n.gnext() == 0)
+            break;
+        n = n.add_num(n.gnext());
+    }
+    return lobject.Onilobject;
+}
+
 pub fn Hget(t: *LuaTable, key: *const TValue) *const TValue {
     switch (key.typeOf()) {
         .Nil => return lobject.Onilobject,
-        .String => return Hgetstr(t, key.tsvalue()),
+        .Boolean => return chainsearchtagged(.Boolean, t, key.bvalue()),
+        .LightUserdata => return Hgetp(t, key.pvalue(), key.lightuserdatatag()), // special search function with tag comparison
         .Number => {
-            const k = lnumutils.inum2int(key.nvalue());
-            if (@as(f64, @floatFromInt(k)) == key.nvalue()) // index is int?
+            const n = key.nvalue();
+            const k = lnumutils.inum2int(n);
+            if (@as(f64, @floatFromInt(k)) == n) // index is int?
                 return Hgetnum(t, k); // use specialized version
-            // else go through
+
+            return chainsearchtagged(.Number, t, n);
         },
-        else => {},
+        .Integer => return chainsearchtagged(.Integer, t, key.lvalue()),
+        .Vector => return chainsearchtagged(.Vector, t, key.vvalue()),
+        .String => return Hgetstr(t, key.tsvalue()),
+        else => return chainsearchtagged(@fromBackingInt(LUA_TGCO), t, key.gcvalue()),
     }
-    var n = mainposition(t, key);
-    while (true) { // check whether `key' is somewhere in the chain
-        if (lobject.OrawequalKey(n[0].gkey(), key))
-            return n[0].gval(); // that's it
-        if (n[0].gnext() == 0)
-            break;
-        n = @ptrCast(n[0].add_num(n[0].gnext()));
-    }
-    return lobject.Onilobject; // not found
 }
 
 pub fn Hset(L: *lua.State, t: *LuaTable, key: *const TValue) Error!*TValue {
@@ -696,27 +814,46 @@ pub fn Hset(L: *lua.State, t: *LuaTable, key: *const TValue) Error!*TValue {
 }
 
 pub fn Hnewkey(L: *lua.State, t: *LuaTable, key: *const TValue) Error!*TValue {
-    if (key.ttisnil())
-        return error.@"table index is nil";
-    if (key.ttisnumber() and lnumutils.inumisnan(key.nvalue()))
-        return error.@"table index is nan";
-    if (key.ttisvector() and lnumutils.ivecisnan(key.vvalue()))
-        return error.@"table index contains nan";
-    return newkey(L, t, key);
+    switch (key.typeOf()) {
+        .Nil => return error.@"table index is nil",
+        .Boolean => return newkeytagged(.Boolean, false, L, t, key, key.bvalue(), -1),
+        .LightUserdata => return newkeytagged(.LightUserdata, false, L, t, key, key.pvalue(), -1),
+        .Number => {
+            const n = key.nvalue();
+            if (lnumutils.inumisnan(n))
+                return error.@"table index is nan";
+
+            const k = lnumutils.inum2int(n);
+            if (@as(f64, @floatFromInt(k)) == n)
+                return newkeytagged(.Number, true, L, t, key, n, k);
+
+            return newkeytagged(.Number, false, L, t, key, n, -1);
+        },
+        .Integer => return newkeytagged(.Integer, false, L, t, key, key.lvalue(), -1),
+        .Vector => {
+            if (lnumutils.ivecisnan(key.vvalue()))
+                return error.@"table index contains nan";
+
+            return newkeytagged(.Vector, false, L, t, key, key.vvalue(), -1);
+        },
+        .String => return newkeytagged(.String, false, L, t, key, key.tsvalue(), -1),
+        else => return newkeytagged(@fromBackingInt(LUA_TGCO), false, L, t, key, key.gcvalue(), -1),
+    }
 }
 
 pub fn Hsetnum(L: *lua.State, t: *LuaTable, key: i32) Error!*TValue {
     // (1 <= key && key <= t->sizearray)
-    if (key - 1 < t.sizearray)
+    if (@as(u32, @bitCast(key)) -% 1 < @as(u32, @bitCast(t.sizearray)))
         return &t.array.?[@intCast(key - 1)];
     // hash fallback
     const p = Hgetnum(t, key);
     if (p != lobject.Onilobject)
         return @constCast(p)
     else {
+        const n: f64 = @floatFromInt(key);
         var k: TValue = undefined;
-        k.setnvalue(@floatFromInt(key));
-        return newkey(L, t, &k);
+        k.setnvalue(n);
+        return newkeytagged(.Number, true, L, t, &k, n, key);
     }
 }
 
@@ -728,7 +865,18 @@ pub fn Hsetstr(L: *lua.State, t: *LuaTable, key: *lobject.TString) Error!*TValue
     else {
         var k: TValue = undefined;
         k.setsvalue(L, key);
-        return newkey(L, t, &k);
+        return newkeytagged(.String, false, L, t, &k, key, -1);
+    }
+}
+
+pub fn Hsetp(L: *lua.State, t: *LuaTable, key: ?*anyopaque, tag: c_int) Error!*TValue {
+    const p = Hgetp(t, key, tag);
+    if (p != lobject.Onilobject)
+        return @constCast(p)
+    else {
+        var k: TValue = undefined;
+        k.setpvalue(key, @intCast(tag));
+        return newkeytagged(.LightUserdata, false, L, t, &k, key, -1);
     }
 }
 
@@ -835,4 +983,75 @@ pub fn Hclear(tt: *LuaTable) void {
 
     // back to empty -> no tag methods present
     tt.tmcache = ~@as(u8, 0);
+}
+
+pub fn Hsetreadonly(L: *lua.State, t: *LuaTable, readonly: bool) Error!void {
+    if (Hgetreadonly(t) == readonly)
+        return;
+
+    if (readonly) {
+        t.readonly = 1;
+
+        // check if this table is likely to be used as a metatable
+        if (@as(*const LuaNode, @ptrCast(t.node)) == dummynode)
+            return;
+
+        // collect all metamethods
+        var metamethods: [ltm.N]TValue = undefined;
+        var found = false;
+        var tmcache: u8 = 0;
+
+        for (0..ltm.N) |i| {
+            const val = Hgetstr(t, L.global.tmname[i]);
+            metamethods[ltm.N - (i + 1)].setobj(L, val); // metamethods will be stored in reverse
+            const has_value = !val.ttisnil();
+            found = found or has_value;
+            if (i <= @backingInt(ltm.TMS.TM_EQ) and !has_value)
+                tmcache |= @as(u8, 1) << @intCast(i);
+        }
+
+        // update the metamethod presence cache
+        t.tmcache = tmcache;
+
+        // if there are metamethods, place the metamethod cache before the array elements
+        if (found) jmp: {
+            const size: usize = @intCast(t.sizearray);
+            // if allocation fails, the optimization is skipped instead of erroring as an error might be unexpected from a table freeze
+            const newarray = lmem.Mnewarray(L, TValue, size + ltm.N, t.header.memcat) catch |err| switch (err) {
+                error.OutOfMemory => break :jmp,
+                else => return err,
+            };
+            const oldarray = t.array;
+
+            if (size != 0)
+                @memcpy((newarray + ltm.N)[0..size], oldarray.?[0..size]);
+
+            @memcpy(newarray[0..ltm.N], &metamethods);
+            t.array = newarray + ltm.N;
+            t.readonly |= 2;
+
+            if (size != 0)
+                lmem.Mfreearray(L, TValue, oldarray, size, t.header.memcat);
+        }
+    } else {
+        // if we have a metamethod cache, transform the array part back to the original layout (or delete when sizearray is 0)
+        if (lobject.hasmetacache(t)) {
+            const old_array = t.array.?;
+            const size: usize = @intCast(t.sizearray);
+            var new_array: ?[*]TValue = null;
+
+            if (size != 0) {
+                new_array = try lmem.Mnewarray(L, TValue, size, t.header.memcat);
+                @memcpy(new_array.?[0..size], old_array[0..size]);
+            }
+
+            t.array = new_array;
+            lmem.Mfreearray(L, TValue, old_array - ltm.N, size + ltm.N, t.header.memcat);
+        }
+        t.readonly = 0;
+    }
+}
+
+pub fn Hgetreadonly(t: *const LuaTable) bool {
+    return t.readonly != 0;
 }
