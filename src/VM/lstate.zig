@@ -617,7 +617,8 @@ pub const lua_State = extern struct {
 
     // lapi
     pub const Atoobject = lapi.Atoobject;
-    pub const Apushobject = lapi.Apushobject;
+    pub const Apushvalue = lapi.Apushvalue;
+    pub const Apushclass = lapi.Apushclass;
 
     // laux
     pub const LargerrorL = laux.LargerrorL;
