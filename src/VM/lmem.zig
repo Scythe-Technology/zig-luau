@@ -270,9 +270,6 @@ fn newpage(L: *lua.State, pageset: ?*?*lua_Page, pageSize: usize, blockSize: c_i
     std.debug.assert(pageSize - @offsetOf(lua_Page, "data") >= blockSize * blockCount);
 
     const page = pagealloc(g, null, 0, pageSize) orelse return Error.OutOfMemory;
-    // const page = @as(*lua_Page, @ptrCast(@alignCast(
-    //     (g.frealloc.?)(g.ud, null, 0, pageSize) orelse return Error.OutOfMemory,
-    // )));
 
     // ASAN_POISON_MEMORY_REGION(...); // TODO: ASAN support
 

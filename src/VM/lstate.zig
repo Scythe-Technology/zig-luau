@@ -842,26 +842,6 @@ fn f_luaopen(L: *lua_State) Errorset.Table!void {
     g.GCthreshold = 4 * g.totalbytes;
 }
 
-fn preinit_state(L: *lua_State, g: *global_State) void {
-    L.global = g;
-    L.stack = undefined; // TODO: null
-    L.stacksize = 0;
-    L.gt = null;
-    L.openupval = null;
-    L.size_ci = 0;
-    L.nCcalls = 0;
-    L.baseCcalls = 0;
-    L.curr_status = 0;
-    L.base_ci = null;
-    L.ci = null;
-    L.namecall = null;
-    L.cachedslot = 0;
-    L.singlestep_on = false;
-    L.isactive = false;
-    L.activememcat = 0;
-    L.userdata = null;
-}
-
 fn close_state(L: *lua_State) void {
     const g = L.global;
     lfunc.Fclose(L, @ptrCast(L.stack)); // close all upvalues for this thread
@@ -872,8 +852,10 @@ fn close_state(L: *lua_State) void {
     for (0..@intCast(lua.config.SIZECLASSES)) |i| {
         std.debug.assert(g.freepages[i] == null);
         std.debug.assert(g.freegcopages[i] == null);
+        std.debug.assert(g.freegcopages_cage[i] == null);
     }
     std.debug.assert(g.allgcopages == null);
+    std.debug.assert(g.allgcopages_cage == null);
     std.debug.assert(g.totalbytes == @sizeOf(LG));
     std.debug.assert(g.memcatbytes[0] == @sizeOf(LG));
     for (1..@intCast(lua.config.MEMORY_CATEGORIES)) |i|
@@ -894,7 +876,6 @@ pub fn Enewthread(L: *lua_State) Errorset.Table!*lua_State {
 
     L1.global = L.global;
 
-    // preinit_state(L1, L.global);
     L1.activememcat = L.activememcat; // inherit the active memory category
     try stack_init(L1, L); // init stack
     L1.gt = L.gt; // share table of globals
@@ -943,6 +924,7 @@ pub fn resetthread(L: *lua_State) Errorset.Memory!void {
         try ldo.Dreallocstack(L, @intCast(BASIC_STACK_SIZE), false);
     for (0..@intCast(L.stacksize)) |i|
         L.stack[i].setnilvalue();
+    L.finalizers = null;
 }
 
 pub fn isthreadreset(L: *lua_State) bool {
@@ -998,92 +980,6 @@ pub fn newstate(allocator: lua.Alloc, ud: ?*anyopaque) Errorset.Table!*lua_State
 
     errdefer L.close();
     try f_luaopen(L);
-
-    // const l = allocator(ud, null, 0, @sizeOf(LG)) orelse return error.OutOfMemory;
-    // const L: *lua_State = @ptrCast(@alignCast(l));
-    // const g: *global_State = &(@as(*LG, @ptrCast(@alignCast(L)))).g;
-    // L.header.tt = @intFromEnum(lua.Type.Thread);
-    // L.header.marked = lgc.bit2mask(lgc.WHITE0BIT, lgc.FIXEDBIT);
-    // g.currentwhite = L.header.marked;
-    // L.header.memcat = 0;
-    // preinit_state(L, g);
-    // g.frealloc = allocator;
-    // g.ud = ud;
-    // g.mainthread = L;
-    // g.uvhead.u.open.prev = &g.uvhead;
-    // g.uvhead.u.open.next = &g.uvhead;
-    // g.GCthreshold = 0; // mark it as unfinished state
-    // g.registryfree = 0;
-    // g.errorjmp = null;
-    // g.rngstate = 0;
-    // g.ptrenckey[0] = 1;
-    // g.ptrenckey[1] = 0;
-    // g.ptrenckey[2] = 0;
-    // g.ptrenckey[3] = 0;
-    // @memset(g.ptrenckeynew[0..8], 0);
-    // g.ptrencactive = false;
-    // g.strt.size = 0;
-    // g.strt.nuse = 0;
-    // g.strt.hash = null;
-    // g.pseudotemp.setnilvalue();
-    // L.registry().setnilvalue();
-    // g.gcstate = lgc.GCSpause;
-    // g.gray = null;
-    // g.grayagain = null;
-    // g.weak = null;
-    // g.totalbytes = @sizeOf(LG);
-    // g.gcgoal = lgc.I_GCGOAL;
-    // g.gcstepmul = lgc.I_GCSTEPMUL;
-    // g.gcstepsize = @as(c_int, lgc.I_GCSTEPSIZE) << 10;
-
-    // for (0..@intCast(lua.config.SIZECLASSES)) |i| {
-    //     g.freepages[i] = null;
-    //     g.freegcopages[i] = null;
-    // }
-
-    // g.allpages = null;
-    // g.allgcopages = null;
-    // g.sweepgcopage = null;
-
-    // @memset(g.mt[0..], null);
-
-    // @memset(g.udatagc[0..], null);
-    // @memset(g.udatamark[0..], null);
-    // @memset(g.udatamt[0..], null);
-
-    // for (0..ludata.UTAG_INTERNAL_LIMIT) |i| {
-    //     const udatadirect = &g.udatadirect[i];
-
-    //     udatadirect.indextm.setnilvalue();
-    //     udatadirect.newindextm.setnilvalue();
-    //     udatadirect.namecalltm.setnilvalue();
-    //     udatadirect.index = null;
-    //     udatadirect.newindex = null;
-    //     udatadirect.namecall = null;
-    // }
-
-    // @memset(g.lightuserdataname[0..], null);
-    // @memset(g.udatadirectfields[0..], null);
-    // @memset(g.memcatbytes[0..], 0);
-
-    // g.memcatbytes[0] = @sizeOf(LG);
-
-    // g.cb = .{};
-
-    // g.ecb = .{};
-
-    // @memset(g.ecbdata[0..], 0);
-
-    // g.gcstats = .{};
-    // g.lastprotoid = 1;
-
-    // g.builtinPcall = null;
-    // g.builtinXpcall = null;
-
-    // // TODO: LUAI_GCMETRICS
-
-    // errdefer L.close();
-    // try f_luaopen(L);
 
     return L;
 }

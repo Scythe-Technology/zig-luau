@@ -448,6 +448,10 @@ fn traversestack(g: *lstate.global_State, L: *lua.State) void {
     markobject(g, @ptrCast(@alignCast(L.gt)));
     if (L.namecall) |nc|
         stringmark(nc);
+
+    if (L.finalizers) |f|
+        markobject(g, @ptrCast(@alignCast(f)));
+
     for (L.stack[0..(L.top - L.stack)]) |*o|
         markvalue(g, o);
     var uv: ?*lobject.UpVal = L.openupval;
@@ -633,12 +637,15 @@ pub inline fn iscleared(o: anytype) bool {
 
 fn rebuildmetacache(L: *lua.State, h: *lobject.LuaTable) void {
     var tmcache: u8 = 0;
+
     for (0..ltm.N) |event| {
         const value = ltable.Hgetstr(h, L.global.tmname[event]);
         lobject.getmetacache(h, @intCast(event)).setobj(L, value);
+
         if (event <= @backingInt(ltm.TMS.TM_EQ) and value.ttisnil())
             tmcache |= @as(u8, 1) << @intCast(event);
     }
+
     h.tmcache = tmcache;
 }
 
@@ -913,6 +920,7 @@ fn atomic(L: *lua.State) Errorset.Table!usize {
     // flip current white
     g.currentwhite = otherwhite(g);
     g.sweepgcopage = g.allgcopages;
+    g.sweepgcopage_cage = g.allgcopages_cage;
     g.gcstate = GCSsweep;
 
     return work;
@@ -1014,8 +1022,17 @@ fn gcstep(L: *lua.State, limit: usize) Errorset.Table!usize {
                 cost += steps * GC_SWEEPPAGESTEPCOST;
             }
 
+            while (g.sweepgcopage_cage != null and cost < limit) {
+                const next = lmem.Mgetnextpage(g.sweepgcopage_cage.?); // page sweep might destroy the page
+
+                const steps = sweepgcopage(L, g.sweepgcopage_cage.?);
+
+                g.sweepgcopage_cage = next;
+                cost += steps * GC_SWEEPPAGESTEPCOST;
+            }
+
             // nothing more to sweep?
-            if (g.sweepgcopage == null) {
+            if (g.sweepgcopage == null and g.sweepgcopage_cage == null) {
                 // don't forget to visit main thread, it's the only object not allocated in GCO pages
                 std.debug.assert(!isdead(g, @ptrCast(@alignCast(g.mainthread))));
                 makewhite(g, @ptrCast(@alignCast(g.mainthread))); // make it white (for next cycle)
@@ -1086,7 +1103,7 @@ fn getheaptrigger(g: *lstate.global_State, heapgoal: usize) usize {
 pub fn Cstep(L: *lua.State, assist: bool) Errorset.Table!usize {
     const g = L.global;
 
-    const lim: usize = @as(usize, @intCast(g.gcstepsize)) * @divTrunc(@as(usize, @intCast(g.gcstepmul)), 100);
+    var lim: usize = @as(usize, @intCast(g.gcstepsize)) * @divTrunc(@as(usize, @intCast(g.gcstepmul)), 100);
     std.debug.assert(g.totalbytes >= g.GCthreshold);
     const debt = g.totalbytes - g.GCthreshold;
 
@@ -1104,8 +1121,8 @@ pub fn Cstep(L: *lua.State, assist: bool) Errorset.Table!usize {
     // TODO: LUAI_GCMETRICS
 
     // if allocations outpace the GC to require an assist, adjust step size to cover the difference
-    if (lua.config.VECTOR_DOUBLE and assist) {
-        const need = debt * g.gcstepmul / 100;
+    if (assist) {
+        const need = debt * @as(usize, @intCast(g.gcstepmul)) / 100;
 
         if (need > lim)
             lim = need;
