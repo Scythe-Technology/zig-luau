@@ -35,6 +35,8 @@ pub fn Fnewproto(L: *lua.State) !*lobject.Proto {
 
     f.execdata = null;
     f.exectarget = 0;
+    f.execcount = 0;
+    f.execflags = 0;
 
     f.lineinfo = null;
     f.abslineinfo = null;

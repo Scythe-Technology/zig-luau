@@ -358,4 +358,4 @@ pub const UdataDirectAccessData = extern struct {
 pub const UserdataMark = *const fn (L: *State, ud: *anyopaque) callconv(.c) void;
 
 pub const EmbedderMark = *const fn (L: *State, ref: c_int) callconv(.c) void;
-pub const EmbedderGc = *const fn (L: *State, markref: *EmbedderMark) callconv(.c) void;
+pub const EmbedderGc = *const fn (L: *State, markref: ?EmbedderMark) callconv(.c) c_int;

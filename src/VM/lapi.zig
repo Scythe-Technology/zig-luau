@@ -324,9 +324,6 @@ pub inline fn isnil(L: *lua.State, idx: i32) bool {
 pub inline fn isboolean(L: *lua.State, idx: i32) bool {
     return @"type"(L, idx) == @backingInt(lua.Type.Boolean);
 }
-pub inline fn isinteger64(L: *lua.State, idx: i32) bool {
-    return @"type"(L, idx) == @backingInt(lua.Type.Integer);
-}
 pub inline fn isvector(L: *lua.State, idx: i32) bool {
     return @"type"(L, idx) == @backingInt(lua.Type.Vector);
 }
@@ -484,21 +481,6 @@ pub fn toboolean(L: *lua.State, idx: i32) bool {
     }
     const o = index2addr(L, idx);
     return !o.l_isfalse();
-}
-
-pub fn tointeger64(L: *lua.State, idx: i32) ?i64 {
-    if (comptime !build_config.use_zig_backend) {
-        var isinteger: i32 = 0;
-        const v = c.lua_tointeger64(@ptrCast(L), idx, &isinteger);
-        if (isinteger != 0)
-            return v;
-        return null;
-    }
-    const o: *const lobject.TValue = index2addr(L, idx);
-    if (o.ttisinteger())
-        return o.lvalue()
-    else
-        return null;
 }
 
 pub fn tolstring(L: *lua.State, idx: i32) ?[:0]const u8 {
@@ -758,14 +740,6 @@ pub fn pushinteger(L: *lua.State, n: i32) void {
         return c.lua_pushinteger(@ptrCast(L), n);
     }
     L.top[0].setnvalue(@floatFromInt(n));
-    api_incr_top(L);
-}
-
-pub fn pushinteger64(L: *lua.State, n: i64) void {
-    if (comptime !build_config.use_zig_backend) {
-        return c.lua_pushinteger64(@ptrCast(L), n);
-    }
-    L.top[0].setlvalue(n);
     api_incr_top(L);
 }
 

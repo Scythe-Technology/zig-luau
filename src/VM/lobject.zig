@@ -406,6 +406,11 @@ pub const FeedbackVectorSlot = extern struct {
     },
 };
 
+pub const ProtoExecFlag = enum(c_int) {
+    PEF_EXECLOCKED = 1 << 0, // function will no longer be examined by custom execution
+    PEF_DEBUGLOCKED = 1 << 1, // bytecode can have breakpoints in it
+};
+
 ///
 /// Function Prototypes
 ///
@@ -429,6 +434,9 @@ pub const Proto = extern struct {
 
     execdata: ?*anyopaque,
     exectarget: usize,
+
+    execcount: u32,
+    execflags: u8,
 
     lineinfo: ?[*]u8, // for each instruction, line number as a delta from baseline
     abslineinfo: ?[*]u8, // baseline line info, one entry for each 1<<linegaplog2 instructions; allocated after lineinfo

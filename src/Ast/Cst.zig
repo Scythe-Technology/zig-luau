@@ -34,6 +34,7 @@ pub const Node = extern struct {
         stat_for,
         stat_for_in,
         stat_if,
+        stat_while,
         stat_assign,
         stat_compound_assign,
         stat_function,
@@ -78,6 +79,7 @@ pub const Node = extern struct {
                 .stat_for => StatFor,
                 .stat_for_in => StatForIn,
                 .stat_if => StatIf,
+                .stat_while => StatWhile,
                 .stat_assign => StatAssign,
                 .stat_compound_assign => StatCompoundAssign,
                 .stat_function => StatFunction,
@@ -321,6 +323,13 @@ pub const StatIf = extern struct {
     annotationColonPosition: Location.Position,
 };
 
+pub const StatWhile = extern struct {
+    classIndex: Node.Kind = .stat_while,
+
+    // Colon before the `while local` binding's type annotation
+    annotationColonPosition: Location.Position,
+};
+
 pub const StatAssign = extern struct {
     classIndex: Node.Kind = .stat_assign,
 
@@ -554,6 +563,7 @@ test "CstValuesCheck" {
         pub extern "c" const CstStatForIndex: u8;
         pub extern "c" const CstStatForInIndex: u8;
         pub extern "c" const CstStatIfIndex: u8;
+        pub extern "c" const CstStatWhileIndex: u8;
         pub extern "c" const CstStatAssignIndex: u8;
         pub extern "c" const CstStatCompoundAssignIndex: u8;
         pub extern "c" const CstStatFunctionIndex: u8;
@@ -596,6 +606,7 @@ test "CstValuesCheck" {
         pub extern "c" const CstStatForSize: usize;
         pub extern "c" const CstStatForInSize: usize;
         pub extern "c" const CstStatIfSize: usize;
+        pub extern "c" const CstStatWhileSize: usize;
         pub extern "c" const CstStatAssignSize: usize;
         pub extern "c" const CstStatCompoundAssignSize: usize;
         pub extern "c" const CstStatFunctionSize: usize;

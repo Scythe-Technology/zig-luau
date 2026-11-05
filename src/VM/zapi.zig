@@ -42,12 +42,9 @@ pub fn Zpushvalue(L: *lua.State, value: anytype) !void {
             if (int.bits <= 32) {
                 const pushfn = if (int.signedness == .signed) lapi.pushinteger else lapi.pushunsigned;
                 pushfn(L, @intCast(value));
-            } else {
-                if (int.bits <= 64)
-                    lapi.pushinteger64(L, @bitCast(value))
-                else
-                    lapi.pushinteger64(L, @truncate(value));
-            }
+            } else if (int.bits <= 53) {
+                L.pushnumber(@floatFromInt(value));
+            } else @compileError("integer size too large, try converting to a smaller integer type");
         },
         .float => |float| {
             if (float.bits <= 64)
@@ -219,7 +216,7 @@ pub fn Ztolstringk(L: *lua.State, idx: i32) ![]const u8 {
         },
         .String => L.pushvalue(idx),
         .Integer => {
-            const l = L.tointeger64(idx).?;
+            const l = lapi.Atoobject(L, idx).?.lvalue();
             var s: [MAX_NUM_BUF]u8 = undefined;
             const buf = std.fmt.bufPrint(&s, "{d}", .{l}) catch unreachable; // should be able to fit
             try L.pushlstring(buf);

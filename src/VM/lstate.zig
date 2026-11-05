@@ -215,6 +215,21 @@ const ExecutionCallbacks = extern struct {
     getcounterdata: ?*const fn (L: *lua_State, proto: *anyopaque, count: *usize) callconv(.c) [*]const u8 = null,
     /// called when inlining threshold is reached
     inlinefunction: ?*const fn (L: *lua_State, caller: *lobject.Closure, target: *lobject.Closure, pc: u32) callconv(.c) *lobject.Proto = null,
+
+    // called when GC marks the function unless opted out with PEF_EXECLOCKED to examine if an action on a function will be needed later
+    examinefunction: ?*const fn (L: *lua_State, proto: *lobject.Proto) callconv(.c) void = null,
+    // called when GC cycle has been completed and the collector is paused
+    // functions previoulsy recorded by 'examinefunction' can be processed safely
+    commitfunctions: ?*const fn (L: *lua_State) callconv(.c) void = null,
+};
+
+const TAGGED_PAGESET_BASE: comptime_int = @backingInt(lua.Type.String);
+const TAGGED_PAGESET_SIZE: comptime_int = lua.Type.T_COUNT - TAGGED_PAGESET_BASE;
+
+pub const LuauPageset = extern struct {
+    freepages: [lua.config.SIZECLASSES]?*lmem.lua_Page, // cage GCO free pages, per size class
+    allpages: ?*lmem.lua_Page, // all cage GCO pages (sweep target)
+    sweeppage: ?*lmem.lua_Page, // sweep cursor
 };
 
 pub const global_State = extern struct {
@@ -302,6 +317,9 @@ pub const global_State = extern struct {
 
     /// Set of userdata __index/__newindex/__namecall metamethods for a direct access
     udatadirect: [ludata.UTAG_INTERNAL_LIMIT]lua.UdataDirectAccessData,
+
+    taggedpageset: [TAGGED_PAGESET_SIZE]LuauPageset, // Page sets which only hold allocations for a specific GCO type
+    sweeppageset: c_int, // Which array is being swept
 
     /// total amount of memory used by each memory category
     memcatbytes: [lua.config.MEMORY_CATEGORIES]usize,
@@ -438,7 +456,6 @@ pub const lua_State = extern struct {
     //
     pub const isnumber = lapi.isnumber;
     pub const isstring = lapi.isstring;
-    pub const isinteger64 = lapi.isinteger64;
     pub const iscfunction = lapi.iscfunction;
     pub const isLfunction = lapi.isLfunction;
     pub const isuserdata = lapi.isuserdata;
@@ -470,7 +487,6 @@ pub const lua_State = extern struct {
     pub const tounsigned = lapi.tounsigned;
     pub const tovector = lapi.tovector;
     pub const toboolean = lapi.toboolean;
-    pub const tointeger64 = lapi.tointeger64;
     pub const tolstring = lapi.tolstring;
     pub const tostring = lapi.tostring;
     pub const namecallatom = lapi.namecallatom;
@@ -494,7 +510,6 @@ pub const lua_State = extern struct {
     pub const pushnil = lapi.pushnil;
     pub const pushnumber = lapi.pushnumber;
     pub const pushinteger = lapi.pushinteger;
-    pub const pushinteger64 = lapi.pushinteger64;
     pub const pushunsigned = lapi.pushunsigned;
     pub const pushvector = lapi.pushvector;
     pub const pushlstring = lapi.pushlstring;
@@ -645,8 +660,6 @@ pub const lua_State = extern struct {
     pub const Loptboolean = laux.Loptboolean;
     pub const Lcheckinteger = laux.Lcheckinteger;
     pub const Loptinteger = laux.Loptinteger;
-    pub const Lcheckinteger64 = laux.Lcheckinteger64;
-    pub const Loptinteger64 = laux.Loptinteger64;
     pub const Lcheckunsigned = laux.Lcheckunsigned;
     pub const Loptunsigned = laux.Loptunsigned;
     pub const Lcheckvector = laux.Lcheckvector;
@@ -854,9 +867,15 @@ fn close_state(L: *lua_State) void {
         std.debug.assert(g.freepages[i] == null);
         std.debug.assert(g.freegcopages[i] == null);
         std.debug.assert(g.freegcopages_cage[i] == null);
+
+        for (0..TAGGED_PAGESET_SIZE) |set|
+            std.debug.assert(g.taggedpageset[set].freepages[i] == null);
     }
     std.debug.assert(g.allgcopages == null);
     std.debug.assert(g.allgcopages_cage == null);
+
+    for (0..TAGGED_PAGESET_SIZE) |set|
+        std.debug.assert(g.taggedpageset[set].allpages == null);
     std.debug.assert(g.totalbytes == @sizeOf(LG));
     std.debug.assert(g.memcatbytes[0] == @sizeOf(LG));
     for (1..@intCast(lua.config.MEMORY_CATEGORIES)) |i|
@@ -983,4 +1002,14 @@ pub fn newstate(allocator: lua.Alloc, ud: ?*anyopaque) Errorset.Table!*lua_State
     try f_luaopen(L);
 
     return L;
+}
+
+test "global state size" {
+    const Sizes = struct {
+        extern "c" const global_State_size: usize;
+        extern "c" const ExecutionCallbacks_size: usize;
+    };
+
+    try std.testing.expectEqual(Sizes.global_State_size, @sizeOf(global_State));
+    try std.testing.expectEqual(Sizes.ExecutionCallbacks_size, @sizeOf(ExecutionCallbacks));
 }

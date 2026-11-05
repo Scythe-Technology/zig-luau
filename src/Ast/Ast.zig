@@ -1094,6 +1094,14 @@ pub const StatWhile = extern struct {
     hasDo: bool = false,
     doLocation: Location,
 
+    // Active for `while local` and `while const`; conditionLocal is bound to `condition` and re-evaluated each iteration in scope for `body` only
+    conditionLocal: ?*Local = null,
+    conditionIsConst: bool = false,
+    conditionKeywordLocation: cpp_std.Optional(Location),
+
+    // Location of the `=` in a `while local`/`while const` binding
+    conditionEqualsLocation: cpp_std.Optional(Location),
+
     pub const is = IsFn;
     pub const as = AsCastFn;
     pub const asExpr = AsExprCastFn;
