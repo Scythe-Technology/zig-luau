@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const ldo = @import("ldo.zig");
 
@@ -33,6 +34,30 @@ pub fn Zyielderror(L: *lua.State) anyerror {
     return error.RaiseLuauError;
 }
 
+fn exactFloatBounds(comptime T: type) struct { min: i64, max: i64 } {
+    const info = @typeInfo(T).int;
+    return .{
+        .min = @intCast(if (info.signedness == .signed) std.math.minInt(i54) else 0),
+        .max = @intCast(if (info.signedness == .signed) std.math.maxInt(i54) else std.math.maxInt(u53)),
+    };
+}
+
+fn floatToExactInt(comptime T: type, n: f64) ?T {
+    if (!std.math.isFinite(n) or std.math.trunc(n) != n)
+        return null;
+    const bounds = exactFloatBounds(T);
+    if (n < @as(f64, @floatFromInt(bounds.min)) or n > @as(f64, @floatFromInt(bounds.max)))
+        return null;
+    return @intFromFloat(n);
+}
+
+fn intRangeError(L: *lua.State, narg: i32, comptime msg: ?[]const u8, min: anytype, max: anytype, got: []const u8) anyerror {
+    if (narg > 0)
+        return L.Zerrorf("invalid argument #{d} (number expected between {d} and {d}, got {s})", .{ narg, min, max, got })
+    else
+        return L.Zerrorf("{s} (number expected between {d} and {d}, got {s})", .{ msg orelse "invalid value", min, max, got });
+}
+
 pub fn Zpushvalue(L: *lua.State, value: anytype) !void {
     switch (@typeInfo(@TypeOf(value))) {
         .bool => L.pushboolean(value),
@@ -42,7 +67,18 @@ pub fn Zpushvalue(L: *lua.State, value: anytype) !void {
             if (int.bits <= 32) {
                 const pushfn = if (int.signedness == .signed) lapi.pushinteger else lapi.pushunsigned;
                 pushfn(L, @intCast(value));
-            } else if (int.bits <= 53) {
+            } else if (switch (int.signedness) {
+                .signed => int.bits <= 54,
+                .unsigned => int.bits <= 53,
+            }) {
+                L.pushnumber(@floatFromInt(value));
+            } else if (int.bits <= 64) {
+                const fits = switch (int.signedness) {
+                    .signed => value >= std.math.minInt(i54) and value <= std.math.maxInt(i54),
+                    .unsigned => value <= std.math.maxInt(u53),
+                };
+                if (!fits)
+                    return error.IntegerOverflow;
                 L.pushnumber(@floatFromInt(value));
             } else @compileError("integer size too large, try converting to a smaller integer type");
         },
@@ -97,7 +133,7 @@ pub fn Zpushvalue(L: *lua.State, value: anytype) !void {
             if (info.len != lua.config.VECTOR_SIZE)
                 @compileError("Vector size mismatch");
             switch (info.len) {
-                3 => L.pushvector(value[0], value[1], value[2], 0),
+                3 => L.pushvector(value[0], value[1], value[2]),
                 4 => L.pushvector(value[0], value[1], value[2], value[3]),
                 else => @compileError("Unsupported vector size"),
             }
@@ -192,6 +228,35 @@ pub fn Zcallmeta(L: *lua.State, obj: i32, event: [:0]const u8) !bool {
     return true;
 }
 
+fn decimalLen(v: u64) i32 {
+    var n = v;
+    var len: i32 = 1;
+    while (n >= 10) : (len += 1)
+        n /= 10;
+    return len;
+}
+
+fn numDecimal(n: anytype) bool {
+    const T = @TypeOf(n);
+    if (!std.math.isFinite(n) or n == 0)
+        return true;
+
+    const Bits = @Int(.unsigned, @bitSizeOf(T));
+    const bits: u64 = @as(Bits, @bitCast(n));
+
+    const tables = if (builtin.mode == .small) &std.fmt.float.Backend64_TablesSmall else &std.fmt.float.Backend64_TablesFull;
+    const explicit = std.math.floatMantissaBits(T) - std.math.floatFractionalBits(T) != 0;
+    const d = std.fmt.float.binaryToDecimal(u64, bits, std.math.floatMantissaBits(T), std.math.floatExponentBits(T), explicit, tables);
+    const dot = decimalLen(d.mantissa) + d.exponent;
+    return dot >= -5 and dot <= 21;
+}
+
+fn printNum(buf: []u8, n: anytype) []u8 {
+    if (numDecimal(n))
+        return std.fmt.bufPrint(buf, "{d}", .{n}) catch unreachable; // should be able to fit
+    return std.fmt.bufPrint(buf, "{e}", .{n}) catch unreachable; // should be able to fit
+}
+
 /// Converts value to string & pushes to stack.
 pub fn Ztolstringk(L: *lua.State, idx: i32) ![]const u8 {
     const MAX_NUM_BUF = std.fmt.float.bufferSize(.decimal, f64);
@@ -202,17 +267,20 @@ pub fn Ztolstringk(L: *lua.State, idx: i32) ![]const u8 {
         .Number => {
             const number = L.tonumber(idx).?;
             var s: [MAX_NUM_BUF]u8 = undefined;
-            const buf = std.fmt.bufPrint(&s, "{d}", .{number}) catch unreachable; // should be able to fit
-            try L.pushlstring(buf);
+            try L.pushlstring(printNum(&s, number));
         },
         .Vector => {
             const vec = L.tovector(idx).?;
             var s: [(MAX_NUM_BUF * VEC_SIZE) + ((VEC_SIZE - 1) * 2)]u8 = undefined;
-            const buf = if (VEC_SIZE == 3)
-                std.fmt.bufPrint(&s, "{d}, {d}, {d}", .{ vec[0], vec[1], vec[2] }) catch unreachable // should be able to fit
-            else
-                std.fmt.bufPrint(&s, "{d}, {d}, {d}, {d}", .{ vec[0], vec[1], vec[2], vec[3] }) catch unreachable; // should be able to fit
-            try L.pushlstring(buf);
+            var end: usize = 0;
+            for (vec, 0..) |comp, i| {
+                if (i != 0) {
+                    @memcpy(s[end .. end + 2], ", ");
+                    end += 2;
+                }
+                end += printNum(s[end..], comp).len;
+            }
+            try L.pushlstring(s[0..end]);
         },
         .String => L.pushvalue(idx),
         .Integer => {
@@ -308,14 +376,21 @@ pub fn Zcheckvalue(L: *lua.State, comptime T: type, narg: i32, comptime msg: ?[]
                     return tag_error(L, narg, .Number, msg);
                 const getfn = if (int.signedness == .signed) lapi.tointeger else lapi.tounsigned;
                 return getfn(L, narg) orelse unreachable;
-            } else {
-                const value = lapi.Atoobject(L, narg) orelse return tag_error(L, narg, .Integer, msg);
-                return switch (value.typeOf()) {
-                    .Number => @intFromFloat(value.nvalue()),
-                    .Integer => @bitCast(value.lvalue()),
-                    else => tag_error(L, narg, .Integer, msg),
-                };
-            }
+            } else if (int.bits <= 64) {
+                const obj = lapi.Atoobject(L, narg) orelse return tag_error(L, narg, .Number, msg);
+                switch (obj.typeOf()) {
+                    .Number => {
+                        const n = obj.nvalue();
+                        if (floatToExactInt(T, n)) |v|
+                            return v;
+                        var got_buf: [std.fmt.float.bufferSize(.decimal, f64)]u8 = undefined;
+                        const got = printNum(&got_buf, n);
+                        const bounds = exactFloatBounds(T);
+                        return intRangeError(L, narg, msg, bounds.min, bounds.max, got);
+                    },
+                    else => return tag_error(L, narg, .Number, msg),
+                }
+            } else @compileError("integer size too large, try converting to a smaller integer type");
         },
         .float => |float| {
             if (!L.isnumber(narg))
@@ -453,7 +528,7 @@ pub fn Znewmetatable(L: *lua.State, tname: [:0]const u8, value: anytype) !bool {
     return true;
 }
 
-const EXCEPTIONS_ENABLED = !@import("builtin").cpu.arch.isWasm();
+const EXCEPTIONS_ENABLED = !builtin.cpu.arch.isWasm();
 
 test "toCFn + Zchecktype" {
     const L = try @import("lstate.zig").Lnewstate();
@@ -542,6 +617,70 @@ test Zpushfunction {
     }
 }
 
+test Ztolstringk {
+    const L = try @import("lstate.zig").Lnewstate();
+    defer L.deinit();
+    errdefer std.debug.print("{s}\n", .{L.tostring(-1) orelse "No lua error"});
+
+    L.pushnil();
+    try std.testing.expectEqualStrings("nil", try Ztolstringk(L, -1));
+    L.pop(1);
+
+    try L.pushlstring("Hello, world!");
+    try std.testing.expectEqualStrings("Hello, world!", try Ztolstringk(L, -1));
+    L.pop(1);
+
+    L.pushnumber(0.1);
+    try std.testing.expectEqualStrings("0.1", try Ztolstringk(L, -1));
+    L.pop(1);
+
+    L.pushnumber(0.000001);
+    try std.testing.expectEqualStrings("0.000001", try Ztolstringk(L, -1));
+    L.pop(1);
+
+    L.pushnumber(0.0000001);
+    try std.testing.expectEqualStrings("1e-7", try Ztolstringk(L, -1));
+    L.pop(1);
+
+    L.pushnumber(10.0000001);
+    try std.testing.expectEqualStrings("10.0000001", try Ztolstringk(L, -1));
+    L.pop(1);
+
+    L.pushnumber(1000000000000000000000);
+    try std.testing.expectEqualStrings("1e21", try Ztolstringk(L, -1));
+    L.pop(1);
+
+    if (comptime lua.config.VECTOR_SIZE == 3) {
+        L.pushvector(0.1, 0.1, 0.1);
+        try std.testing.expectEqualStrings("0.1, 0.1, 0.1", try Ztolstringk(L, -1));
+        L.pop(1);
+
+        L.pushvector(0.000001, 0.000001, 0.000001);
+        try std.testing.expectEqualStrings("0.000001, 0.000001, 0.000001", try Ztolstringk(L, -1));
+        L.pop(1);
+
+        L.pushvector(0.0000001, 0.0000001, 0.0000001);
+        try std.testing.expectEqualStrings("1e-7, 1e-7, 1e-7", try Ztolstringk(L, -1));
+        L.pop(1);
+
+        L.pushvector(10.0001, 10.0001, 10.0001);
+        try std.testing.expectEqualStrings("10.0001, 10.0001, 10.0001", try Ztolstringk(L, -1));
+        L.pop(1);
+
+        L.pushvector(1000000000, 1000000000, 1000000000);
+        try std.testing.expectEqualStrings("1000000000, 1000000000, 1000000000", try Ztolstringk(L, -1));
+        L.pop(1);
+
+        L.pushvector(1, 2, 3);
+        try std.testing.expectEqualStrings("1, 2, 3", try Ztolstringk(L, -1));
+        L.pop(1);
+    }
+
+    L.pushboolean(true);
+    try std.testing.expectEqualStrings("true", try Ztolstringk(L, -1));
+    L.pop(1);
+}
+
 test Zpushvalue {
     const L = try @import("lstate.zig").Lnewstate();
     defer L.deinit();
@@ -561,6 +700,31 @@ test Zpushvalue {
     try std.testing.expectEqual(.Number, L.typeOf(-1));
     try std.testing.expectEqual(std.math.maxInt(i10), L.tointeger(-1).?);
     L.pop(1);
+
+    try Zpushvalue(L, @as(i54, std.math.maxInt(i54)));
+    try std.testing.expectEqual(@as(f64, @floatFromInt(std.math.maxInt(i54))), L.tonumber(-1).?);
+    L.pop(1);
+    try Zpushvalue(L, @as(i54, std.math.minInt(i54)));
+    try std.testing.expectEqual(@as(f64, @floatFromInt(std.math.minInt(i54))), L.tonumber(-1).?);
+    L.pop(1);
+    try Zpushvalue(L, @as(u53, std.math.maxInt(u53)));
+    try std.testing.expectEqual(@as(f64, @floatFromInt(std.math.maxInt(u53))), L.tonumber(-1).?);
+    L.pop(1);
+
+    try Zpushvalue(L, @as(i64, std.math.maxInt(i54)));
+    try std.testing.expectEqual(@as(f64, @floatFromInt(std.math.maxInt(i54))), L.tonumber(-1).?);
+    L.pop(1);
+    try Zpushvalue(L, @as(u64, std.math.maxInt(u53)));
+    try std.testing.expectEqual(@as(f64, @floatFromInt(std.math.maxInt(u53))), L.tonumber(-1).?);
+    L.pop(1);
+
+    const top = L.gettop();
+    try std.testing.expectError(error.IntegerOverflow, Zpushvalue(L, @as(i64, std.math.maxInt(i54)) + 1));
+    try std.testing.expectError(error.IntegerOverflow, Zpushvalue(L, @as(i64, std.math.minInt(i54)) - 1));
+    try std.testing.expectError(error.IntegerOverflow, Zpushvalue(L, @as(u64, std.math.maxInt(u53)) + 1));
+    try std.testing.expectError(error.IntegerOverflow, Zpushvalue(L, @as(i64, std.math.maxInt(i64))));
+    try std.testing.expectError(error.IntegerOverflow, Zpushvalue(L, @as(u64, std.math.maxInt(u64))));
+    try std.testing.expectEqual(top, L.gettop());
 
     try Zpushvalue(L, 1.24);
     try std.testing.expectEqual(.Number, L.typeOf(-1));
@@ -786,6 +950,40 @@ test Zcheckvalue {
     try Zpushvalue(L, 455);
     try std.testing.expectEqual(455, try Zcheckvalue(L, i32, -1, null));
     L.pop(1);
+
+    try Zpushvalue(L, @as(i64, std.math.maxInt(i54)));
+    try std.testing.expectEqual(std.math.maxInt(i54), try Zcheckvalue(L, i64, -1, null));
+    try std.testing.expectEqual(@as(i64, std.math.maxInt(i54)), try Zcheckvalue(L, i54, -1, null));
+    L.pop(1);
+
+    try Zpushvalue(L, @as(i64, std.math.minInt(i54)));
+    try std.testing.expectEqual(std.math.minInt(i54), try Zcheckvalue(L, i64, -1, null));
+    L.pop(1);
+
+    try Zpushvalue(L, @as(u64, std.math.maxInt(u53)));
+    try std.testing.expectEqual(std.math.maxInt(u53), try Zcheckvalue(L, u64, -1, null));
+    try std.testing.expectEqual(@as(u64, std.math.maxInt(u53)), try Zcheckvalue(L, u53, -1, null));
+    L.pop(1);
+
+    L.pushnumber(@floatFromInt(std.math.maxInt(i54) + 1));
+    try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, i64, -1, null));
+    try std.testing.expectEqualStrings("invalid value (number expected between -9007199254740992 and 9007199254740991, got 9007199254740992)", L.tostring(-1).?);
+    L.pop(1);
+
+    try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, u64, @intCast(L.gettop()), null));
+    try std.testing.expectEqualStrings("invalid argument #1 (number expected between 0 and 9007199254740991, got 9007199254740992)", L.tostring(-1).?);
+    L.pop(2);
+
+    L.pushnumber(1.5);
+    try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, i64, -1, null));
+    try std.testing.expectEqualStrings("invalid value (number expected between -9007199254740992 and 9007199254740991, got 1.5)", L.tostring(-1).?);
+    L.pop(2);
+
+    L.pushnumber(-1);
+    try std.testing.expectEqual(@as(i64, -1), try Zcheckvalue(L, i64, -1, null));
+    try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, u64, -1, null));
+    try std.testing.expectEqualStrings("invalid value (number expected between 0 and 9007199254740991, got -1)", L.tostring(-1).?);
+    L.pop(2);
 
     try Zpushvalue(L, 1.24);
     try std.testing.expectEqual(1.24, try Zcheckvalue(L, f64, -1, null));
@@ -1132,8 +1330,8 @@ test Ztolstring {
         L.pop(1);
     }
     {
-        if (lua.config.VECTOR_SIZE == 3) {
-            L.pushvector(1.2, 44.0, 123.0, 0.0);
+        if (comptime lua.config.VECTOR_SIZE == 3) {
+            L.pushvector(1.2, 44.0, 123.0);
             try std.testing.expectEqualStrings("1.2, 44, 123", try Ztolstring(L, -1));
         } else {
             L.pushvector(1.2, 44.0, 123.0, 1205.0);
@@ -1159,6 +1357,41 @@ test Ztolstring {
     {
         L.pushnumber(123.0);
         try std.testing.expectEqualStrings("123", try Ztolstring(L, -1));
+        L.pop(1);
+    }
+    {
+        L.pushnumber(1e-6);
+        try std.testing.expectEqualStrings("0.000001", try Ztolstring(L, -1));
+        L.pop(1);
+    }
+    {
+        L.pushnumber(1e-7);
+        try std.testing.expectEqualStrings("1e-7", try Ztolstring(L, -1));
+        L.pop(1);
+    }
+    {
+        L.pushnumber(1e20);
+        try std.testing.expectEqualStrings("100000000000000000000", try Ztolstring(L, -1));
+        L.pop(1);
+    }
+    {
+        L.pushnumber(1e21);
+        try std.testing.expectEqualStrings("1e21", try Ztolstring(L, -1));
+        L.pop(1);
+    }
+    {
+        L.pushnumber(-1e21);
+        try std.testing.expectEqualStrings("-1e21", try Ztolstring(L, -1));
+        L.pop(1);
+    }
+    {
+        if (comptime lua.config.VECTOR_SIZE == 3) {
+            L.pushvector(1.2, 1e21, 1e-7);
+            try std.testing.expectEqualStrings("1.2, 1e21, 1e-7", try Ztolstring(L, -1));
+        } else {
+            L.pushvector(1.2, 1e21, 1e-6, 1e22);
+            try std.testing.expectEqualStrings("1.2, 1e21, 0.000001, 1e22", try Ztolstring(L, -1));
+        }
         L.pop(1);
     }
     {

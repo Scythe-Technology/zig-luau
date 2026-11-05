@@ -511,7 +511,7 @@ pub const lua_State = extern struct {
     pub const pushnumber = lapi.pushnumber;
     pub const pushinteger = lapi.pushinteger;
     pub const pushunsigned = lapi.pushunsigned;
-    pub const pushvector = lapi.pushvector;
+    pub const pushvector = if (lua.config.VECTOR_SIZE == 3) lapi.pushvector3 else lapi.pushvector4;
     pub const pushlstring = lapi.pushlstring;
     pub const pushstring = lapi.pushstring;
     pub const pushvfstring = lapi.pushvfstring;

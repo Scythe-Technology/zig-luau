@@ -751,7 +751,26 @@ pub fn pushunsigned(L: *lua.State, n: u32) void {
     api_incr_top(L);
 }
 
-pub fn pushvector(
+pub fn pushvector3(
+    L: *lua.State,
+    x: lua.config.VECTOR_TYPE,
+    y: lua.config.VECTOR_TYPE,
+    z: lua.config.VECTOR_TYPE,
+) if (lua.config.VECTOR_DOUBLE) Errorset.Table!void else void {
+    if (comptime !build_config.use_zig_backend) {
+        if (comptime lua.config.VECTOR_SIZE == 4)
+            @compileError("use zig backend for 4D vectors");
+        return c.lua_pushvector(@ptrCast(L), x, y, z);
+    }
+    if (comptime lua.config.VECTOR_DOUBLE) {
+        try lgc.CcheckGC(L);
+        lgc.Cthreadbarrier(L);
+        try L.top[0].setvvalue(L, x, y, z, null);
+    } else L.top[0].setvvalue(L, x, y, z, null);
+    api_incr_top(L);
+}
+
+pub fn pushvector4(
     L: *lua.State,
     x: lua.config.VECTOR_TYPE,
     y: lua.config.VECTOR_TYPE,

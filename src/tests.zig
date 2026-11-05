@@ -1155,8 +1155,8 @@ test "Set Api" {
             const y: f32 = @floatCast(l.Loptnumber(2, 0.0));
             const z: f32 = @floatCast(l.Loptnumber(3, 0.0));
 
-            if (luau.VECTOR_SIZE == 3) {
-                l.pushvector(x, y, z, null);
+            if (comptime luau.VECTOR_SIZE == 3) {
+                l.pushvector(x, y, z);
             } else {
                 const w: f32 = @floatCast(l.Loptnumber(4, 0.0));
                 l.pushvector(x, y, z, w);
@@ -1260,8 +1260,8 @@ test "Vectors" {
             const y: f32 = @floatCast(l.Loptnumber(2, 0.0));
             const z: f32 = @floatCast(l.Loptnumber(3, 0.0));
 
-            if (luau.VECTOR_SIZE == 3) {
-                l.pushvector(x, y, z, null);
+            if (comptime luau.VECTOR_SIZE == 3) {
+                l.pushvector(x, y, z);
             } else {
                 const w: f32 = @floatCast(l.Loptnumber(4, 0.0));
                 l.pushvector(x, y, z, w);
@@ -1308,8 +1308,8 @@ test "Vectors" {
         try expectEqual(0.0, vec[3]);
     }
 
-    if (luau.VECTOR_SIZE == 3) {
-        lua.pushvector(0.0, 1.0, 0.0, null);
+    if (comptime luau.VECTOR_SIZE == 3) {
+        lua.pushvector(0.0, 1.0, 0.0);
     } else {
         lua.pushvector(0.0, 1.0, 0.0, 0.0);
     }
