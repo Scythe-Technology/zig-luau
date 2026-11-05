@@ -16,10 +16,10 @@ jobs:
           name: Linux x86_64
           target: x86_64-linux-gnu
         - os: macos-15-intel
-          name: macOs x86_64
+          name: macOS x86_64
           target: x86_64-macos
-        - os: macos-14
-          name: macOs Arm64
+        - os: macos-26
+          name: macOS Arm64
           target: aarch64-macos
         - os: windows-latest
           name: Windows x86_64
@@ -36,7 +36,7 @@ jobs:
 
     - uses: mlugg/setup-zig@v2
       with:
-        version: 0.17.0
+        version: 0.17.1
         use-cache: false
 
     - name: Setup Wasmtime
