@@ -1108,7 +1108,7 @@ test Zcheckvalue {
     {
         L.pushinteger(255);
         const num = try Zcheckvalue(L, u8, -1, null);
-        try std.testing.expectEqual(255, num);
+        try std.testing.expectEqual(255, @as(u32, @intCast(num)));
         try std.testing.expectError(error.RaiseLuauError, Zcheckvalue(L, u2, @intCast(L.gettop()), null));
         try std.testing.expectEqualStrings("invalid argument #2 (number expected between 0 and 3, got 255)", L.tostring(-1).?);
         L.pop(1);
