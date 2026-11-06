@@ -24,5 +24,5 @@ ZIG_EXPORT const unsigned char TString_data_offset = offsetof(TString, data);
 ZIG_EXPORT const unsigned char Udata_data_offset = offsetof(Udata, data);
 ZIG_EXPORT const unsigned char LuauBuffer_data_offset = offsetof(LuauBuffer, data);
 
-ZIG_EXPORT const unsigned long global_State_size = sizeof(global_State);
-ZIG_EXPORT const unsigned long ExecutionCallbacks_size = sizeof(lua_ExecutionCallbacks);
+ZIG_EXPORT const size_t global_State_size = sizeof(global_State);
+ZIG_EXPORT const size_t ExecutionCallbacks_size = sizeof(lua_ExecutionCallbacks);
