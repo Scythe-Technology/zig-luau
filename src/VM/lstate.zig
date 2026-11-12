@@ -58,6 +58,9 @@ const stringtable = extern struct {
     /// number of elements
     nuse: u32,
     size: c_int,
+    saltmult: u32,
+    saltadd: u32,
+    hashshift: u8,
 };
 
 ///
@@ -244,6 +247,7 @@ pub const global_State = extern struct {
     currentwhite: u8,
     /// state of garbage collector
     gcstate: u8,
+    gcdisabled: u8,
 
     /// list of gray objects
     gray: ?*GCObject,
@@ -980,6 +984,8 @@ pub fn newstate(allocator: lua.Alloc, ud: ?*anyopaque) Errorset.Table!*lua_State
     g.uvhead.u.open.next = &g.uvhead;
 
     g.ptrenckey[0] = 1;
+
+    g.strt.saltmult = 0x9e3779b9; // default string table salt provides additional Fibonacci hash mixing
 
     g.totalbytes = @sizeOf(LG);
     g.memcatbytes[0] = @sizeOf(LG);

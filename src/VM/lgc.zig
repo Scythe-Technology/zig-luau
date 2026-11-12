@@ -1103,6 +1103,9 @@ fn getheaptrigger(g: *lstate.global_State, heapgoal: usize) usize {
 pub fn Cstep(L: *lua.State, assist: bool) Errorset.Table!usize {
     const g = L.global;
 
+    if (g.gcdisabled != 0)
+        return 0;
+
     var lim: usize = @as(usize, @intCast(g.gcstepsize)) * @divTrunc(@as(usize, @intCast(g.gcstepmul)), 100);
     std.debug.assert(g.totalbytes >= g.GCthreshold);
     const debt = g.totalbytes - g.GCthreshold;
