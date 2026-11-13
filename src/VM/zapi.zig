@@ -252,50 +252,59 @@ fn numDecimal(n: anytype) bool {
 }
 
 fn printNum(buf: []u8, n: anytype) []u8 {
-    if (numDecimal(n))
+    if (numDecimal(n)) {
+        if (std.math.isNan(n)) {
+            return std.fmt.bufPrint(buf, "nan", .{}) catch unreachable; // should be able to fit
+        }
         return std.fmt.bufPrint(buf, "{d}", .{n}) catch unreachable; // should be able to fit
+    }
     return std.fmt.bufPrint(buf, "{e}", .{n}) catch unreachable; // should be able to fit
+}
+
+const MAX_NUM_BUF = std.fmt.float.bufferSize(.decimal, f64);
+const VEC_SIZE = lua.config.VECTOR_SIZE;
+
+pub const STR_BUF_SIZE = (MAX_NUM_BUF * VEC_SIZE) + ((VEC_SIZE - 1) * 2); // longest
+
+// Converts value to string without pushing to stack.
+pub fn Ztolstringkc(L: *lua.State, idx: i32, buf: *[STR_BUF_SIZE]u8) []const u8 {
+    switch (L.typeOf(idx)) {
+        .Nil => return "nil",
+        .Boolean => return if (L.toboolean(idx)) "true" else "false",
+        .Number => {
+            const number = L.tonumber(idx).?;
+            return printNum(buf, number);
+        },
+        .Vector => {
+            const vec = L.tovector(idx).?;
+            var end: usize = 0;
+            for (vec, 0..) |comp, i| {
+                if (i != 0) {
+                    @memcpy(buf[end .. end + 2], ", ");
+                    end += 2;
+                }
+                end += printNum(buf[end..], comp).len;
+            }
+            return buf[0..end];
+        },
+        .String => return L.tolstring(idx).?,
+        .Integer => {
+            const l = lapi.Atoobject(L, idx).?.lvalue();
+            const w = std.fmt.bufPrint(buf, "{d}", .{l}) catch unreachable; // should be able to fit
+            return w;
+        },
+        else => {
+            const ptr = L.topointer(idx);
+            const w = std.fmt.bufPrint(buf, "{s}: 0x{x:016}", .{ lapi.typename(L.typeOf(idx)), @intFromPtr(ptr) }) catch unreachable; // should be able to fit
+            return w;
+        },
+    }
 }
 
 /// Converts value to string & pushes to stack.
 pub fn Ztolstringk(L: *lua.State, idx: i32) ![]const u8 {
-    const MAX_NUM_BUF = std.fmt.float.bufferSize(.decimal, f64);
-    const VEC_SIZE = lua.config.VECTOR_SIZE;
-    switch (L.typeOf(idx)) {
-        .Nil => try L.pushlstring("nil"),
-        .Boolean => try L.pushlstring(if (L.toboolean(idx)) "true" else "false"),
-        .Number => {
-            const number = L.tonumber(idx).?;
-            var s: [MAX_NUM_BUF]u8 = undefined;
-            try L.pushlstring(printNum(&s, number));
-        },
-        .Vector => {
-            const vec = L.tovector(idx).?;
-            var s: [(MAX_NUM_BUF * VEC_SIZE) + ((VEC_SIZE - 1) * 2)]u8 = undefined;
-            var end: usize = 0;
-            for (vec, 0..) |comp, i| {
-                if (i != 0) {
-                    @memcpy(s[end .. end + 2], ", ");
-                    end += 2;
-                }
-                end += printNum(s[end..], comp).len;
-            }
-            try L.pushlstring(s[0..end]);
-        },
-        .String => L.pushvalue(idx),
-        .Integer => {
-            const l = lapi.Atoobject(L, idx).?.lvalue();
-            var s: [MAX_NUM_BUF]u8 = undefined;
-            const buf = std.fmt.bufPrint(&s, "{d}", .{l}) catch unreachable; // should be able to fit
-            try L.pushlstring(buf);
-        },
-        else => {
-            const ptr = L.topointer(idx);
-            var s: [20 + ltm.LONGEST_TYPENAME_SIZE]u8 = undefined; // 16 + 2 + 2(extra) + size
-            const buf = std.fmt.bufPrint(&s, "{s}: 0x{x:016}", .{ lapi.typename(L.typeOf(idx)), @intFromPtr(ptr) }) catch unreachable; // should be able to fit
-            try L.pushlstring(buf);
-        },
-    }
+    var buf: [STR_BUF_SIZE]u8 = undefined;
+    try L.pushlstring(Ztolstringkc(L, idx, &buf));
     return L.tolstring(-1) orelse unreachable;
 }
 
